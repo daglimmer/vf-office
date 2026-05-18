@@ -596,7 +596,7 @@ function SpecialistAgent({ spec, zone, activePhase }: { spec: SpecialistData; zo
   useFrame((_, delta) => {
     if (ref.current) {
       // Smooth position lerp toward target zone
-      const lerpSpeed = 6.0
+      const lerpSpeed = 1.2
       currentPos.current.lerp(targetPos.current, Math.min(1, delta * lerpSpeed))
       ref.current.position.x = currentPos.current.x
       ref.current.position.z = currentPos.current.z
@@ -806,6 +806,9 @@ function SpecialistAvatars({ specialists, activePhase }: { specialists: Speciali
         const forcedZone = statusMatchesPhase && spec.status
           ? (STATUS_ZONE_MAP[spec.status] || null)
           : null
+        // Priority: forced (phase match) → status map → API zone → specialist default
+        // STATUS_ZONE_MAP takes priority over spec.zone so phase-based routing
+        // (idle→lounge, consulting→meeting, etc.) always wins.
         const zoneId = forcedZone
           || (spec.status && STATUS_ZONE_MAP[spec.status])
           || spec.zone
