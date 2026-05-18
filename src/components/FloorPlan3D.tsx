@@ -122,9 +122,9 @@ function Lights() {
       <pointLight position={[-4, 6, 3]} intensity={0.8} color="#ff0066" distance={9} />
       <pointLight position={[4, 6, -3]} intensity={0.8} color="#00ff88" distance={9} />
 
-      {/* Ground-level neon glow pools — under each zone */}
-      <pointLight position={[-6.75, 0.5, 3.0]} intensity={0.8} color="#ff0044" distance={4} />   {/* Server Room */}
-      <pointLight position={[-3, 0.5, 3.75]} intensity={0.7} color="#ff6600" distance={3} />    {/* Patch Room */}
+      {/* Ground-level neon glow pools — cool blue server room corridor */}
+      <pointLight position={[-6.75, 0.5, 3.0]} intensity={0.9} color="#00aaff" distance={4} />   {/* Server Room */}
+      <pointLight position={[-3, 0.5, 3.75]} intensity={0.7} color="#ff8800" distance={3} />    {/* Patch Room */}
       <pointLight position={[1.5, 0.5, 3.75]} intensity={0.7} color="#ffaa00" distance={3} />    {/* Vault */}
       <pointLight position={[5.25, 0.5, 2.25]} intensity={0.8} color="#ff00ff" distance={4} />   {/* Lounge */}
       <pointLight position={[-6.75, 0.5, -4.5]} intensity={0.8} color="#00ff88" distance={4} />   {/* Data Centre */}
