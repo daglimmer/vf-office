@@ -1,4 +1,5 @@
 import React from 'react'
+import * as THREE from 'three'
 
 // ─── Corridor & Open Space Decor — Polished Layout ──────────────────
 // Places hallway markings, plants, water coolers, and ambient details
@@ -83,79 +84,64 @@ export default function CorridorDecor({ gridCols, gridRows }: CorridorDecorProps
 
   return (
     <group>
-      {/* ─── Hallway Painted Lines (corridor floor markings) ─── */}
-      {/* Corridor centerline — dashed, runs through the main east-west corridor (rows 2-5) */}
-      {Array.from({ length: 19 }).map((_, i) => {
-        const t = i / 19
+      {/* ─── Circuit Floor Traces — neon PCB-like patterns ─── */}
+      {/* Main east-west data bus — cyan traces through corridor */}
+      {Array.from({ length: 12 }).map((_, i) => {
+        const t = i / 12
         const startX = cell(2, 3)[0]
-        const endX = cell(8, 3)[0]
-        const x = startX + t * (endX - startX)
-        const z = cell(0, 3)[2]
-        if (i % 2 === 0) return null
-        return (
-          <mesh key={`dash-${i}`} position={[x, 0.004, z]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.1, 0.04]} />
-            <meshBasicMaterial color="#f59e0b" transparent opacity={0.3} />
-          </mesh>
-        )
-      })}
-
-      {/* Corridor centerline — extended east through cols 8-10 row 3 */}
-      {Array.from({ length: 10 }).map((_, i) => {
-        const t = (i + 0.5) / 10
-        const startX = cell(8, 3)[0]
         const endX = cell(10, 3)[0]
         const x = startX + t * (endX - startX)
-        const z = cell(0, 3)[2]
-        if (i % 2 === 0) return null
+        const z1 = cell(2, 3 + (i % 3) * 0.3)[2]
         return (
-          <mesh key={`dash-ext-${i}`} position={[x, 0.004, z]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.08, 0.03]} />
-            <meshBasicMaterial color="#f59e0b" transparent opacity={0.2} />
+          <mesh key={`trace-ew-${i}`} position={[x, 0.005, z1]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[0.08, 0.015]} />
+            <meshBasicMaterial color={['#00ccff', '#4488ff', '#8844ff'][i % 3]} transparent opacity={0.45} />
           </mesh>
         )
       })}
 
-      {/* South edge line (row 4.8 boundary — corridor bottom) */}
-      {Array.from({ length: 20 }).map((_, i) => {
-        const t = (i + 0.5) / 20
-        const startX = cell(2, 4.8)[0]
-        const endX = cell(10, 4.8)[0]
-        const x = startX + t * (endX - startX)
-        const z = cell(0, 4.8)[2]
+      {/* Diagonal PCB traces — 45° angled paths */}
+      {[[2, 3, 5, 3.5], [5, 3, 7, 3.5], [8, 3, 9.5, 3.5]].map(([c1, r1, c2, r2], i) => {
+        const sx = cell(c1, r1)[0]
+        const sz = cell(c1, r1)[2]
+        const ex = cell(c2, r2)[0]
+        const ez = cell(c2, r2)[2]
+        const midX = (sx + ex) / 2
+        const midZ = (sz + ez) / 2
+        const length = Math.sqrt((ex - sx) ** 2 + (ez - sz) ** 2)
+        const angle = Math.atan2(ez - sz, ex - sx)
         return (
-          <mesh key={`eline-s-${i}`} position={[x, 0.004, z]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.06, 0.06]} />
-            <meshBasicMaterial color="#6c7a8d" transparent opacity={0.15} />
+          <mesh key={`pdb-${i}`} position={[midX, 0.005, midZ]} rotation={[-Math.PI / 2, 0, angle]}>
+            <planeGeometry args={[length, 0.018]} />
+            <meshBasicMaterial color="#ff00ff" transparent opacity={0.35} />
           </mesh>
         )
       })}
 
-      {/* North edge line (row 2.2 boundary — patch/vault end) */}
-      {Array.from({ length: 15 }).map((_, i) => {
-        const t = (i + 0.5) / 15
-        const startX = cell(2, 2.2)[0]
-        const endX = cell(7, 2.2)[0]
-        const x = startX + t * (endX - startX)
-        const z = cell(0, 2.2)[2]
-        return (
-          <mesh key={`eline-n-${i}`} position={[x, 0.004, z]} rotation={[-Math.PI / 2, 0, 0]}>
-            <planeGeometry args={[0.06, 0.06]} />
-            <meshBasicMaterial color="#6c7a8d" transparent opacity={0.15} />
-          </mesh>
-        )
+      {/* Vertical north-south data bus — through corridor */}
+      {[3, 5, 7, 9].map((col) => {
+        const x = cell(col, 3)[0]
+        const z1 = cell(col, 2.5)[2]
+        const z2 = cell(col, 4.5)[2]
+        return Array.from({ length: 8 }).map((_, i) => {
+          const t = (i + 0.5) / 8
+          const z = z1 + t * (z2 - z1)
+          return (
+            <mesh key={`trace-v-${col}-${i}`} position={[x, 0.005, z]} rotation={[-Math.PI / 2, 0, 0]}>
+              <planeGeometry args={[0.015, 0.06]} />
+              <meshBasicMaterial color={['#00ccff', '#ff00ff'][i % 2]} transparent opacity={0.3} />
+            </mesh>
+          )
+        })
       })}
 
-      {/* ─── Floor Directional Arrows ─── */}
-      <mesh position={[cell(4, 3)[0], 0.005, cell(4, 3)[2]]} rotation={[-Math.PI / 2, 0, -Math.PI / 2]}>
-        <planeGeometry args={[0.1, 0.08]} />
-        <meshBasicMaterial color="#f59e0b" transparent opacity={0.2} />
-      </mesh>
-      {/* Arrow pointing toward DC (far right) */}
-      <mesh position={[cell(9, 3)[0], 0.005, cell(9, 3)[2]]} rotation={[-Math.PI / 2, 0, -Math.PI / 2]}>
-        <planeGeometry args={[0.08, 0.06]} />
-        <meshBasicMaterial color="#10b981" transparent opacity={0.2} />
-      </mesh>
+      {/* Corner accent nodes — circular pads at trace junctions */}
+      {[[2, 4], [5, 4], [8, 4], [3, 3], [6, 3], [9, 3]].map(([c, r], i) => (
+        <mesh key={`pad-${i}`} position={[cell(c, r)[0], 0.006, cell(c, r)[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.03, 0.06, 16]} />
+          <meshBasicMaterial color={['#00ccff', '#ff00ff', '#00ff88'][i % 3]} transparent opacity={0.5} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
 
       {/* ─── Plants — scattered through corridors (updated positions) ─── */}
       <Plant col={3} row={3} size={0.9} />

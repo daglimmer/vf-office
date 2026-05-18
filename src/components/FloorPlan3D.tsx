@@ -5,6 +5,7 @@ import { EffectComposer, Bloom, Noise } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import ZoneBlock from './ZoneBlock'
 import { ServerRacks } from './RackBlock'
+import DataStreams from './DataStreams'
 import OfficeFurniture from './OfficeFurniture'
 import PatchRoomFurniture from './PatchRoomFurniture'
 import VaultFurniture from './VaultFurniture'
@@ -838,6 +839,9 @@ function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, sp
 
       {/* ─── Corridor Decor — hallway markings, plants, water coolers ─── */}
       <CorridorDecor gridCols={GRID_COLS} gridRows={GRID_ROWS} />
+
+      {/* ─── Cyberpunk Data Streams — flowing particles between zones ─── */}
+      <DataStreams gridCols={GRID_COLS} gridRows={GRID_ROWS} />
 
       <Suspense fallback={null}>
         <Environment preset="night" />
