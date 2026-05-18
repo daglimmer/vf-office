@@ -23,7 +23,6 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
 
           return (
             <React.Fragment key={phase.id}>
-              {/* Phase button */}
               <button
                 className={`wf-phase ${isActive ? 'wf-phase-active' : ''} ${isPast ? 'wf-phase-past' : ''}`}
                 style={{
@@ -39,20 +38,19 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
                 <span className="wf-phase-label">{phase.label}</span>
               </button>
 
-              {/* Arrow connector */}
               {idx < WORKFLOW_PHASES.length - 1 && (
                 <div className={`wf-arrow ${isPast && idx < activeIdx ? 'wf-arrow-done' : ''}`}>
                   <svg width="24" height="12" viewBox="0 0 24 12">
                     <line
                       x1="0" y1="6" x2="20" y2="6"
-                      stroke={isPast && idx < activeIdx ? phase.color : '#1e2a3a'}
+                      stroke={isPast && idx < activeIdx ? phase.color : '#1a3355'}
                       strokeWidth="2"
                       strokeLinecap="round"
                     />
                     <polyline
                       points="14,2 20,6 14,10"
                       fill="none"
-                      stroke={isPast && idx < activeIdx ? phase.color : '#1e2a3a'}
+                      stroke={isPast && idx < activeIdx ? phase.color : '#1a3355'}
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -65,18 +63,17 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
         })}
       </div>
 
-      {/* Phase progress bar */}
       <div className="wf-progress-track">
         <div
           className="wf-progress-fill"
           style={{
             width: `${((activeIdx + 1) / WORKFLOW_PHASES.length) * 100}%`,
-            backgroundColor: WORKFLOW_PHASES[Math.max(0, activeIdx)]?.color || '#6b7280',
+            backgroundColor: WORKFLOW_PHASES[Math.max(0, activeIdx)]?.color || '#556688',
+            boxShadow: `0 0 10px ${WORKFLOW_PHASES[Math.max(0, activeIdx)]?.color || '#556688'}`,
           }}
         />
       </div>
 
-      {/* Specialist phase indicators */}
       {specialists && specialists.length > 0 && (
         <div className="wf-specialists">
           {WORKFLOW_PHASES.map((phase) => {
@@ -84,7 +81,7 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
             if (phaseSpecs.length === 0) return null
             return (
               <div key={phase.id} className="wf-phase-group">
-                <span className="wf-phase-dot" style={{ backgroundColor: phase.color }} />
+                <span className="wf-phase-dot" style={{ backgroundColor: phase.color, boxShadow: `0 0 4px ${phase.color}` }} />
                 {phaseSpecs.map((spec) => (
                   <span key={spec.name} className="wf-spec-chip" title={`${spec.task || phase.label}`}>
                     {spec.emoji}
@@ -102,8 +99,8 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
           flex-direction: column;
           align-items: center;
           padding: 10px 16px 6px;
-          background: rgba(19, 24, 32, 0.95);
-          border-bottom: 1px solid rgba(30, 42, 58, 0.5);
+          background: rgba(6, 10, 20, 0.95);
+          border-bottom: 1px solid rgba(26, 51, 85, 0.4);
           backdrop-filter: blur(8px);
         }
         .wf-bar-inner {
@@ -121,7 +118,7 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
           border-radius: 6px;
           border: 1px solid transparent;
           background: transparent;
-          color: #6c7a8d;
+          color: #556688;
           font-size: 12px;
           font-family: inherit;
           cursor: pointer;
@@ -129,18 +126,19 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
           white-space: nowrap;
         }
         .wf-phase:hover {
-          background: rgba(255,255,255,0.03);
-          color: #bfc7d5;
+          background: rgba(0, 204, 255, 0.04);
+          color: #8899cc;
+          border-color: rgba(0, 204, 255, 0.15);
         }
         .wf-phase-active {
-          background: rgba(57, 186, 230, 0.1) !important;
+          background: rgba(0, 204, 255, 0.08) !important;
           border-color: var(--phase-color) !important;
           color: var(--phase-color) !important;
-          box-shadow: 0 0 12px var(--phase-glow);
+          box-shadow: 0 0 16px var(--phase-glow), 0 0 4px var(--phase-color);
         }
         .wf-phase-past {
-          color: #9ca3af;
-          opacity: 0.7;
+          color: #7788aa;
+          opacity: 0.6;
         }
         .wf-phase-icon {
           font-size: 16px;
@@ -153,16 +151,16 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
         .wf-arrow {
           display: flex;
           align-items: center;
-          opacity: 0.5;
+          opacity: 0.3;
         }
         .wf-arrow-done {
-          opacity: 1;
+          opacity: 0.8;
         }
         .wf-progress-track {
           width: 100%;
           max-width: 600px;
           height: 3px;
-          background: #1e2a3a;
+          background: #0d1525;
           border-radius: 2px;
           margin-top: 8px;
           overflow: hidden;
@@ -170,7 +168,7 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
         .wf-progress-fill {
           height: 100%;
           border-radius: 2px;
-          transition: width 0.5s ease, background-color 0.5s ease;
+          transition: width 0.5s ease, background-color 0.5s ease, box-shadow 0.5s ease;
         }
         .wf-specialists {
           display: flex;
@@ -189,19 +187,20 @@ export default function WorkflowBar({ activePhase, onPhaseClick, specialists }: 
           width: 6px;
           height: 6px;
           border-radius: 50%;
-          opacity: 0.8;
           flex-shrink: 0;
+          animation: neon-pulse 2s ease-in-out infinite;
         }
         .wf-spec-chip {
           font-size: 13px;
           line-height: 1;
           cursor: default;
           opacity: 0.85;
-          transition: opacity 0.15s ease, transform 0.15s ease;
+          transition: opacity 0.15s ease, transform 0.15s ease, filter 0.15s ease;
         }
         .wf-spec-chip:hover {
           opacity: 1;
           transform: scale(1.15);
+          filter: drop-shadow(0 0 4px currentColor);
         }
       `}</style>
     </div>
