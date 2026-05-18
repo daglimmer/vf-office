@@ -160,28 +160,28 @@ function ZoneWalls({ gridCols, gridRows }: { gridCols: number; gridRows: number 
   const walls = [
     // ─── Vertical walls ───
     // col 2: Server↔Patch (rows 0-2), DC↔Oly (rows 5-8)
-    vWall(colX(2), rowZ(0), rowZ(2), '#ef4444'),
-    vWall(colX(2), rowZ(5), rowZ(8), '#10b981'),
+    vWall(colX(2), rowZ(0), rowZ(2), '#ff0044'),
+    vWall(colX(2), rowZ(5), rowZ(8), '#00ff88'),
     // col 5: Patch↔Vault (rows 0-2)
-    vWall(colX(5), rowZ(0), rowZ(2), '#f97316'),
+    vWall(colX(5), rowZ(0), rowZ(2), '#ff6600'),
     // col 4: Oly↔Meeting (rows 5-8)
-    vWall(colX(4), rowZ(5), rowZ(8), '#a78bfa'),
+    vWall(colX(4), rowZ(5), rowZ(8), '#00ccff'),
     // col 7: Meeting↔The Office (rows 5-8)
-    vWall(colX(7), rowZ(5), rowZ(8), '#3b82f6'),
+    vWall(colX(7), rowZ(5), rowZ(8), '#4488ff'),
     // col 8: Vault↔Lounge (rows 0-4)
-    vWall(colX(8), rowZ(0), rowZ(4), '#f59e0b'),
+    vWall(colX(8), rowZ(0), rowZ(4), '#ff00ff'),
     // col 10: Lounge↔empty & The Office↔empty (full height accent)
-    vWall(colX(10), rowZ(0), rowZ(8), '#6366f1'),
+    vWall(colX(10), rowZ(0), rowZ(8), '#8844ff'),
 
     // ─── Horizontal walls ───
     // row 2: Patch/Vault bottom → corridor (cols 2-8)
-    hWall(colX(2), colX(8), rowZ(2), 6 * cellW, '#f97316'),
+    hWall(colX(2), colX(8), rowZ(2), 6 * cellW, '#ff6600'),
     // row 3: Server bottom (cols 0-2)
-    hWall(colX(0), colX(2), rowZ(3), 2 * cellW, '#ef4444'),
+    hWall(colX(0), colX(2), rowZ(3), 2 * cellW, '#ff0044'),
     // row 4: Lounge bottom (cols 8-10)
-    hWall(colX(8), colX(10), rowZ(4), 2 * cellW, '#f59e0b'),
+    hWall(colX(8), colX(10), rowZ(4), 2 * cellW, '#ff00ff'),
     // row 5: Corridor → DC/Oly/Meeting/The Office (cols 0-10)
-    hWall(colX(0), colX(10), rowZ(5), 10 * cellW, '#10b981'),
+    hWall(colX(0), colX(10), rowZ(5), 10 * cellW, '#00ff88'),
   ]
 
   return (
@@ -199,11 +199,11 @@ function ZoneWalls({ gridCols, gridRows }: { gridCols: number; gridRows: number 
             w.isH ? DIVIDER_THICKNESS : w.length,
           ]} />
           <meshStandardMaterial
-            color="#2d2d2d"
-            roughness={0.7}
-            metalness={0.1}
+            color="#0a0f1a"
+            roughness={0.55}
+            metalness={0.35}
             emissive={w.color}
-            emissiveIntensity={0.04}
+            emissiveIntensity={0.18}
           />
         </mesh>
       ))}
@@ -233,18 +233,18 @@ function GlassWalls({ gridCols, gridRows }: { gridCols: number; gridRows: number
 
   const glassPanels = [
     // ─── Vertical glass panels ───
-    vGlass(colX(2), rowZ(0), rowZ(2), '#ef4444'),
-    vGlass(colX(2), rowZ(5), rowZ(8), '#10b981'),
-    vGlass(colX(5), rowZ(0), rowZ(2), '#f97316'),
-    vGlass(colX(4), rowZ(5), rowZ(8), '#a78bfa'),
-    vGlass(colX(7), rowZ(5), rowZ(8), '#3b82f6'),
-    vGlass(colX(8), rowZ(0), rowZ(4), '#f59e0b'),
-    vGlass(colX(10), rowZ(0), rowZ(8), '#6366f1'),
+    vGlass(colX(2), rowZ(0), rowZ(2), '#ff0044'),
+    vGlass(colX(2), rowZ(5), rowZ(8), '#00ff88'),
+    vGlass(colX(5), rowZ(0), rowZ(2), '#ff6600'),
+    vGlass(colX(4), rowZ(5), rowZ(8), '#00ccff'),
+    vGlass(colX(7), rowZ(5), rowZ(8), '#4488ff'),
+    vGlass(colX(8), rowZ(0), rowZ(4), '#ff00ff'),
+    vGlass(colX(10), rowZ(0), rowZ(8), '#8844ff'),
     // ─── Horizontal glass panels ───
-    hGlass(colX(2), colX(8), rowZ(2), 6 * cellW, '#f97316'),
-    hGlass(colX(0), colX(2), rowZ(3), 2 * cellW, '#ef4444'),
-    hGlass(colX(8), colX(10), rowZ(4), 2 * cellW, '#f59e0b'),
-    hGlass(colX(0), colX(10), rowZ(5), 10 * cellW, '#10b981'),
+    hGlass(colX(2), colX(8), rowZ(2), 6 * cellW, '#ff6600'),
+    hGlass(colX(0), colX(2), rowZ(3), 2 * cellW, '#ff0044'),
+    hGlass(colX(8), colX(10), rowZ(4), 2 * cellW, '#ff00ff'),
+    hGlass(colX(0), colX(10), rowZ(5), 10 * cellW, '#00ff88'),
   ]
 
   const glassY = DIVIDER_HEIGHT + GLASS_HEIGHT / 2
@@ -263,14 +263,16 @@ function GlassWalls({ gridCols, gridRows }: { gridCols: number; gridRows: number
             g.isH ? GLASS_THICKNESS : g.length,
           ]} />
           <meshPhysicalMaterial
-            color="#c8d6e5"
-            metalness={0.05}
-            roughness={0.08}
+            color="#1a2a4a"
+            metalness={0.08}
+            roughness={0.06}
             transparent
-            opacity={0.22}
-            envMapIntensity={0.35}
-            clearcoat={0.1}
-            clearcoatRoughness={0.2}
+            opacity={0.28}
+            envMapIntensity={0.5}
+            clearcoat={0.15}
+            clearcoatRoughness={0.15}
+            emissive={g.color}
+            emissiveIntensity={0.06}
           />
         </mesh>
       ))}
@@ -293,21 +295,21 @@ function GlassDoors({ gridCols, gridRows }: { gridCols: number; gridRows: number
 
   const flatDoors = [
     // Server Room → corridor (centered on cols 0-2, row 3 boundary)
-    { x: (colX(0) + colX(2)) / 2, z: rowZ(3), rot: 0, color: '#ef4444', label: 'SR' },
+    { x: (colX(0) + colX(2)) / 2, z: rowZ(3), rot: 0, color: '#ff0044', label: 'SR' },
     // Patch Room → corridor (centered on cols 2-4, row 2 boundary)  
-    { x: (colX(2) + colX(4)) / 2, z: rowZ(2), rot: 0, color: '#f97316', label: 'PR' },
+    { x: (colX(2) + colX(4)) / 2, z: rowZ(2), rot: 0, color: '#ff6600', label: 'PR' },
     // Vault → corridor (centered on cols 5-7, row 2 boundary)
-    { x: (colX(5) + colX(7)) / 2, z: rowZ(2), rot: 0, color: '#d97706', label: 'VT' },
+    { x: (colX(5) + colX(7)) / 2, z: rowZ(2), rot: 0, color: '#ffaa00', label: 'VT' },
     // Lounge → corridor (centered on cols 8-9, row 4 boundary)
-    { x: (colX(8) + colX(10)) / 2, z: rowZ(4), rot: 0, color: '#f59e0b', label: 'LO' },
+    { x: (colX(8) + colX(10)) / 2, z: rowZ(4), rot: 0, color: '#ff00ff', label: 'LO' },
     // Data Centre → corridor (centered on cols 0-1, row 5 boundary)
-    { x: (colX(0) + colX(2)) / 2, z: rowZ(5), rot: 0, color: '#10b981', label: 'DC' },
+    { x: (colX(0) + colX(2)) / 2, z: rowZ(5), rot: 0, color: '#00ff88', label: 'DC' },
     // Oly's Office → corridor (centered on cols 2-3, row 5 boundary)
-    { x: (colX(2) + colX(4)) / 2, z: rowZ(5), rot: 0, color: '#a78bfa', label: 'OO' },
+    { x: (colX(2) + colX(4)) / 2, z: rowZ(5), rot: 0, color: '#00ccff', label: 'OO' },
     // Meeting Room → corridor (centered on cols 4-6, row 5 boundary)
-    { x: (colX(4) + colX(7)) / 2, z: rowZ(5), rot: 0, color: '#3b82f6', label: 'MR' },
+    { x: (colX(4) + colX(7)) / 2, z: rowZ(5), rot: 0, color: '#4488ff', label: 'MR' },
     // The Office → corridor (centered on cols 7-9, row 5 boundary)
-    { x: (colX(7) + colX(10)) / 2, z: rowZ(5), rot: 0, color: '#6366f1', label: 'TO' },
+    { x: (colX(7) + colX(10)) / 2, z: rowZ(5), rot: 0, color: '#8844ff', label: 'TO' },
   ]
 
   const doorBaseY = 0.01
@@ -324,30 +326,32 @@ function GlassDoors({ gridCols, gridRows }: { gridCols: number; gridRows: number
           {[-hingeX, hingeX].map((fx, j) => (
             <mesh key={`post-${j}`} position={[fx, doorH / 2, doorZ]}>
               <boxGeometry args={[DOOR_FRAME_THICKNESS, doorH, DOOR_FRAME_THICKNESS]} />
-              <meshStandardMaterial color="#5a6578" metalness={0.8} roughness={0.3} />
+              <meshStandardMaterial color="#1a2a4a" metalness={0.8} roughness={0.25} emissive={d.color} emissiveIntensity={0.18} />
             </mesh>
           ))}
           {/* Top rail */}
           <mesh position={[0, doorH - DOOR_FRAME_THICKNESS / 2, doorZ]}>
             <boxGeometry args={[DOOR_WIDTH, DOOR_FRAME_THICKNESS, DOOR_FRAME_THICKNESS]} />
-            <meshStandardMaterial color="#5a6578" metalness={0.8} roughness={0.3} />
+            <meshStandardMaterial color="#1a2a4a" metalness={0.8} roughness={0.25} emissive={d.color} emissiveIntensity={0.18} />
           </mesh>
           {/* Glass panel */}
           <mesh position={[0, doorH / 2, doorZ]}>
             <boxGeometry args={[DOOR_WIDTH - DOOR_FRAME_THICKNESS * 2, doorH - DOOR_FRAME_THICKNESS * 3, 0.008]} />
             <meshPhysicalMaterial
-              color="#d8e6f0"
-              metalness={0.03}
-              roughness={0.06}
+              color="#182840"
+              metalness={0.05}
+              roughness={0.04}
               transparent
-              opacity={0.35}
-              envMapIntensity={0.5}
+              opacity={0.42}
+              envMapIntensity={0.6}
+              emissive={d.color}
+              emissiveIntensity={0.08}
             />
           </mesh>
           {/* Handle bar */}
           <mesh position={[hingeX - 0.06, doorH * 0.55, doorZ + 0.015]}>
             <boxGeometry args={[0.015, 0.14, 0.01]} />
-            <meshStandardMaterial color="#9ca3af" metalness={0.9} roughness={0.15} />
+            <meshStandardMaterial color="#8899cc" metalness={0.85} roughness={0.15} emissive={d.color} emissiveIntensity={0.25} />
           </mesh>
         </group>
       ))}
@@ -460,23 +464,23 @@ const SPECIALIST_EMOJIS: Record<string, string> = {
 }
 
 const SPECIALIST_COLORS: Record<string, string> = {
-  main: '#39bae6',
-  builder: '#22c55e',
-  sentry: '#3b82f6',
-  bulwark: '#ef4444',
-  archive: '#f59e0b',
-  sage: '#a78bfa',
-  haven: '#10b981',
-  ledger: '#ec4899',
+  main: '#00ccff',
+  builder: '#00ff88',
+  sentry: '#4488ff',
+  bulwark: '#ff0044',
+  archive: '#ffaa00',
+  sage: '#cc88ff',
+  haven: '#00ff88',
+  ledger: '#ff4488',
 }
 
 // ─── Status-to-color mapping (always visible) ──────────────────────
 const STATUS_COLORS: Record<string, string> = {
-  consulting: '#f59e0b',   // amber
-  working: '#22c55e',      // green
-  debrief: '#a78bfa',      // blue
-  documenting: '#3b82f6',  // purple
-  idle: '#6b7280',         // grey
+  consulting: '#ffaa00',   // neon amber
+  working: '#00ff88',      // neon green
+  debrief: '#cc88ff',      // neon purple
+  documenting: '#4488ff',  // neon blue
+  idle: '#556688',         // muted blue-grey
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -792,7 +796,7 @@ function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, sp
       <ServerRacks
         col={0} row={0} colSpan={2} rowSpan={3}
         gridCols={GRID_COLS} gridRows={GRID_ROWS}
-        color="#ef4444" zoneId="server_room"
+        color="#ff0044" zoneId="server_room"
         facingDirection="north"
       />
       
@@ -800,7 +804,7 @@ function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, sp
       <ServerRacks
         col={0} row={5} colSpan={2} rowSpan={3}
         gridCols={GRID_COLS} gridRows={GRID_ROWS}
-        color="#10b981" zoneId="datacenter"
+        color="#00ff88" zoneId="datacenter"
         facingDirection="north"
       />
 

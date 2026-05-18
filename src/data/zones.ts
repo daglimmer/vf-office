@@ -1,4 +1,4 @@
-// ─── Zone Configuration — Ray's Grid Layout (2026-05-17) ────────
+// ─── Zone Configuration — Cyberpunk Neon Grid (2026-05-18) ────────
 // 12×8 grid, 8 zones. Full-width corridor at row 4.
 // Server Room: 2×3 (cols 0-1, rows 0-2) — raised-floor compute
 // Patch Room: 3×2 (cols 2-4, rows 0-1) — network termination
@@ -7,7 +7,7 @@
 // Data Centre: 2×3 (cols 0-1, rows 5-7) — cluster infrastructure
 // Oly's Office: 2×3 (cols 2-3, rows 5-7) — command center
 // Meeting Room: 3×3 (cols 4-6, rows 5-7) — conference room
-// The Office: 3×3 (cols 7-9, rows 5-7) — Ray's private office
+// The Office: 3×3 (cols 7-9, rows 5-7) — Ray's private office + Tech Desk
 // Corridor: row 4 (full width), cols 2-7 rows 2-3 (open space)
 
 export interface ZoneConfig {
@@ -23,12 +23,15 @@ export interface ZoneConfig {
   rowSpan: number
 }
 
+// ─── Cyberpunk Neon Color Palette ──────────────────────────────────
+// Deep blue/magenta primary with neon accent zone colors
+// Designed for bloom post-processing — high-saturation emissive
 export const ZONES: ZoneConfig[] = [
   {
     id: 'server_room',
     label: 'Server Room',
     icon: '🖥️',
-    color: '#ef4444',
+    color: '#ff0044',
     description: '3× 84U racks. 9 hosts online. Compute backbone of the lab.',
     col: 0, row: 0, colSpan: 2, rowSpan: 3,
   },
@@ -36,7 +39,7 @@ export const ZONES: ZoneConfig[] = [
     id: 'patch_room',
     label: 'Patch Room',
     icon: '🔌',
-    color: '#f97316',
+    color: '#ff6600',
     description: 'Patch panels and network termination. DSW/ASW switch stacks. Cross-connects to all zones.',
     col: 2, row: 0, colSpan: 3, rowSpan: 2,
   },
@@ -44,7 +47,7 @@ export const ZONES: ZoneConfig[] = [
     id: 'vault',
     label: 'Vault',
     icon: '🔐',
-    color: '#d97706',
+    color: '#ffaa00',
     description: 'Reinforced secure storage vault. Backup archives, secrets, cold storage.',
     col: 5, row: 0, colSpan: 3, rowSpan: 2,
   },
@@ -52,7 +55,7 @@ export const ZONES: ZoneConfig[] = [
     id: 'lounge',
     label: 'Lounge Area',
     icon: '🛋️',
-    color: '#f59e0b',
+    color: '#ff00ff',
     description: 'Consulting, debrief & chill-out zone. Convertible lounge chairs, coffee table, whiteboard.',
     col: 8, row: 0, colSpan: 2, rowSpan: 4,
   },
@@ -60,7 +63,7 @@ export const ZONES: ZoneConfig[] = [
     id: 'datacenter',
     label: 'Data Centre',
     icon: '📡',
-    color: '#10b981',
+    color: '#00ff88',
     description: 'Cluster infrastructure — 3 racks, 9 hosts. High-density compute. Ground floor left wing.',
     col: 0, row: 5, colSpan: 2, rowSpan: 3,
   },
@@ -68,7 +71,7 @@ export const ZONES: ZoneConfig[] = [
     id: 'oly_office',
     label: "Oly's Office",
     icon: '⚙️',
-    color: '#a78bfa',
+    color: '#00ccff',
     description: "Oly's command center. Sleek desk, dual monitors, bookshelf. Mission control HQ.",
     col: 2, row: 5, colSpan: 2, rowSpan: 3,
   },
@@ -76,7 +79,7 @@ export const ZONES: ZoneConfig[] = [
     id: 'meeting',
     label: 'Meeting Room',
     icon: '📋',
-    color: '#3b82f6',
+    color: '#4488ff',
     description: 'Team conference room. Oval table with 8 leather chairs, projector screen. Specialist debriefs & planning.',
     col: 4, row: 5, colSpan: 3, rowSpan: 3,
   },
@@ -84,13 +87,13 @@ export const ZONES: ZoneConfig[] = [
     id: 'the_office',
     label: 'The Office',
     icon: '🏢',
-    color: '#6366f1',
-    description: "Modern open-plan office. 6 compact tech desks in a 2×3 grid. Strategic command post.",
+    color: '#8844ff',
+    description: "Modern open-plan office. Tech desks + Ray's command post. Strategic operations center.",
     col: 7, row: 5, colSpan: 3, rowSpan: 3,
   },
 ]
 
-// ─── Workflow Phases ────────────────────────────────────────────────
+// ─── Workflow Phases — Neon Variants ────────────────────────────────
 export interface WorkflowPhase {
   id: string
   label: string
@@ -99,9 +102,9 @@ export interface WorkflowPhase {
 }
 
 export const WORKFLOW_PHASES: WorkflowPhase[] = [
-  { id: 'consulting', label: 'Consulting', icon: '🤝', color: '#f59e0b' },
-  { id: 'working', label: 'Doing the Work', icon: '⚙️', color: '#22c55e' },
-  { id: 'debrief', label: 'Debrief', icon: '📋', color: '#a78bfa' },
-  { id: 'documenting', label: 'Documenting', icon: '📝', color: '#3b82f6' },
-  { id: 'idle', label: 'Idle', icon: '☕', color: '#6b7280' },
+  { id: 'consulting', label: 'Consulting', icon: '🤝', color: '#ffaa00' },
+  { id: 'working', label: 'Doing the Work', icon: '⚙️', color: '#00ff88' },
+  { id: 'debrief', label: 'Debrief', icon: '📋', color: '#cc88ff' },
+  { id: 'documenting', label: 'Documenting', icon: '📝', color: '#4488ff' },
+  { id: 'idle', label: 'Idle', icon: '☕', color: '#556688' },
 ]
