@@ -277,6 +277,160 @@ function CeilingRings({ position, radius }: { position: [number, number, number]
   )
 }
 
+// ─── Glass Wall Panel — translucent divider between DC and Oly's Office ──
+function GlassWallPanel({ position, width, height, color }: {
+  position: [number, number, number]
+  width: number
+  height: number
+  color: string
+}) {
+  const glowRef = useRef<THREE.Mesh>(null!)
+
+  useFrame(({ clock }) => {
+    if (glowRef.current) {
+      const pulse = 0.25 + Math.sin(clock.elapsedTime * 0.5) * 0.08
+      const mat = glowRef.current.material as THREE.MeshStandardMaterial
+      mat.emissiveIntensity = pulse
+    }
+  })
+
+  return (
+    <group position={position}>
+      {/* Main glass pane — translucent teal/smoke */}
+      <mesh>
+        <boxGeometry args={[0.04, height * 0.92, width * 0.88]} />
+        <meshPhysicalMaterial
+          color="#1a2a3a"
+          metalness={0.08}
+          roughness={0.06}
+          transparent
+          opacity={0.32}
+          envMapIntensity={0.4}
+          clearcoat={0.12}
+          clearcoatRoughness={0.18}
+          emissive={color}
+          emissiveIntensity={0.05}
+        />
+      </mesh>
+
+      {/* Glass edge frames — top and bottom rails */}
+      <mesh position={[0, height * 0.46, 0]}>
+        <boxGeometry args={[0.06, 0.02, width * 0.90]} />
+        <meshStandardMaterial color="#2a3a4a" metalness={0.7} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, -height * 0.46, 0]}>
+        <boxGeometry args={[0.06, 0.02, width * 0.90]} />
+        <meshStandardMaterial color="#2a3a4a" metalness={0.7} roughness={0.3} />
+      </mesh>
+
+      {/* Vertical structural mullions */}
+      {[width * 0.3, 0, -width * 0.3].map((zm, mi) => (
+        <mesh key={`mullion-${mi}`} position={[0, 0, zm]}>
+          <boxGeometry args={[0.025, height * 0.88, 0.02]} />
+          <meshStandardMaterial color="#1e2e3e" metalness={0.65} roughness={0.35} />
+        </mesh>
+      ))}
+
+      {/* Subtle cyan edge glow */}
+      <mesh ref={glowRef} position={[0, 0, 0]}>
+        <boxGeometry args={[0.045, height * 0.93, width * 0.89]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={0.25}
+          roughness={0.05}
+          transparent
+          opacity={0.08}
+        />
+      </mesh>
+    </group>
+  )
+}
+
+// ─── Glass-Mounted Screen — display panel physically attached to glass wall ──
+function GlassMountedScreen({ position, size, glassX }: {
+  position: [number, number, number]
+  size: [number, number]
+  glassX: number
+}) {
+  const ledRef = useRef<THREE.Mesh>(null!)
+
+  useFrame(({ clock }) => {
+    if (ledRef.current) {
+      const pulse = 0.6 + Math.sin(clock.elapsedTime * 1.5) * 0.2
+      const mat = ledRef.current.material as THREE.MeshBasicMaterial
+      mat.opacity = pulse
+    }
+  })
+
+  // Screen faces the DC interior (toward -X / center)
+  // Positioned on the DC side of the glass, flush-mounted
+  const scrX = glassX - 0.025  // slightly inside from glass surface
+
+  return (
+    <group position={[scrX, position[1], position[2]]}>
+      {/* Mounting bracket — top clamp onto glass rail */}
+      <mesh position={[0.025, size[1] / 2 + 0.015, 0]}>
+        <boxGeometry args={[0.05, 0.02, size[0] * 0.6]} />
+        <meshStandardMaterial color="#1a1d26" metalness={0.7} roughness={0.3} />
+      </mesh>
+
+      {/* Mounting bracket — bottom clamp */}
+      <mesh position={[0.025, -size[1] / 2 - 0.015, 0]}>
+        <boxGeometry args={[0.05, 0.02, size[0] * 0.6]} />
+        <meshStandardMaterial color="#1a1d26" metalness={0.7} roughness={0.3} />
+      </mesh>
+
+      {/* VESA arm — connects screen to glass mount point */}
+      <mesh position={[0.02, 0, 0]}>
+        <boxGeometry args={[0.025, 0.03, 0.03]} />
+        <meshStandardMaterial color="#22262e" metalness={0.8} roughness={0.25} />
+      </mesh>
+
+      {/* Screen bezel/frame — dark metal */}
+      <mesh position={[0, 0, 0]}>
+        <boxGeometry args={[0.015, size[1], size[0]]} />
+        <meshStandardMaterial color="#0a0f18" metalness={0.6} roughness={0.2} />
+      </mesh>
+
+      {/* Screen display surface — facing DC interior (-X direction) */}
+      <mesh position={[-0.005, 0, 0]}>
+        <planeGeometry args={[size[0] - 0.04, size[1] - 0.04]} />
+        <meshStandardMaterial
+          color="#0a1a30"
+          emissive="#0d2040"
+          emissiveIntensity={0.5}
+          roughness={0.04}
+        />
+      </mesh>
+
+      {/* UI elements on screen */}
+      {Array.from({ length: 4 }).map((_, i) => (
+        <mesh key={`gbar-${i}`} position={[
+          -0.006,
+          size[1] * 0.28 - i * size[1] * 0.15,
+          (i - 1.5) * 0.08
+        ]}>
+          <boxGeometry args={[0.001, 0.003 + i * 0.004, 0.04]} />
+          <meshBasicMaterial color={i < 2 ? '#22dd88' : '#44aadd'} transparent opacity={0.55} />
+        </mesh>
+      ))}
+
+      {/* Circular widget on screen */}
+      <mesh position={[-0.006, -size[1] * 0.28, 0]}>
+        <ringGeometry args={[0.025, 0.030, 24, 1, 0, Math.PI * 1.6]} />
+        <meshBasicMaterial color="#44ccff" transparent opacity={0.5} />
+      </mesh>
+
+      {/* Status LED on bezel edge */}
+      <mesh ref={ledRef} position={[0.008, size[1] / 2 - 0.03, size[0] / 2 - 0.025]}>
+        <sphereGeometry args={[0.006, 8, 8]} />
+        <meshBasicMaterial color="#00ff88" transparent opacity={0.7} />
+      </mesh>
+    </group>
+  )
+}
+
 // ─── Wall Screen Bank — large display panels on perimeter walls ─────
 function WallScreenBank({ position, rotation, size }: {
   position: [number, number, number]
@@ -477,7 +631,30 @@ export default function DataCentrePortal({ col, row, colSpan, rowSpan, gridCols,
       {/* ─── Ceiling Ring Canopy ─── */}
       <CeilingRings position={[0, 2.05, 0]} radius={roomRadius * 0.90} />
 
-      {/* ─── Perimeter Wall Screen Banks ─── */}
+      {/* ─── GLASS WALL — Shared boundary with Oly's Office (right side) ─── */}
+      <GlassWallPanel
+        position={[zW * 0.48, 0, 0]}
+        width={zD * 0.85}
+        height={2.10}
+        color="#00ff88"
+      />
+
+      {/* ─── Screens mounted ON the glass wall (Oly's Office side) ─── */}
+      {/* Upper display — cluster status */}
+      <GlassMountedScreen
+        position={[0, 1.05, -zD * 0.15]}
+        size={[0.36, 0.28]}
+        glassX={zW * 0.48}
+      />
+
+      {/* Lower display — metrics dashboard */}
+      <GlassMountedScreen
+        position={[0, 0.50, zD * 0.18]}
+        size={[0.32, 0.24]}
+        glassX={zW * 0.48}
+      />
+
+      {/* ─── Perimeter Wall Screen Banks — back and left walls ─── */}
       {/* Back wall — center map display */}
       <WallScreenBank
         position={[0, 0.90, -zD * 0.36]}
@@ -503,13 +680,6 @@ export default function DataCentrePortal({ col, row, colSpan, rowSpan, gridCols,
       <WallScreenBank
         position={[-zW * 0.36, 0.80, 0]}
         rotation={[0, Math.PI / 2, 0]}
-        size={[0.35, 0.30]}
-      />
-
-      {/* Right wall screen */}
-      <WallScreenBank
-        position={[zW * 0.36, 0.80, 0]}
-        rotation={[0, -Math.PI / 2, 0]}
         size={[0.35, 0.30]}
       />
 
