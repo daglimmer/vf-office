@@ -13,6 +13,7 @@ import MeetingFurniture from './MeetingFurniture'
 import TheOfficeFurniture from './TheOfficeFurniture'
 import LoungeFurniture from './LoungeFurniture'
 import CorridorDecor from './CorridorDecor'
+import DataCenter from './DataCenter'
 import { ZONES, ZoneConfig, WORKFLOW_PHASES } from '../data/zones'
 import { SpecialistData } from '../App'
 
@@ -871,12 +872,10 @@ function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, sp
         facingDirection="north"
       />
       
-      {/* ─── Data Centre racks — bottom-left, face north toward door ─── */}
-      <ServerRacks
+      {/* ─── Data Centre — hexagonal portal, Traefik label, holographic displays ─── */}
+      <DataCenter
         col={0} row={5} colSpan={2} rowSpan={3}
         gridCols={GRID_COLS} gridRows={GRID_ROWS}
-        color="#00ff88" zoneId="datacenter"
-        facingDirection="north"
       />
 
       {/* ─── The Office — bottom-right (cols 7-9, rows 5-7) ─── */}
