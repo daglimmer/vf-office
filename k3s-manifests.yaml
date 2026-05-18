@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
         - name: vf-office
-          image: registry.mission-control.svc.cluster.local:5000/vf-office:workflow
+          image: registry.mission-control.svc.cluster.local:5000/vf-office:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80

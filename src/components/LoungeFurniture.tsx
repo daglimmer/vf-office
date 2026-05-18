@@ -604,9 +604,6 @@ export default function LoungeFurniture({ col, row, colSpan, rowSpan, gridCols, 
   const roomW = colSpan * cellW
   const roomD = rowSpan * cellD
 
-  // Fireplace at far end (north/deeper z, negative in our coords)
-  const fpZ = -roomD * 0.38
-
   return (
     <group>
       {/* ═══════════════════════════════════════════════════════════
@@ -614,180 +611,116 @@ export default function LoungeFurniture({ col, row, colSpan, rowSpan, gridCols, 
           ═══════════════════════════════════════════════════════════ */}
       <mesh position={[cx, 0.004, cz]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[roomW * 0.88, roomD * 0.88]} />
-        <meshStandardMaterial
-          color={STONE_FLOOR}
-          roughness={0.12}
-          metalness={0.10}
-        />
+        <meshStandardMaterial color={STONE_FLOOR} roughness={0.12} metalness={0.10} />
       </mesh>
-
-      {/* Floor reflection sheen */}
       <mesh position={[cx, 0.005, cz]} rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[roomW * 0.82, roomD * 0.82]} />
-        <meshStandardMaterial
-          color="#d0ccc4"
-          roughness={0.08}
-          metalness={0.08}
-          transparent
-          opacity={0.35}
-        />
+        <meshStandardMaterial color="#d0ccc4" roughness={0.08} metalness={0.08} transparent opacity={0.35} />
       </mesh>
 
       {/* ═══════════════════════════════════════════════════════════
           HIGH CEILING — black recessed lighting troughs
           ═══════════════════════════════════════════════════════════ */}
       <group position={[cx, 0.95, cz]}>
-        {/* Perimeter U-shaped trough */}
-        {/* Left side */}
         <CeilingTrough position={[-roomW * 0.38, 0, 0]} width={0.08} depth={roomD * 0.75} />
-        {/* Right side */}
         <CeilingTrough position={[roomW * 0.38, 0, 0]} width={0.08} depth={roomD * 0.75} />
-        {/* Back side (above fireplace) */}
         <CeilingTrough position={[0, 0, -roomD * 0.38]} width={roomW * 0.75} depth={0.08} />
-        {/* Central linear trough */}
-        <CeilingTrough position={[0, 0, roomD * 0.05]} width={roomW * 0.55} depth={0.06} />
+        <CeilingTrough position={[0, 0, roomD * 0.08]} width={roomW * 0.50} depth={0.06} />
       </group>
 
       {/* ═══════════════════════════════════════════════════════════
-          WOOD WALL PANELING — light oak, left and right walls
+          WOOD WALL PANELING — light oak, left and right
           ═══════════════════════════════════════════════════════════ */}
-      <WoodWallPanel
-        position={[cx - roomW * 0.42, 0.35, cz]}
-        width={0.65}
-        height={0.65}
-        rotation={[0, Math.PI / 2, 0]}
-      />
-      <WoodWallPanel
-        position={[cx + roomW * 0.42, 0.35, cz]}
-        width={0.65}
-        height={0.65}
-        rotation={[0, -Math.PI / 2, 0]}
-      />
+      <WoodWallPanel position={[cx - roomW * 0.42, 0.35, cz]} width={0.65} height={0.65} rotation={[0, Math.PI / 2, 0]} />
+      <WoodWallPanel position={[cx + roomW * 0.42, 0.35, cz]} width={0.65} height={0.65} rotation={[0, -Math.PI / 2, 0]} />
 
-      {/* Wood pillar accents */}
-      <mesh position={[cx - roomW * 0.32, 0.35, cz - roomD * 0.15]} castShadow>
-        <boxGeometry args={[0.06, 0.65, 0.06]} />
+      {/* Wood pillar accents near fireplace */}
+      <mesh position={[cx - roomW * 0.25, 0.35, cz - roomD * 0.20]} castShadow>
+        <boxGeometry args={[0.05, 0.65, 0.05]} />
         <meshStandardMaterial color={OAK_WOOD} roughness={0.50} />
       </mesh>
-      <mesh position={[cx + roomW * 0.32, 0.35, cz - roomD * 0.15]} castShadow>
-        <boxGeometry args={[0.06, 0.65, 0.06]} />
+      <mesh position={[cx + roomW * 0.25, 0.35, cz - roomD * 0.20]} castShadow>
+        <boxGeometry args={[0.05, 0.65, 0.05]} />
         <meshStandardMaterial color={OAK_WOOD} roughness={0.50} />
       </mesh>
 
       {/* ═══════════════════════════════════════════════════════════
           WINDOW WALLS — floor-to-ceiling glass on sides
           ═══════════════════════════════════════════════════════════ */}
-      <WindowPanel
-        position={[cx - roomW * 0.42, 0.45, cz + roomD * 0.05]}
-        width={0.25}
-        height={0.55}
-        rotation={[0, Math.PI / 2, 0]}
-      />
-      <WindowPanel
-        position={[cx + roomW * 0.42, 0.45, cz + roomD * 0.05]}
-        width={0.25}
-        height={0.55}
-        rotation={[0, -Math.PI / 2, 0]}
-      />
+      <WindowPanel position={[cx - roomW * 0.42, 0.45, cz + roomD * 0.08]} width={0.25} height={0.55} rotation={[0, Math.PI / 2, 0]} />
+      <WindowPanel position={[cx + roomW * 0.42, 0.45, cz + roomD * 0.08]} width={0.25} height={0.55} rotation={[0, -Math.PI / 2, 0]} />
 
       {/* ═══════════════════════════════════════════════════════════
           CENTRAL FIREPLACE — floor-to-ceiling limestone monolith
+          at far end of the room, the focal point
           ═══════════════════════════════════════════════════════════ */}
       <group position={[cx, 0, cz]}>
         <FireplaceMonolith />
       </group>
 
       {/* ═══════════════════════════════════════════════════════════
-          AREA RUGS — left and right seating zones (symmetrical)
+          AREA RUGS — symmetrical, flanking central path
           ═══════════════════════════════════════════════════════════ */}
       <group position={[cx, 0, cz]}>
-        {/* Left rug */}
-        <AreaRug position={[-roomW * 0.18, 0.006, roomD * 0.12]} width={roomW * 0.32} depth={roomD * 0.40} />
-        {/* Right rug */}
-        <AreaRug position={[roomW * 0.18, 0.006, roomD * 0.12]} width={roomW * 0.32} depth={roomD * 0.40} />
+        <AreaRug position={[-roomW * 0.18, 0.006, roomD * 0.12]} width={roomW * 0.28} depth={roomD * 0.35} />
+        <AreaRug position={[roomW * 0.18, 0.006, roomD * 0.12]} width={roomW * 0.28} depth={roomD * 0.35} />
       </group>
 
       {/* ═══════════════════════════════════════════════════════════
-          LEFT SEATING GROUP
+          MAIN SEATING — Two long sofas facing each other
+          across a central path leading to the fireplace
           ═══════════════════════════════════════════════════════════ */}
-      <group position={[cx - roomW * 0.18, 0, cz + roomD * 0.12]}>
-        {/* Chaise Sofa — facing center/right */}
-        <ChaiseSofa position={[0.12, 0, -roomD * 0.08]} rotation={[0, -Math.PI * 0.35, 0]} />
-        {/* Wingback Chair — facing inward */}
-        <WingbackChair position={[-0.08, 0, roomD * 0.08]} rotation={[0, Math.PI * 0.25, 0]} />
-        {/* Coffee Table — center of group */}
-        <CoffeeTable position={[0, 0.14, 0]} size={[roomW * 0.24, 0.14, roomD * 0.10]} />
-        {/* Coffee table books */}
-        <CoffeeTableBooks position={[0, 0.15, 0.01]} />
+      {/* LEFT SOFA — faces right toward center */}
+      <group position={[cx - roomW * 0.15, 0, cz + roomD * 0.10]}>
+        <ThreeSeaterSofa position={[0, 0, 0]} rotation={[0, Math.PI * 0.50, 0]} />
+        {/* Coffee table in front of sofa — toward center */}
+        <CoffeeTable position={[roomW * 0.12, 0.14, -roomD * 0.02]} size={[roomW * 0.20, 0.14, roomD * 0.08]} />
+        <CoffeeTableBooks position={[roomW * 0.12, 0.15, -roomD * 0.01]} />
+      </group>
+
+      {/* RIGHT SOFA — faces left toward center */}
+      <group position={[cx + roomW * 0.15, 0, cz + roomD * 0.10]}>
+        <ThreeSeaterSofa position={[0, 0, 0]} rotation={[0, -Math.PI * 0.50, 0]} />
+        <CoffeeTable position={[-roomW * 0.12, 0.14, -roomD * 0.02]} size={[roomW * 0.20, 0.14, roomD * 0.08]} />
+        <CoffeeTableBooks position={[-roomW * 0.12, 0.15, -roomD * 0.01]} />
       </group>
 
       {/* ═══════════════════════════════════════════════════════════
-          RIGHT SEATING GROUP
+          TEAL VELVET WINGBACKS — flanking the fireplace
+          angled inward for conversation
           ═══════════════════════════════════════════════════════════ */}
-      <group position={[cx + roomW * 0.18, 0, cz + roomD * 0.12]}>
-        {/* Chaise Sofa — facing center/left */}
-        <ChaiseSofa position={[-0.12, 0, -roomD * 0.08]} rotation={[0, Math.PI * 0.35, 0]} />
-        {/* Wingback Chair — facing inward */}
-        <WingbackChair position={[0.08, 0, roomD * 0.08]} rotation={[0, -Math.PI * 0.25, 0]} />
-        {/* Coffee Table — center of group */}
-        <CoffeeTable position={[0, 0.14, 0]} size={[roomW * 0.24, 0.14, roomD * 0.10]} />
-        {/* Coffee table books */}
-        <CoffeeTableBooks position={[0, 0.15, -0.01]} />
-      </group>
-
-      {/* ═══════════════════════════════════════════════════════════
-          OUTER SEATING — three-seater sofas against walls
-          ═══════════════════════════════════════════════════════════ */}
-      <ThreeSeaterSofa
-        position={[cx - roomW * 0.35, 0, cz + roomD * 0.05]}
-        rotation={[0, Math.PI / 2, 0]}
+      <WingbackChair
+        position={[cx - roomW * 0.12, 0, cz - roomD * 0.22]}
+        rotation={[0, Math.PI * 0.30, 0]}
       />
-      <ThreeSeaterSofa
-        position={[cx + roomW * 0.35, 0, cz + roomD * 0.05]}
-        rotation={[0, -Math.PI / 2, 0]}
-      />
-
-      {/* Neutral lounge chairs near back */}
-      <LoungeChair
-        position={[cx - roomW * 0.30, 0, cz - roomD * 0.08]}
-        rotation={[0, Math.PI * 0.15, 0]}
-      />
-      <LoungeChair
-        position={[cx + roomW * 0.30, 0, cz - roomD * 0.08]}
-        rotation={[0, -Math.PI * 0.15, 0]}
+      <WingbackChair
+        position={[cx + roomW * 0.12, 0, cz - roomD * 0.22]}
+        rotation={[0, -Math.PI * 0.30, 0]}
       />
 
       {/* ═══════════════════════════════════════════════════════════
-          FLOOR LAMPS — near seating groups
+          FLOOR LAMPS — tall, flanking the fireplace
           ═══════════════════════════════════════════════════════════ */}
-      <FloorLamp position={[cx - roomW * 0.28, 0, cz + roomD * 0.28]} />
-      <FloorLamp position={[cx + roomW * 0.28, 0, cz + roomD * 0.28]} />
+      <FloorLamp position={[cx - roomW * 0.22, 0, cz - roomD * 0.24]} />
+      <FloorLamp position={[cx + roomW * 0.22, 0, cz - roomD * 0.24]} />
 
       {/* ═══════════════════════════════════════════════════════════
-          WALL SCONCES — alabaster blocks on wood pillars
+          WALL SCONCES — alabaster on wood pillars
           ═══════════════════════════════════════════════════════════ */}
-      <WallSconce
-        position={[cx - roomW * 0.30, 0.45, cz - roomD * 0.15]}
-        rotation={[0, 0, 0]}
-      />
-      <WallSconce
-        position={[cx + roomW * 0.30, 0.45, cz - roomD * 0.15]}
-        rotation={[0, 0, 0]}
-      />
+      <WallSconce position={[cx - roomW * 0.24, 0.45, cz - roomD * 0.20]} rotation={[0, 0, 0]} />
+      <WallSconce position={[cx + roomW * 0.24, 0.45, cz - roomD * 0.20]} rotation={[0, 0, 0]} />
 
       {/* ═══════════════════════════════════════════════════════════
-          SIDE TABLES — small, with florals
+          SIDE TABLES — small accent tables
           ═══════════════════════════════════════════════════════════ */}
-      <SideTable position={[cx - roomW * 0.15, 0, cz + roomD * 0.28]} />
-      <SideTable position={[cx + roomW * 0.15, 0, cz + roomD * 0.28]} />
-      <SideTable position={[cx - roomW * 0.15, 0, cz - roomD * 0.22]} />
-      <SideTable position={[cx + roomW * 0.15, 0, cz - roomD * 0.22]} />
+      <SideTable position={[cx - roomW * 0.10, 0, cz + roomD * 0.24]} />
+      <SideTable position={[cx + roomW * 0.10, 0, cz + roomD * 0.24]} />
 
       {/* ═══════════════════════════════════════════════════════════
           AMBIENT WARM LIGHTING
           ═══════════════════════════════════════════════════════════ */}
       <pointLight position={[cx, 0.80, cz]} intensity={0.4} color="#f5ead5" distance={3.5} />
-      <pointLight position={[cx, 0.25, cz - roomD * 0.35]} intensity={0.6} color={FLAME_ORANGE} distance={2.5} />
+      <pointLight position={[cx, 0.25, cz - roomD * 0.35]} intensity={0.7} color={FLAME_ORANGE} distance={2.5} />
 
       {/* ═══════════════════════════════════════════════════════════
           ZONE LABEL — floor decal
