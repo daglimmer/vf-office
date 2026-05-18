@@ -1,6 +1,7 @@
 import React, { Suspense, useState, useRef, useMemo, useEffect } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Html, OrbitControls, Environment, Text } from '@react-three/drei'
+import { EffectComposer, Bloom, Noise } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import ZoneBlock from './ZoneBlock'
 import { ServerRacks } from './RackBlock'
@@ -882,6 +883,16 @@ export default function FloorPlan3D({ selectedZone, onSelectZone, hoveredZone, o
           minDistance={3} maxDistance={15} maxPolarAngle={Math.PI / 2.2}
           target={[0, 0, 0]}
         />
+        <EffectComposer>
+          <Bloom
+            luminanceThreshold={0.15}
+            luminanceSmoothing={0.85}
+            intensity={1.1}
+            radius={0.5}
+            mipmapBlur
+          />
+          <Noise opacity={0.012} />
+        </EffectComposer>
       </Canvas>
     </div>
   )
