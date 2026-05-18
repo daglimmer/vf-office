@@ -128,7 +128,7 @@ export default function App() {
           <span className="text-[#39bae6] font-bold">⚙️ VF</span>
           <span>3D Visual Office</span>
           <span className="text-[#1a3355]">|</span>
-          <span>v0.4.0 · Cyberpunk Neon (2026-05-18)</span>
+          <span>v0.5.0 · Professional Corporate (2026-05-18)</span>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-[#8899bb]">
           <span>🏢 8 Zones</span>

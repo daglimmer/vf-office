@@ -112,28 +112,28 @@ function Walls({ gridCols, gridRows }: { gridCols: number; gridRows: number }) {
 function Lights() {
   return (
     <>
-      {/* Low warm ambient — deep purple/blue base so the neons pop */}
-      <ambientLight intensity={0.35} color="#1a0a2a" />
+      {/* Neutral warm ambient — professional corporate base */}
+      <ambientLight intensity={0.40} color="#1a1c22" />
 
-      {/* Overhead neon point lights — grid of cyberpunk ceiling fixtures */}
-      <pointLight position={[0, 7, 0]} intensity={1.5} color="#00aaff" distance={12} />
-      <pointLight position={[-4, 6, -3]} intensity={1.0} color="#8844ff" distance={10} />
-      <pointLight position={[4, 6, 3]} intensity={1.0} color="#00ccff" distance={10} />
-      <pointLight position={[-4, 6, 3]} intensity={0.8} color="#ff0066" distance={9} />
-      <pointLight position={[4, 6, -3]} intensity={0.8} color="#00ff88" distance={9} />
+      {/* Overhead area lights — clean corporate ceiling fixtures */}
+      <pointLight position={[0, 7, 0]} intensity={1.2} color="#dde4f0" distance={12} />
+      <pointLight position={[-4, 6, -3]} intensity={0.8} color="#ccd8ee" distance={10} />
+      <pointLight position={[4, 6, 3]} intensity={0.8} color="#ccddee" distance={10} />
+      <pointLight position={[-4, 6, 3]} intensity={0.7} color="#dddde4" distance={9} />
+      <pointLight position={[4, 6, -3]} intensity={0.7} color="#dddde4" distance={9} />
 
-      {/* Ground-level neon glow pools — cool blue server room corridor */}
-      <pointLight position={[-6.75, 0.5, 3.0]} intensity={0.9} color="#00aaff" distance={4} />   {/* Server Room */}
-      <pointLight position={[-3, 0.5, 3.75]} intensity={0.7} color="#ff8800" distance={3} />    {/* Patch Room */}
-      <pointLight position={[1.5, 0.5, 3.75]} intensity={0.7} color="#ffaa00" distance={3} />    {/* Vault */}
-      <pointLight position={[5.25, 0.5, 2.25]} intensity={0.8} color="#ff00ff" distance={4} />   {/* Lounge */}
-      <pointLight position={[-6.75, 0.5, -4.5]} intensity={0.8} color="#00ff88" distance={4} />   {/* Data Centre */}
-      <pointLight position={[-5.25, 0.5, -3.75]} intensity={0.7} color="#00ccff" distance={3} />  {/* Oly's Office */}
-      <pointLight position={[-1.5, 0.5, -3.75]} intensity={0.7} color="#4488ff" distance={4} />   {/* Meeting Room */}
-      <pointLight position={[3.75, 0.5, -3.75]} intensity={0.7} color="#8844ff" distance={4} />   {/* The Office */}
+      {/* Ground-level zone accent pools — corporate identity */}
+      <pointLight position={[-6.75, 0.5, 3.0]} intensity={0.6} color="#2299dd" distance={4} />   {/* Server Room */}
+      <pointLight position={[-3, 0.5, 3.75]} intensity={0.5} color="#dd8833" distance={3} />    {/* Patch Room */}
+      <pointLight position={[1.5, 0.5, 3.75]} intensity={0.5} color="#aa9966" distance={3} />    {/* Vault */}
+      <pointLight position={[5.25, 0.5, 2.25]} intensity={0.7} color="#ddbb88" distance={4} />   {/* Lounge */}
+      <pointLight position={[-6.75, 0.5, -4.5]} intensity={0.6} color="#00aacc" distance={4} />   {/* Data Centre */}
+      <pointLight position={[-5.25, 0.5, -3.75]} intensity={0.5} color="#5599bb" distance={3} />  {/* Oly's Office */}
+      <pointLight position={[-1.5, 0.5, -3.75]} intensity={0.5} color="#5566aa" distance={4} />   {/* Meeting Room */}
+      <pointLight position={[3.75, 0.5, -3.75]} intensity={0.5} color="#6677aa" distance={4} />   {/* The Office */}
 
-      {/* Corridor overhead neon tubes */}
-      <pointLight position={[0, 2.5, 0]} intensity={0.6} color="#00aaff" distance={6} />
+      {/* Corridor overhead ambient */}
+      <pointLight position={[0, 2.5, 0]} intensity={0.5} color="#ccdde8" distance={6} />
     </>
   )
 }
@@ -819,7 +819,7 @@ function SpecialistAvatars({ specialists, activePhase }: { specialists: Speciali
 function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, specialists, activePhase }: FloorPlanProps) {
   const { scene } = useThree()
   useEffect(() => {
-    scene.fog = new THREE.FogExp2('#040811', 0.005)
+    scene.fog = new THREE.FogExp2('#1a1c24', 0.003)
   }, [scene])
 
   return (
@@ -925,7 +925,7 @@ export default function FloorPlan3D({ selectedZone, onSelectZone, hoveredZone, o
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.3,
         }}
-        style={{ background: '#040811' }}
+        style={{ background: '#121620' }}
       >
         <Suspense fallback={
           <Html center>
