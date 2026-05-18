@@ -71,6 +71,7 @@ function mapApiSpecialists(apiSpecialists: any[]): SpecialistData[] {
     return {
       name: frontendName,
       status: s.status || 'idle',
+      phase: s.phase || STATUS_PHASE_MAP[s.status || 'idle'] || 'idle',
       task: s.task_label || s.task || undefined,
       task_label: s.task_label || undefined,
       task_runtime: s.task_runtime || undefined,
@@ -84,6 +85,7 @@ function mapApiSpecialists(apiSpecialists: any[]): SpecialistData[] {
 export interface SpecialistData {
   name: string
   status?: string
+  phase?: string
   task?: string
   task_label?: string
   task_runtime?: number
@@ -119,8 +121,12 @@ export default function App() {
           const data = await res.json()
           setStatus(data)
           setError(null)
-          if (data.state?.phase) {
-            setActivePhase(data.state.phase)
+          // Derive activePhase from specialist statuses (status-based routing)
+          if (data.specialists?.length) {
+            const phasePriority = ['consulting', 'working', 'debrief', 'documenting', 'idle']
+            const statuses = new Set(data.specialists.map((s: any) => s.status))
+            const active = phasePriority.find(p => statuses.has(p)) || 'idle'
+            setActivePhase(active)
           }
         } else {
           setError(null)
