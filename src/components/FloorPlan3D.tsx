@@ -1,7 +1,6 @@
 import React, { Suspense, useState, useRef, useMemo, useEffect } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Html, OrbitControls, Environment, Text } from '@react-three/drei'
-import { EffectComposer, Bloom, Noise } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import ZoneBlock from './ZoneBlock'
 import { ServerRacks } from './RackBlock'
@@ -915,9 +914,50 @@ function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, sp
   )
 }
 
+// ─── Error Boundary for WebGL crashes ────────────────────────────────
+
+interface EBState { hasError: boolean; error: string | null }
+
+class WebGLErrorBoundary extends React.Component<{ children: React.ReactNode }, EBState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error): EBState {
+    return { hasError: true, error: error.message }
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("[WebGL ErrorBoundary] Caught error:", error, errorInfo)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex items-center justify-center h-full bg-[#121620]">
+          <div className="flex flex-col items-center gap-4 text-center p-8">
+            <div className="text-4xl">🖥️</div>
+            <div className="text-[#ff6677] text-lg font-bold">WebGL Render Error</div>
+            <div className="text-[#6c7a8d] text-sm max-w-md">{this.state.error}</div>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload() }}
+              className="px-4 py-2 bg-[#1a3355] text-[#39bae6] rounded-md hover:bg-[#2a4477] text-sm"
+            >
+              Reload View
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function FloorPlan3D({ selectedZone, onSelectZone, hoveredZone, onHoverZone, specialists, activePhase }: FloorPlanProps) {
   return (
     <div className="w-full h-full absolute inset-0">
+      <WebGLErrorBoundary>
       <Canvas
         camera={{ position: [0, 8, 5], fov: 45, near: 0.1, far: 100 }}
         shadows
@@ -947,17 +987,8 @@ export default function FloorPlan3D({ selectedZone, onSelectZone, hoveredZone, o
           minDistance={3} maxDistance={15} maxPolarAngle={Math.PI / 2.2}
           target={[0, 0, 0]}
         />
-        <EffectComposer>
-          <Bloom
-            luminanceThreshold={0.15}
-            luminanceSmoothing={0.85}
-            intensity={1.1}
-            radius={0.5}
-            mipmapBlur
-          />
-          <Noise opacity={0.012} />
-        </EffectComposer>
       </Canvas>
+      </WebGLErrorBoundary>
     </div>
   )
 }
