@@ -607,120 +607,184 @@ function SpecialistAgent({ spec, zone, activePhase }: { spec: SpecialistData; zo
 
   return (
     <group ref={ref} position={[x, 0.65, z]}>
-      {/* Status glow ring — always visible, shows status color */}
+      {/* ─── Holographic Base Ring — pulsing neon glow ─── */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
         <ringGeometry args={[0.30, 0.36, 32]} />
         <meshBasicMaterial
           color={statusColor}
           transparent
-          opacity={isActive ? 0.50 : 0.18}
+          opacity={isActive ? 0.60 : 0.15}
           side={THREE.DoubleSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* Phase highlight ring — outer double ring when phase matches */}
+      {isPhaseHighlighted && (
+        <>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.07, 0]}>
+            <ringGeometry args={[0.38, 0.44, 32]} />
+            <meshBasicMaterial
+              color={phaseColor}
+              transparent
+              opacity={0.65}
+              side={THREE.DoubleSide}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.09, 0]}>
+            <ringGeometry args={[0.46, 0.49, 32]} />
+            <meshBasicMaterial
+              color={phaseColor}
+              transparent
+              opacity={0.3}
+              side={THREE.DoubleSide}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+        </>
+      )}
+
+      {/* ─── Holographic Orb — transparent glass sphere with glow ─── */}
+      {/* Outer glow shell */}
+      <mesh>
+        <sphereGeometry args={[0.21, 24, 24]} />
+        <meshBasicMaterial
+          color={isActive ? statusColor : defaultColor}
+          transparent
+          opacity={isActive ? 0.12 : 0.04}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
         />
       </mesh>
       
-      {/* Phase highlight ring — outer, extra glow when phase matches WorkflowBar */}
-      {isPhaseHighlighted && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.07, 0]}>
-          <ringGeometry args={[0.38, 0.44, 32]} />
+      {/* Main hologram sphere — glass-like core */}
+      <mesh castShadow>
+        <sphereGeometry args={[0.18, 20, 20]} />
+        <meshPhysicalMaterial
+          color={isActive ? statusColor : defaultColor}
+          roughness={0.15}
+          metalness={0.05}
+          emissive={isActive ? statusColor : defaultColor}
+          emissiveIntensity={isActive ? (isWorking ? 0.9 : 0.6) : 0.08}
+          transparent
+          opacity={0.72}
+          envMapIntensity={0.3}
+          clearcoat={0.1}
+        />
+      </mesh>
+
+      {/* Wireframe cage — angular geometric shell */}
+      <mesh>
+        <sphereGeometry args={[0.19, 8, 6]} />
+        <meshBasicMaterial
+          color={isActive ? statusColor : defaultColor}
+          transparent
+          opacity={isWorking ? 0.5 : isActive ? 0.3 : 0.08}
+          wireframe
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+
+      {/* ─── Orbital Rings — rotating neon halos ─── */}
+      <mesh rotation={[Math.PI / 2.2, 0, 0]} position={[0, 0.22, 0]}>
+        <torusGeometry args={[0.2, 0.018, 8, 20]} />
+        <meshStandardMaterial
+          color={isActive ? statusColor : defaultColor}
+          emissive={isActive ? statusColor : defaultColor}
+          emissiveIntensity={isWorking ? 1.2 : isActive ? 0.7 : 0.1}
+          roughness={0.1}
+          metalness={0.1}
+        />
+      </mesh>
+      
+      {/* Secondary ring — tilted axis, faster rotation for working */}
+      {isActive && (
+        <mesh rotation={[-Math.PI / 3, 0, Math.PI / 4]} position={[0, 0.22, 0]}>
+          <torusGeometry args={[0.22, 0.01, 6, 18]} />
           <meshBasicMaterial
-            color={phaseColor}
+            color={statusColor}
             transparent
-            opacity={0.55}
-            side={THREE.DoubleSide}
+            opacity={isWorking ? 0.7 : 0.35}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
           />
         </mesh>
       )}
-      
-      {/* Main agent sphere — always status-colored */}
-      <mesh castShadow>
-        <sphereGeometry args={[0.18, 16, 16]} />
-        <meshStandardMaterial
-          color={isActive ? statusColor : defaultColor}
-          roughness={0.3}
-          metalness={0.2}
-          emissive={isActive ? statusColor : defaultColor}
-          emissiveIntensity={isActive ? (isWorking ? 0.7 : 0.5) : 0.10}
-        />
-      </mesh>
-      
-      {/* Orbital ring — identity color, brighter when active */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.22, 0]}>
-        <torusGeometry args={[0.2, 0.02, 8, 16]} />
-        <meshBasicMaterial 
-          color={isActive ? statusColor : defaultColor} 
-          transparent 
-          opacity={isWorking ? 0.85 : isActive ? 0.55 : 0.22} 
-        />
-      </mesh>
-      
-      {/* Agent name — floating below avatar sphere */}
+
+      {/* ─── Agent name — floating below orb ─── */}
       <Text
-        position={[0, -0.34, 0]} fontSize={0.10}
+        position={[0, -0.36, 0]} fontSize={0.10}
         anchorX="center" anchorY="middle"
         font="/fonts/Inter-Bold.ttf"
-        outlineWidth={0.009} outlineColor="#0a0e14"
-        color={isActive ? '#ffffff' : '#9ca3af'}
+        outlineWidth={0.01} outlineColor="#040811"
+        color={isActive ? '#e0e8f8' : '#7788aa'}
         fontWeight="bold"
       >
         {displayName}
       </Text>
-      
-      {/* Emoji label — above agent */}
+
+      {/* ─── Emoji label — above orb ─── */}
       <Text
-        position={[0, 0.42, 0]} fontSize={0.18}
+        position={[0, 0.45, 0]} fontSize={0.18}
         anchorX="center" anchorY="bottom"
         font="/fonts/Inter-Bold.ttf"
-        outlineWidth={0.01} outlineColor="#0a0e14"
-        color={isActive ? '#ffffff' : '#9ca3af'}
+        outlineWidth={0.012} outlineColor="#040811"
+        color={isActive ? '#ffffff' : '#8899bb'}
       >
         {emoji}
       </Text>
-      
-      {/* Status label — floating above agent */}
+
+      {/* ─── Status label — floating above ─── */}
       <Text
-        position={[0, 0.63, 0]} fontSize={0.10}
+        position={[0, 0.66, 0]} fontSize={0.10}
         anchorX="center" anchorY="bottom"
         font="/fonts/Inter-Bold.ttf"
-        outlineWidth={0.008} outlineColor="#0a0e14"
+        outlineWidth={0.009} outlineColor="#040811"
         color={statusColor}
       >
         {statusLabel}
       </Text>
 
-      {/* Task label — below status */}
+      {/* Task label — dimmer, below status */}
       {taskLabel && (
         <Text
-          position={[0, 0.76, 0]} fontSize={0.07}
+          position={[0, 0.79, 0]} fontSize={0.07}
           anchorX="center" anchorY="bottom"
           font="/fonts/Inter-Bold.ttf"
-          outlineWidth={0.006} outlineColor="#0a0e14"
-          color="#9ca3af"
+          outlineWidth={0.006} outlineColor="#040811"
+          color="#8899bb"
           maxWidth={2.0}
         >
           {taskLabel}
         </Text>
       )}
 
-      {/* Runtime — below task */}
+      {/* Runtime — cyberpunk timer */}
       {runtimeStr && (
         <Text
-          position={[0, 0.85, 0]} fontSize={0.065}
+          position={[0, 0.88, 0]} fontSize={0.065}
           anchorX="center" anchorY="bottom"
           font="/fonts/Inter-Bold.ttf"
-          outlineWidth={0.005} outlineColor="#0a0e14"
-          color="#6c7a8d"
+          outlineWidth={0.006} outlineColor="#040811"
+          color="#8899bb"
         >
           ⏱ {runtimeStr}
         </Text>
       )}
-      
-      {/* Phase indicator — small colored dot below agent */}
+
+      {/* Phase indicator — small glowing orb below agent */}
       <mesh position={[0, -0.22, 0]}>
         <sphereGeometry args={[0.05, 8, 8]} />
         <meshStandardMaterial
           color={statusColor}
           emissive={statusColor}
-          emissiveIntensity={isPhaseHighlighted ? 0.9 : isActive ? 0.6 : 0.2}
+          emissiveIntensity={isPhaseHighlighted ? 1.2 : isActive ? 0.8 : 0.15}
+          roughness={0.1}
         />
       </mesh>
     </group>
