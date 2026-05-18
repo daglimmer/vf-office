@@ -5,7 +5,6 @@ import { EffectComposer, Bloom, Noise } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import ZoneBlock from './ZoneBlock'
 import { ServerRacks } from './RackBlock'
-import DataStreams from './DataStreams'
 import OfficeFurniture from './OfficeFurniture'
 import PatchRoomFurniture from './PatchRoomFurniture'
 import VaultFurniture from './VaultFurniture'
@@ -13,7 +12,7 @@ import MeetingFurniture from './MeetingFurniture'
 import TheOfficeFurniture from './TheOfficeFurniture'
 import LoungeFurniture from './LoungeFurniture'
 import CorridorDecor from './CorridorDecor'
-import DataCenter from './DataCenter'
+import DataCentrePortal from './DataCentrePortal'
 import { ZONES, ZoneConfig, WORKFLOW_PHASES } from '../data/zones'
 import { SpecialistData } from '../App'
 
@@ -35,29 +34,29 @@ function Floor({ gridCols, gridRows }: { gridCols: number; gridRows: number }) {
 
   return (
     <group>
-      {/* Reflective obsidian floor — dark, polished, metallic */}
+      {/* Clean white floor — light, polished */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
         <planeGeometry args={[floorWidth + 2, floorDepth + 2]} />
         <meshStandardMaterial
-          color="#0a0f18"
-          roughness={0.22}
-          metalness={0.85}
+          color="#f0f0f4"
+          roughness={0.30}
+          metalness={0.15}
         />
       </mesh>
-      {/* Subtle neon grid lines — dark blue + dark purple */}
+      {/* Subtle light grid lines */}
       <gridHelper
-        args={[Math.max(floorWidth, floorDepth) + 0.5, Math.max(gridCols, gridRows), '#151d33', '#0d111f']}
+        args={[Math.max(floorWidth, floorDepth) + 0.5, Math.max(gridCols, gridRows), '#d0d0d8', '#e8e8ec']}
         position={[0, 0.001, 0]}
       />
-      {/* Reflective sheen overlay — catches light like polished obsidian */}
+      {/* Light reflective sheen overlay */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]}>
         <planeGeometry args={[floorWidth, floorDepth]} />
         <meshStandardMaterial
-          color="#0d1520"
-          roughness={0.15}
-          metalness={0.92}
+          color="#f5f5f8"
+          roughness={0.20}
+          metalness={0.10}
           transparent
-          opacity={0.55}
+          opacity={0.45}
         />
       </mesh>
     </group>
@@ -76,25 +75,25 @@ function Walls({ gridCols, gridRows }: { gridCols: number; gridRows: number }) {
       {/* Back wall (north) */}
       <mesh position={[0, wallHeight / 2, -hd]} receiveShadow>
         <boxGeometry args={[fw + 1, wallHeight, 0.06]} />
-        <meshStandardMaterial color="#060b14" roughness={0.65} metalness={0.3} />
+        <meshStandardMaterial color="#e8e8ec" roughness={0.45} metalness={0.10} />
       </mesh>
       {/* Front wall (south) */}
       <mesh position={[0, wallHeight / 2, hd]} receiveShadow>
         <boxGeometry args={[fw + 1, wallHeight, 0.06]} />
-        <meshStandardMaterial color="#060b14" roughness={0.65} metalness={0.3} />
+        <meshStandardMaterial color="#e8e8ec" roughness={0.45} metalness={0.10} />
       </mesh>
       {/* Left wall (west) */}
       <mesh position={[-hw, wallHeight / 2, 0]} receiveShadow>
         <boxGeometry args={[0.06, wallHeight, fd + 1]} />
-        <meshStandardMaterial color="#060b14" roughness={0.65} metalness={0.3} />
+        <meshStandardMaterial color="#e8e8ec" roughness={0.45} metalness={0.10} />
       </mesh>
       {/* Right wall (east) */}
       <mesh position={[hw, wallHeight / 2, 0]} receiveShadow>
         <boxGeometry args={[0.06, wallHeight, fd + 1]} />
-        <meshStandardMaterial color="#060b14" roughness={0.65} metalness={0.3} />
+        <meshStandardMaterial color="#e8e8ec" roughness={0.45} metalness={0.10} />
       </mesh>
 
-      {/* Neon accent strips at wall tops — subtle glow */}
+      {/* Subtle accent strips at wall tops — clean bright */}
       {[
         { pos: [0, wallHeight + 0.005, -hd], args: [fw + 1, 0.015, 0.015] },
         { pos: [0, wallHeight + 0.005, hd], args: [fw + 1, 0.015, 0.015] },
@@ -103,7 +102,7 @@ function Walls({ gridCols, gridRows }: { gridCols: number; gridRows: number }) {
       ].map((s, i) => (
         <mesh key={`nstrip-${i}`} position={s.pos as [number, number, number]}>
           <boxGeometry args={s.args as [number, number, number]} />
-          <meshStandardMaterial color="#1a3366" emissive="#1a3366" emissiveIntensity={0.3} />
+          <meshStandardMaterial color="#d0d0d8" emissive="#d0d0d8" emissiveIntensity={0.15} />
         </mesh>
       ))}
     </group>
@@ -202,11 +201,11 @@ function ZoneWalls({ gridCols, gridRows }: { gridCols: number; gridRows: number 
             w.isH ? DIVIDER_THICKNESS : w.length,
           ]} />
           <meshStandardMaterial
-            color="#0a0f1a"
-            roughness={0.55}
-            metalness={0.35}
+            color="#e8e8ec"
+            roughness={0.40}
+            metalness={0.10}
             emissive={w.color}
-            emissiveIntensity={0.18}
+            emissiveIntensity={0.08}
           />
         </mesh>
       ))}
@@ -872,8 +871,8 @@ function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, sp
         facingDirection="north"
       />
       
-      {/* ─── Data Centre — hexagonal portal, Traefik label, holographic displays ─── */}
-      <DataCenter
+      {/* ─── Data Centre — hexagonal portal, Traefik label, data wall displays ─── */}
+      <DataCentrePortal
         col={0} row={5} colSpan={2} rowSpan={3}
         gridCols={GRID_COLS} gridRows={GRID_ROWS}
       />
@@ -908,8 +907,6 @@ function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, sp
       {/* ─── Corridor Decor — hallway markings, plants, water coolers ─── */}
       <CorridorDecor gridCols={GRID_COLS} gridRows={GRID_ROWS} />
 
-      {/* ─── Cyberpunk Data Streams — flowing particles between zones ─── */}
-      <DataStreams gridCols={GRID_COLS} gridRows={GRID_ROWS} />
 
       <Suspense fallback={null}>
         <Environment preset="night" />
