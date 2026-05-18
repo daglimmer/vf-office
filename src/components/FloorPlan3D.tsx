@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useRef, useMemo, useEffect } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Html, OrbitControls, Environment, Text } from '@react-three/drei'
 import { EffectComposer, Bloom, Noise } from '@react-three/postprocessing'
 import * as THREE from 'three'
@@ -817,6 +817,11 @@ function SpecialistAvatars({ specialists, activePhase }: { specialists: Speciali
 }
 
 function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, specialists, activePhase }: FloorPlanProps) {
+  const { scene } = useThree()
+  useEffect(() => {
+    scene.fog = new THREE.FogExp2('#040811', 0.005)
+  }, [scene])
+
   return (
     <>
       <Lights />
@@ -925,11 +930,6 @@ export default function FloorPlan3D({ selectedZone, onSelectZone, hoveredZone, o
           toneMappingExposure: 1.3,
         }}
         style={{ background: '#040811' }}
-        fog={{
-          type: 'exp2',
-          color: '#040811',
-          density: 0.006,
-        }}
       >
         <Suspense fallback={
           <Html center>
