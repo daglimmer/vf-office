@@ -7,15 +7,19 @@ import { ZoneConfig } from './data/zones'
 const API_BASE = '/api'
 
 // ─── Default Standalone Specialists — shown when API unavailable ───
+// NOTE: zone is intentionally NOT set here — FloorPlan3D resolves zone from
+// status via STATUS_ZONE_MAP for correct phase-to-zone routing.
+// Idle → Lounge | Consulting/Debrief → Meeting | Documenting → The Office
+// Working → per-specialist assigned zone
 const DEFAULT_SPECIALISTS: SpecialistData[] = [
-  { name: 'oly',    emoji: '⚙️',  status: 'idle',       zone: 'oly_office',  task: 'Coordinating' },
-  { name: 'builder',emoji: '📦',  status: 'working',    zone: 'datacenter',   task: 'Deploying K3s' },
-  { name: 'sentry', emoji: '🌐',  status: 'consulting', zone: 'lounge',       task: 'Network audit' },
-  { name: 'bulwark',emoji: '🖥️',  status: 'working',    zone: 'server_room',  task: 'PXE hardening' },
-  { name: 'archive',emoji: '💾',  status: 'documenting',zone: 'lounge',       task: 'Backup report' },
-  { name: 'sage',   emoji: '🧠',  status: 'debrief',    zone: 'lounge',       task: 'K8s lab review' },
-  { name: 'haven',  emoji: '🏠',  status: 'idle',       zone: 'lounge',       task: 'On standby' },
-  { name: 'ledger', emoji: '🏦',  status: 'consulting', zone: 'the_office',   task: 'Budget review' },
+  { name: 'oly',    emoji: '⚙️',  status: 'idle'        },
+  { name: 'builder',emoji: '📦',  status: 'working'     },
+  { name: 'sentry', emoji: '🌐',  status: 'consulting'  },
+  { name: 'bulwark',emoji: '🖥️',  status: 'working'     },
+  { name: 'archive',emoji: '💾',  status: 'documenting' },
+  { name: 'sage',   emoji: '🧠',  status: 'debrief'     },
+  { name: 'haven',  emoji: '🏠',  status: 'idle'        },
+  { name: 'ledger', emoji: '🏦',  status: 'consulting'  },
 ]
 
 // Map status to workflow phase ID for the bar
@@ -23,8 +27,58 @@ const STATUS_PHASE_MAP: Record<string, string> = {
   consulting: 'consulting',
   working: 'working',
   debrief: 'debrief',
+  reporting: 'debrief',
   documenting: 'documenting',
   idle: 'idle',
+}
+
+// ─── Map Backend zone names → Frontend zone IDs ────────────────────
+// Backend returns: desk, data_center, meeting, consult:<name>
+// Frontend expects: the_office, datacenter, meeting, lounge, server_room, etc.
+const BACKEND_ZONE_MAP: Record<string, string> = {
+  desk: 'the_office',
+  data_center: 'datacenter',
+  meeting: 'meeting',
+  lounge: 'lounge',
+  server_room: 'server_room',
+  patch_room: 'patch_room',
+  vault: 'vault',
+  oly_office: 'oly_office',
+}
+
+// ─── Map Backend specialist names (capitalized) → Frontend keys ───
+const BACKEND_NAME_MAP: Record<string, string> = {
+  Builder: 'builder',
+  Sentry: 'sentry',
+  Archive: 'archive',
+  Bulwark: 'bulwark',
+  Sage: 'sage',
+  Haven: 'haven',
+  Ledger: 'ledger',
+  Oly: 'oly',
+}
+
+/** Convert backend API response specialists to frontend SpecialistData format */
+function mapApiSpecialists(apiSpecialists: any[]): SpecialistData[] {
+  return apiSpecialists.map((s: any) => {
+    const rawName = s.name || s.id || ''
+    const frontendName = BACKEND_NAME_MAP[rawName] || rawName.toLowerCase()
+    const rawZone = s.zone || ''
+    // Handle consult: prefix (e.g., "consult:builder" → meeting room)
+    const frontendZone = rawZone.startsWith('consult:')
+      ? 'meeting'
+      : (BACKEND_ZONE_MAP[rawZone] || rawZone)
+    return {
+      name: frontendName,
+      status: s.status || 'idle',
+      task: s.task_label || s.task || undefined,
+      task_label: s.task_label || undefined,
+      task_runtime: s.task_runtime || undefined,
+      started_at: s.started_at ? String(s.started_at) : undefined,
+      zone: frontendZone,
+      emoji: s.emoji || undefined,
+    }
+  })
 }
 
 export interface SpecialistData {
@@ -53,13 +107,14 @@ export default function App() {
 
   // Use API specialists when available, fall back to defaults
   const specialists: SpecialistData[] = status?.specialists?.length
-    ? status.specialists
+    ? mapApiSpecialists(status.specialists)
     : DEFAULT_SPECIALISTS
 
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const res = await fetch(`${API_BASE}/visual-office/status`)
+        // Fixed: /status → /activity (matches backend router)
+        const res = await fetch(`${API_BASE}/visual-office/activity`)
         if (res.ok) {
           const data = await res.json()
           setStatus(data)
@@ -75,6 +130,7 @@ export default function App() {
       }
     }
     fetchStatus()
+    // Poll every 30 seconds so agents move when phases change
     const interval = setInterval(fetchStatus, 30000)
     return () => clearInterval(interval)
   }, [])
@@ -128,7 +184,7 @@ export default function App() {
           <span className="text-[#39bae6] font-bold">⚙️ VF</span>
           <span>3D Visual Office</span>
           <span className="text-[#1a3355]">|</span>
-          <span>v0.5.0 · Professional Corporate (2026-05-18)</span>
+          <span>v0.6.0 · Phase Routing Fixed (2026-05-18)</span>
         </div>
         <div className="flex items-center gap-2 text-[10px] text-[#8899bb]">
           <span>🏢 8 Zones</span>

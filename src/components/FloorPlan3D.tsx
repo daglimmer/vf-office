@@ -432,15 +432,16 @@ function CorridorLogo({ gridCols, gridRows }: { gridCols: number; gridRows: numb
 }
 
 // ─── Specialist Avatars — 8-Zone Assignments ────────────────────────
-// NOTE: Several specialists temporarily assigned to lounge for visual testing
+// NOTE: "main" and "oly" both map to Oly's Office (frontend uses "oly")
 const SPECIALIST_ZONES: Record<string, string> = {
-  main: 'oly_office',
-  builder: 'datacenter',
-  sentry: 'lounge',
+  main: "oly_office",
+  oly: "oly_office",
+  builder: 'the_office',
+  sentry: 'datacenter',
   bulwark: 'server_room',
-  archive: 'lounge',
-  sage: 'lounge',
-  haven: 'lounge',
+  archive: 'the_office',
+  sage: 'the_office',
+  haven: 'datacenter',
   ledger: 'the_office',
 }
 
@@ -448,6 +449,7 @@ const SPECIALIST_ZONES: Record<string, string> = {
 const STATUS_ZONE_MAP: Record<string, string> = {
   consulting: 'meeting',
   debrief: 'meeting',
+  reporting: 'meeting',
   documenting: 'the_office',
   idle: 'lounge',
   // working: no entry → falls through to per-specialist SPECIALIST_ZONES
@@ -480,6 +482,7 @@ const STATUS_COLORS: Record<string, string> = {
   consulting: '#ffaa00',   // neon amber
   working: '#00ff88',      // neon green
   debrief: '#cc88ff',      // neon purple
+  reporting: '#cc88ff',    // neon purple (legacy alias)
   documenting: '#4488ff',  // neon blue
   idle: '#556688',         // muted blue-grey
 }
@@ -488,6 +491,7 @@ const STATUS_LABELS: Record<string, string> = {
   consulting: 'Consulting',
   working: 'Working',
   debrief: 'Debriefing',
+  reporting: 'Debriefing',
   documenting: 'Documenting',
   idle: 'Idle',
 }
@@ -803,8 +807,8 @@ function SpecialistAvatars({ specialists, activePhase }: { specialists: Speciali
           ? (STATUS_ZONE_MAP[spec.status] || null)
           : null
         const zoneId = forcedZone
-          || spec.zone
           || (spec.status && STATUS_ZONE_MAP[spec.status])
+          || spec.zone
           || SPECIALIST_ZONES[spec.name]
         if (!zoneId) return null
         const zone = ZONES.find((z) => z.id === zoneId)
