@@ -32,7 +32,7 @@ export const ZONES: ZoneConfig[] = [
     label: 'Server Room',
     icon: '🖥️',
     color: '#2299dd',
-    description: '10 racks in dual-row corridor. Blue-lit compute backbone. Cool cyan edge lighting, polished floor.',
+    description: '8 racks in dual-row corridor. Blue-lit compute backbone. Cool cyan edge lighting, polished floor.',
     col: 0, row: 0, colSpan: 2, rowSpan: 3,
   },
   {

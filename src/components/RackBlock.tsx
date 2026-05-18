@@ -372,18 +372,18 @@ export function ServerRacks({ col, row, colSpan, rowSpan, gridCols, gridRows, co
   // Rack positions — two rows flanking the central aisle
   const rackXOffset = roomW * 0.30
   const rackZSpacing = roomD * 0.22
-  const racksPerSide = 5
+  const racksPerSide = 4
 
   const leftRacks = Array.from({ length: racksPerSide }, (_, i) => ({
     x: -rackXOffset,
-    z: -roomD * 0.35 + i * rackZSpacing,
+    z: -roomD * 0.42 + i * rackZSpacing,
     hosts: 5 + (i % 3),
     index: i,
   }))
 
   const rightRacks = Array.from({ length: racksPerSide }, (_, i) => ({
     x: rackXOffset,
-    z: -roomD * 0.35 + i * rackZSpacing,
+    z: -roomD * 0.42 + i * rackZSpacing,
     hosts: 5 + (i % 3),
     index: i + racksPerSide,
   }))
