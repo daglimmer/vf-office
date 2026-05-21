@@ -877,7 +877,7 @@ function SceneContent({ selectedZone, onSelectZone, hoveredZone, onHoverZone, sp
         facingDirection="north"
       />
       
-      {/* ─── Data Centre — hexagonal portal, Traefik label, data wall displays ─── */}
+      {/* ─── Data Centre — Command Center v4.0.2-CC ─── */}
       <DataCentrePortal
         col={0} row={5} colSpan={2} rowSpan={3}
         gridCols={GRID_COLS} gridRows={GRID_ROWS}

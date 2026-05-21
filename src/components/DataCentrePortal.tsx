@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { Text } from '@react-three/drei'
 import * as THREE from 'three'
 
-// ─── Data Centre Command Center — Image 35 Reference ──────────────────
+// ─── Data Centre Command Center — v4.0.2-CC ────────────────────────────
 // Circular command room: central cylindrical display tower with dense UI,
 // raised holographic floor dais with concentric glowing rings,
 // perimeter console ring, wall-mounted screen banks,
@@ -49,19 +49,19 @@ function CommandDais({ radius, position }: { radius: number; position: [number, 
       {/* Cyan edge ring — outer tier */}
       <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius - 0.02, radius, 64]} />
-        <meshBasicMaterial color="#00ccff" transparent opacity={0.6} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#00ddff" transparent opacity={0.8} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Cyan edge ring — mid tier */}
       <mesh position={[0, 0.085, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius * 0.77, radius * 0.80, 64]} />
-        <meshBasicMaterial color="#00aaff" transparent opacity={0.5} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#00ccff" transparent opacity={0.7} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Cyan edge ring — inner tier */}
       <mesh position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius * 0.54, radius * 0.57, 64]} />
-        <meshBasicMaterial color="#00ccff" transparent opacity={0.7} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#00ddff" transparent opacity={0.9} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Radial circuit lines — emanating from center */}
@@ -183,7 +183,7 @@ function CentralDisplayTower({ position }: { position: [number, number, number] 
       {/* Top cap — glowing ring */}
       <mesh position={[0, towerHeight + 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[towerRadius - 0.02, towerRadius + 0.03, 48]} />
-        <meshBasicMaterial color="#00ccff" transparent opacity={0.6} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#00ddff" transparent opacity={0.8} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Bottom cap ring */}
@@ -193,7 +193,7 @@ function CentralDisplayTower({ position }: { position: [number, number, number] 
       </mesh>
 
       {/* Tower light source */}
-      <pointLight position={[0, towerHeight / 2, 0]} intensity={0.8} color="#00aaff" distance={4} />
+      <pointLight position={[0, towerHeight / 2, 0]} intensity={1.2} color="#00ddff" distance={5} />
     </group>
   )
 }
@@ -233,13 +233,13 @@ function CeilingRings({ position, radius }: { position: [number, number, number]
       {/* Cyan neon outer ring */}
       <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius - 0.01, radius + 0.01, 64]} />
-        <meshBasicMaterial color="#00ccff" transparent opacity={0.7} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#00ddff" transparent opacity={0.9} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Cyan neon mid ring */}
       <mesh position={[0, -0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radius * 0.71, radius * 0.73, 64]} />
-        <meshBasicMaterial color="#00aaff" transparent opacity={0.5} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#00ccff" transparent opacity={0.7} side={THREE.DoubleSide} />
       </mesh>
 
       {/* Cyan neon inner ring */}
@@ -432,69 +432,106 @@ function GlassMountedScreen({ position, size, glassX }: {
 }
 
 // ─── Wall Screen Bank — large display panels on perimeter walls ─────
-function WallScreenBank({ position, rotation, size }: {
+function WallScreenBank({ position, rotation, size, variant }: {
   position: [number, number, number]
   rotation: [number, number, number]
   size: [number, number]
+  variant?: 'big' | 'medium' | 'alerts'
 }) {
+  const accentColor = variant === 'alerts' ? '#ff6644' : variant === 'big' ? '#00ddff' : '#44ff88'
+
   return (
     <group position={position} rotation={rotation}>
-      {/* Main frame */}
+      {/* Main frame — thicker for large screens */}
       <mesh castShadow>
-        <boxGeometry args={[size[0], size[1], 0.015]} />
-        <meshStandardMaterial color="#0a0f18" metalness={0.6} roughness={0.2} />
+        <boxGeometry args={[size[0], size[1], 0.020]} />
+        <meshStandardMaterial color="#080c14" metalness={0.7} roughness={0.15} />
       </mesh>
 
-      {/* Screen surface — main */}
-      <mesh position={[0, 0, 0.008]}>
-        <planeGeometry args={[size[0] - 0.04, size[1] - 0.04]} />
+      {/* Screen surface — bright */}
+      <mesh position={[0, 0, 0.010]}>
+        <planeGeometry args={[size[0] - 0.05, size[1] - 0.05]} />
         <meshStandardMaterial
-          color="#0a1a30"
-          emissive="#0d2040"
-          emissiveIntensity={0.5}
-          roughness={0.04}
+          color="#081422"
+          emissive="#102840"
+          emissiveIntensity={0.7}
+          roughness={0.03}
         />
       </mesh>
 
-      {/* UI elements — data map/grid */}
-      {Array.from({ length: 6 }).map((_, i) => (
-        <mesh key={`wbar-${i}`} position={[
-          (i - 2.5) * 0.08,
-          size[1] * 0.15,
-          0.010,
+      {/* Dashboard title bar */}
+      <mesh position={[0, size[1] * 0.45, 0.012]}>
+        <planeGeometry args={[size[0] * 0.88, 0.025]} />
+        <meshBasicMaterial color={variant === 'alerts' ? '#442222' : '#1a3344'} transparent opacity={0.7} />
+      </mesh>
+
+      {/* Chart area — bar graphs */}
+      {variant !== 'alerts' && Array.from({ length: 8 }).map((_, i) => {
+        const bh = 0.01 + Math.random() * size[1] * 0.25
+        return (
+          <mesh key={`ws-bar-${i}`} position={[
+            -size[0] * 0.30 + i * size[0] * 0.08,
+            -size[1] * 0.10 + bh / 2,
+            0.012,
+          ]}>
+            <boxGeometry args={[size[0] * 0.035, bh, 0.001]} />
+            <meshBasicMaterial color={accentColor} transparent opacity={0.7} blending={THREE.AdditiveBlending} />
+          </mesh>
+        )
+      })}
+
+      {/* Status indicators — data rows */}
+      {Array.from({ length: 5 }).map((_, i) => (
+        <mesh key={`ws-row-${i}`} position={[
+          -size[0] * 0.30,
+          size[1] * 0.30 - i * size[1] * 0.12,
+          0.012,
         ]}>
-          <boxGeometry args={[0.04, 0.003 + i * 0.005, 0.001]} />
-          <meshBasicMaterial color={i < 3 ? '#22dd88' : '#44aadd'} transparent opacity={0.6} />
+          <boxGeometry args={[0.03 + Math.random() * size[0] * 0.40, 0.005, 0.001]} />
+          <meshBasicMaterial color={
+            variant === 'alerts' ? '#ff6644' :
+            i < 2 ? '#22ff88' : i < 4 ? '#44ccff' : '#ffaa44'
+          } transparent opacity={0.6} blending={THREE.AdditiveBlending} />
         </mesh>
       ))}
 
-      {/* Grid lines */}
-      {Array.from({ length: 4 }).map((_, i) => (
-        <mesh key={`wgl-${i}`} position={[0, size[1] * 0.25 - i * size[1] * 0.18, 0.010]}>
-          <boxGeometry args={[size[0] * 0.7, 0.001, 0.001]} />
-          <meshBasicMaterial color="#335577" transparent opacity={0.3} />
+      {/* Alert banners (for alerts variant) */}
+      {variant === 'alerts' && Array.from({ length: 4 }).map((_, i) => (
+        <mesh key={`ws-alert-${i}`} position={[0, size[1] * 0.25 - i * size[1] * 0.15, 0.013]}>
+          <boxGeometry args={[size[0] * 0.45, 0.008, 0.001]} />
+          <meshBasicMaterial color={i === 0 ? '#ff3322' : i === 1 ? '#ff6622' : '#ffaa44'} 
+            transparent opacity={0.7} blending={THREE.AdditiveBlending} />
         </mesh>
       ))}
 
-      {/* Circular widgets */}
-      {[-size[0] * 0.3, size[0] * 0.3].map((cx, ci) => (
-        <group key={`cw-${ci}`} position={[cx, -size[1] * 0.2, 0.010]}>
-          <mesh>
-            <ringGeometry args={[0.025, 0.030, 24]} />
-            <meshBasicMaterial color={ci === 0 ? '#44ccff' : '#22ff88'} transparent opacity={0.6} />
-          </mesh>
-          <mesh>
-            <ringGeometry args={[0.015, 0.020, 16, 1, 0, Math.PI * 1.3]} />
-            <meshBasicMaterial color="#88ddff" transparent opacity={0.4} />
-          </mesh>
-        </group>
+      {/* Data dots */}
+      {Array.from({ length: 6 }).map((_, i) => (
+        <mesh key={`ws-dot-${i}`} position={[
+          size[0] * 0.30 + (Math.random() - 0.5) * size[0] * 0.20,
+          (Math.random() - 0.5) * size[1] * 0.60,
+          0.012,
+        ]}>
+          <sphereGeometry args={[0.006, 6, 6]} />
+          <meshBasicMaterial color={accentColor} transparent opacity={0.5} blending={THREE.AdditiveBlending} />
+        </mesh>
       ))}
+
+      {/* Large gauge ring (for big variant) */}
+      {variant === 'big' && (
+        <mesh position={[size[0] * 0.30, -size[1] * 0.15, 0.012]}>
+          <ringGeometry args={[0.04, 0.055, 32, 1, 0, Math.PI * 1.5]} />
+          <meshBasicMaterial color="#00ddff" transparent opacity={0.6} side={THREE.DoubleSide} />
+        </mesh>
+      )}
 
       {/* Thin cyan frame glow */}
-      <mesh position={[0, 0, 0.004]}>
-        <boxGeometry args={[size[0] - 0.01, size[1] - 0.01, 0.003]} />
-        <meshBasicMaterial color="#00aaff" transparent opacity={0.1} />
+      <mesh position={[0, 0, 0.005]}>
+        <boxGeometry args={[size[0] - 0.01, size[1] - 0.01, 0.004]} />
+        <meshBasicMaterial color={accentColor} transparent opacity={0.10} />
       </mesh>
+
+      {/* Screen backlight */}
+      <pointLight position={[0, 0, -0.1]} intensity={0.2} color={accentColor} distance={1.5} />
     </group>
   )
 }
@@ -516,33 +553,51 @@ function ConsoleStation({ position, rotation }: {
         <boxGeometry args={[0.38, 0.015, 0.20]} />
         <meshStandardMaterial color="#1a1d26" metalness={0.6} roughness={0.18} />
       </mesh>
-      {/* Embedded display on console */}
-      <mesh position={[0, 0.36, -0.06]} rotation={[0.25, 0, 0]}>
-        <planeGeometry args={[0.30, 0.12]} />
-        <meshStandardMaterial
-          color="#0a1a30"
-          emissive="#0d2040"
-          emissiveIntensity={0.4}
-          roughness={0.05}
-        />
-      </mesh>
-      {/* Data lines on console display */}
-      {Array.from({ length: 3 }).map((_, i) => (
-        <mesh key={`cdl-${i}`} position={[-0.08, 0.38 + i * 0.015, -0.055]} rotation={[0.25, 0, 0]}>
-          <boxGeometry args={[0.04 + i * 0.06, 0.002, 0.001]} />
-          <meshBasicMaterial color={i === 0 ? '#22dd88' : '#44aadd'} transparent opacity={0.6} />
+      {/* RAISED MONITOR — sits on top of console (FIX 1) */}
+      <group position={[0, 0.52, -0.08]}>
+        {/* Monitor stand — cylinder */}
+        <mesh position={[0, -0.06, 0]}>
+          <cylinderGeometry args={[0.015, 0.020, 0.04, 8]} />
+          <meshStandardMaterial color="#2a2d35" metalness={0.70} roughness={0.20} />
         </mesh>
-      ))}
+        {/* Monitor stand base */}
+        <mesh position={[0, -0.10, 0]}>
+          <cylinderGeometry args={[0.025, 0.030, 0.008, 8]} />
+          <meshStandardMaterial color="#3a3d45" metalness={0.60} roughness={0.25} />
+        </mesh>
+        {/* Monitor bezel */}
+        <mesh>
+          <boxGeometry args={[0.18, 0.10, 0.008]} />
+          <meshStandardMaterial color="#0a0c10" metalness={0.40} roughness={0.18} />
+        </mesh>
+        {/* Screen surface */}
+        <mesh position={[0, 0, 0.006]}>
+          <boxGeometry args={[0.16, 0.08, 0.003]} />
+          <meshStandardMaterial color="#0a1a30" emissive="#0d2040" emissiveIntensity={0.5} roughness={0.04} />
+        </mesh>
+        {/* Screen content glow */}
+        <mesh position={[0, 0, 0.009]}>
+          <planeGeometry args={[0.14, 0.06]} />
+          <meshBasicMaterial color="#00ddff" transparent opacity={0.20} blending={THREE.AdditiveBlending} depthWrite={false} />
+        </mesh>
+        {/* Data bars on screen */}
+        {Array.from({ length: 4 }).map((_, i) => (
+          <mesh key={`cmon-bar-${i}`} position={[-0.05 + i * 0.03, 0.01, 0.010]}>
+            <boxGeometry args={[0.015, 0.003 + i * 0.004, 0.001]} />
+            <meshBasicMaterial color={i < 2 ? '#22ff88' : '#44aaff'} transparent opacity={0.6} />
+          </mesh>
+        ))}
+      </group>
       {/* Console edge glow */}
       <mesh position={[0, 0.34, -0.05]} rotation={[0.25, 0, 0]}>
         <boxGeometry args={[0.40, 0.018, 0.22]} />
-        <meshBasicMaterial color="#00aaff" transparent opacity={0.08} />
+        <meshBasicMaterial color="#00ddff" transparent opacity={0.12} />
       </mesh>
       {/* Indicator lights */}
       {[-0.15, 0, 0.15].map((ox, li) => (
         <mesh key={`ind-${li}`} position={[ox, 0.34, 0.05]}>
           <sphereGeometry args={[0.006, 6, 6]} />
-          <meshBasicMaterial color={li === 0 ? '#44ff88' : li === 1 ? '#ffaa44' : '#44ccff'} transparent opacity={0.8} />
+          <meshBasicMaterial color={li === 0 ? '#44ff88' : li === 1 ? '#ffaa44' : '#00ddff'} transparent opacity={0.9} />
         </mesh>
       ))}
     </group>
@@ -629,13 +684,13 @@ export default function DataCentrePortal({ col, row, colSpan, rowSpan, gridCols,
       <CentralDisplayTower position={[0, 0, 0]} />
 
       {/* ─── Ceiling Ring Canopy ─── */}
-      <CeilingRings position={[0, 2.05, 0]} radius={roomRadius * 0.90} />
+      <CeilingRings position={[0, 3.2, 0]} radius={roomRadius * 0.90} />
 
       {/* ─── GLASS WALL — Shared boundary with Oly's Office (right side) ─── */}
       <GlassWallPanel
         position={[zW * 0.48, 0, 0]}
         width={zD * 0.85}
-        height={2.10}
+        height={3.4}
         color="#00ff88"
       />
 
@@ -657,30 +712,30 @@ export default function DataCentrePortal({ col, row, colSpan, rowSpan, gridCols,
       {/* ─── Perimeter Wall Screen Banks — back and left walls ─── */}
       {/* Back wall — center map display */}
       <WallScreenBank
-        position={[0, 0.90, -zD * 0.36]}
+        position={[0, 1.40, -zD * 0.36]}
         rotation={[0, 0, 0]}
-        size={[0.55, 0.40]}
+        size={[0.75, 0.55]}
       />
 
       {/* Back-left wall */}
       <WallScreenBank
-        position={[-zW * 0.32, 0.90, -zD * 0.34]}
+        position={[-zW * 0.32, 1.25, -zD * 0.34]}
         rotation={[0, Math.PI / 12, 0]}
-        size={[0.38, 0.30]}
+        size={[0.50, 0.42]}
       />
 
       {/* Back-right wall */}
       <WallScreenBank
-        position={[zW * 0.32, 0.90, -zD * 0.34]}
+        position={[zW * 0.32, 1.25, -zD * 0.34]}
         rotation={[0, -Math.PI / 12, 0]}
-        size={[0.38, 0.30]}
+        size={[0.50, 0.42]}
       />
 
       {/* Left wall screen */}
       <WallScreenBank
-        position={[-zW * 0.36, 0.80, 0]}
+        position={[-zW * 0.36, 1.10, 0]}
         rotation={[0, Math.PI / 2, 0]}
-        size={[0.35, 0.30]}
+        size={[0.45, 0.40]}
       />
 
       {/* ─── Perimeter Console Stations ─── */}
@@ -689,9 +744,9 @@ export default function DataCentrePortal({ col, row, colSpan, rowSpan, gridCols,
       <ConsoleStation position={[zW * 0.30, 0, -zD * 0.20]} rotation={[0, -Math.PI / 4, 0]} />
 
       {/* ─── TRAEFIK PROXY — floating label above tower ─── */}
-      <group position={[0, 2.25, 0.05]}>
+      <group position={[0, 3.3, 0.05]}>
         <Text
-          fontSize={0.14}
+          fontSize={0.18}
           color="#00ccff"
           anchorX="center"
           anchorY="middle"
@@ -704,15 +759,71 @@ export default function DataCentrePortal({ col, row, colSpan, rowSpan, gridCols,
         {/* Underline glow */}
         <mesh position={[0, -0.08, 0.01]}>
           <boxGeometry args={[0.80, 0.004, 0.008]} />
-          <meshBasicMaterial color="#00aaff" transparent opacity={0.5} />
+          <meshBasicMaterial color="#00ccff" transparent opacity={0.7} />
         </mesh>
         <pointLight position={[0, 0, 0.2]} intensity={0.6} color="#00ccff" distance={2.5} />
       </group>
 
+      {/* ─── NEON SIGNS — vibrant wall accents (FIX 3) ─── */}
+      {/* Cloud neon sign — "110lymph.nl" (cyan) */}
+      <group position={[-zW * 0.20, 2.2, -zD * 0.35]}>
+        <mesh position={[0, 0, 0.005]}>
+          <boxGeometry args={[0.50, 0.20, 0.015]} />
+          <meshStandardMaterial color="#15171c" metalness={0.55} roughness={0.35} />
+        </mesh>
+        <Text position={[0, 0, 0.025]} fontSize={0.08} color={'#ffffff'}
+          anchorX="center" anchorY="middle" font="/fonts/Inter-Bold.ttf"
+          outlineWidth={0.003} outlineColor="#0a2a3a">
+          110lymph.nl
+        </Text>
+        <mesh position={[0, 0.06, 0.02]}>
+          <boxGeometry args={[0.30, 0.008, 0.008]} />
+          <meshBasicMaterial color="#00ddff" transparent opacity={0.9} blending={THREE.AdditiveBlending} />
+        </mesh>
+        <mesh position={[0, -0.06, 0.02]}>
+          <boxGeometry args={[0.25, 0.006, 0.006]} />
+          <meshBasicMaterial color="#00ddff" transparent opacity={0.7} blending={THREE.AdditiveBlending} />
+        </mesh>
+        <pointLight position={[0, 0, 0.1]} intensity={0.6} color="#00ddff" distance={2.0} />
+      </group>
+
+      {/* Shield neon sign — orange circuit traces */}
+      <group position={[zW * 0.25, 2.0, -zD * 0.35]}>
+        <mesh position={[0, 0, 0.005]}>
+          <boxGeometry args={[0.30, 0.35, 0.015]} />
+          <meshStandardMaterial color="#15171c" metalness={0.55} roughness={0.35} />
+        </mesh>
+        {/* Shield outline */}
+        {[
+          { x: -0.06, y: 0.05, w: 0.010, h: 0.20 },
+          { x: 0.06, y: 0.05, w: 0.010, h: 0.20 },
+          { x: 0, y: -0.05, w: 0.010, h: 0.10 },
+          { x: 0, y: 0.16, w: 0.10, h: 0.010 },
+          { x: 0, y: -0.10, w: 0.12, h: 0.010 },
+        ].map((seg, i) => (
+          <mesh key={`shield-seg-${i}`} position={[seg.x, seg.y, 0.02]}>
+            <boxGeometry args={[seg.w, seg.h, 0.012]} />
+            <meshBasicMaterial color="#ff7722" transparent opacity={0.9} blending={THREE.AdditiveBlending} />
+          </mesh>
+        ))}
+        {/* Circuit traces */}
+        {[
+          { x: -0.02, y: 0.02, w: 0.06, h: 0.005 },
+          { x: -0.05, y: -0.04, w: 0.04, h: 0.005 },
+          { x: 0.02, y: -0.06, w: 0.05, h: 0.005 },
+        ].map((t, i) => (
+          <mesh key={`shield-trace-${i}`} position={[t.x, t.y, 0.025]}>
+            <boxGeometry args={[t.w, t.h, 0.006]} />
+            <meshBasicMaterial color="#ffaa44" transparent opacity={0.6} blending={THREE.AdditiveBlending} />
+          </mesh>
+        ))}
+        <pointLight position={[0, 0, 0.1]} intensity={0.5} color="#ff7722" distance={1.8} />
+      </group>
+
       {/* ─── Ambient point lights — cool blue command center glow ─── */}
-      <pointLight position={[0, 1.0, 0]} intensity={0.6} color="#003366" distance={4} />
-      <pointLight position={[-zW * 0.25, 0.8, -zD * 0.25]} intensity={0.4} color="#0066aa" distance={3} />
-      <pointLight position={[zW * 0.25, 0.8, -zD * 0.25]} intensity={0.4} color="#0066aa" distance={3} />
+      <pointLight position={[0, 1.5, 0]} intensity={0.8} color="#003366" distance={5} />
+      <pointLight position={[-zW * 0.25, 1.2, -zD * 0.25]} intensity={0.5} color="#0066aa" distance={3.5} />
+      <pointLight position={[zW * 0.25, 1.2, -zD * 0.25]} intensity={0.5} color="#0066aa" distance={3.5} />
 
       {/* ─── Zone label on floor ─── */}
       <Text
