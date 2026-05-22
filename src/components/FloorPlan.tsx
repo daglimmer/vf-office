@@ -178,40 +178,40 @@ function Furniture({ room }: { room: RoomConfig }) {
               </g>
             )
           })}
-          {/* Projector screen on wall */}
-          <rect x={cx - 60} y={y + 15} width="120" height="8" rx="2" fill={color} opacity="0.08" />
-          <text x={cx} y={y + 12} textAnchor="middle" fontSize="6" fill={color} opacity="0.3">SCREEN</text>
+          {/* Big widescreen display on wall */}
+          <rect x={x + 40} y={y + 10} width={w - 80} height="12" rx="2" fill="#0a0a18" stroke={color} strokeWidth="1" strokeOpacity="0.4" />
+          <rect x={x + 44} y={y + 12} width={w - 88} height="8" rx="1" fill={color} opacity="0.12" />
+          <text x={cx} y={y + 8} textAnchor="middle" fontSize="7" fill={color} opacity="0.4" fontWeight="bold">PRESENTATION DISPLAY</text>
         </>
       )
 
-    // ── TEAM OFFICE: 4 desks in 2×2 grid ────────────────────────────
-    case 'team_office':
+    // ── TEAM OFFICE: 3×6 desk grid with widescreen monitors ──────────
+    case 'team_office': {
+      const cols = 6, rows = 3
+      const cellW = (w - 80) / cols
+      const cellH = (h - 40) / rows
       return (
         <>
-          {[
-            { dx: cx - 120, dy: cy - 35 },
-            { dx: cx + 10, dy: cy - 35 },
-            { dx: cx - 120, dy: cy + 45 },
-            { dx: cx + 10, dy: cy + 45 },
-          ].map((d, i) => (
-            <g key={i}>
-              {/* Desk */}
-              <rect x={d.dx - 45} y={d.dy - 18} width="90" height="36" rx="3" fill="#0d111a" stroke={color} strokeWidth="0.5" strokeOpacity="0.2" />
-              {/* Monitor */}
-              <rect x={d.dx - 16} y={d.dy - 12} width="32" height="20" rx="2" fill="#0a0e18" stroke={color} strokeWidth="0.4" strokeOpacity="0.2" />
-              <rect x={d.dx - 14} y={d.dy - 10} width="28" height="16" rx="1" fill={color} opacity="0.05" />
-              {/* Keyboard */}
-              <rect x={d.dx - 25} y={d.dy + 5} width="50" height="7" rx="1.5" fill={color} opacity="0.04" />
-              {/* Chair */}
-              <ellipse cx={d.dx} cy={d.dy + 20} rx="12" ry="6" fill="none" stroke={color} strokeWidth="0.4" strokeOpacity="0.15" />
-            </g>
-          ))}
-          {/* Whiteboard on wall */}
-          <rect x={x + w - 90} y={y + 15} width="70" height="30" rx="2" fill={color} opacity="0.04" stroke={color} strokeWidth="0.4" strokeOpacity="0.15" />
-          <line x1={x + w - 80} y1={y + 26} x2={x + w - 30} y2={y + 26} stroke={color} strokeWidth="0.4" opacity="0.12" />
-          <line x1={x + w - 75} y1={y + 32} x2={x + w - 40} y2={y + 32} stroke={color} strokeWidth="0.4" opacity="0.1" />
+          {Array.from({ length: rows }).map((_, ri) =>
+            Array.from({ length: cols }).map((__, ci) => {
+              const dx = x + 40 + cellW * ci + cellW / 2
+              const dy = y + 25 + cellH * ri + cellH / 2
+              return (
+                <g key={`${ri}-${ci}`}>
+                  {/* Desk */}
+                  <rect x={dx - 28} y={dy - 12} width="56" height="24" rx="2" fill="#0d111a" stroke={color} strokeWidth="0.4" strokeOpacity="0.18" />
+                  {/* Widescreen monitor */}
+                  <rect x={dx - 20} y={dy - 10} width="40" height="12" rx="1.5" fill="#0a0e18" stroke={color} strokeWidth="0.3" strokeOpacity="0.25" />
+                  <rect x={dx - 18} y={dy - 8} width="36" height="8" rx="1" fill={color} opacity="0.05" />
+                  {/* Keyboard */}
+                  <rect x={dx - 18} y={dy + 2} width="36" height="5" rx="1" fill={color} opacity="0.04" />
+                </g>
+              )
+            })
+          )}
         </>
       )
+    }
 
     default:
       return null
@@ -233,7 +233,7 @@ export default function FloorPlan({ specialists, selectedRoom, onSelectRoom }: P
   })
 
   return (
-    <svg viewBox="0 0 1200 900" className="w-full h-full" style={{ background: '#080c14' }}>
+    <svg viewBox="-50 -50 1300 1000" preserveAspectRatio="xMidYMid meet" className="w-full h-full" style={{ background: '#080c14' }}>
       <defs>
         {ROOMS.map(r => <RoomPattern key={r.id} room={r} />)}
         <filter id="pulse">

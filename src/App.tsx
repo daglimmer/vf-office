@@ -137,7 +137,7 @@ export default function App() {
   return (
     <div className="w-screen h-screen bg-[#080c14] relative overflow-hidden font-sans flex flex-col">
       {/* ─── Floor Plan ─── */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-0">
         <FloorPlan
           specialists={mappedSpecialists}
           selectedRoom={selectedRoom}
@@ -247,7 +247,7 @@ export default function App() {
       </div>
 
       {/* ─── Activity Bar ── Bottom status strip ───────────────────── */}
-      <div className="h-24 bg-[#0a0f18] border-t border-[#1a2235] flex gap-0 z-20">
+      <div className="h-16 bg-[#0a0f18] border-t border-[#1a2235] flex gap-0 z-20 shrink-0">
         {/* Phase indicators */}
         <div className="flex items-center gap-1 px-4 border-r border-[#1a2235] min-w-[420px]">
           {phases.map(p => (

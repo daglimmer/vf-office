@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState, useEffect, useLayoutEffect } from 'react'
 import { ROOMS, STATUS_COLORS, STATUS_LABELS, getRoomId } from '../data/zones'
 import { getPos } from './FloorPlan'
 import { SpecialistData } from '../App'
@@ -11,7 +11,10 @@ function fmtTime(secs: number): string {
 }
 
 export default function SpecialistDot({ spec }: { spec: SpecialistData }) {
+  const gRef = useRef<SVGGElement>(null)
   const [hovered, setHovered] = useState(false)
+  const [animating, setAnimating] = useState(false)
+
   const roomId = spec.roomId || getRoomId(spec)
   const room = ROOMS.find(r => r.id === roomId) || ROOMS.find(r => r.id === 'lounge')!
   const pos = getPos(spec.name, room)
@@ -23,12 +26,37 @@ export default function SpecialistDot({ spec }: { spec: SpecialistData }) {
   const name = spec.name.charAt(0).toUpperCase() + spec.name.slice(1)
   const runtime = spec.task_runtime ? fmtTime(spec.task_runtime) : ''
 
+  // FLIP animation: when position changes, snap back, then transition
+  const prevPos = useRef({ x: pos.x, y: pos.y })
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
+
+  useLayoutEffect(() => {
+    const prev = prevPos.current
+    const dx = prev.x - pos.x
+    const dy = prev.y - pos.y
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+      // Position changed — set inverse offset and start animation
+      setOffset({ x: dx, y: dy })
+      setAnimating(true)
+      // Force browser to render the inverted position, then animate back
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setOffset({ x: 0, y: 0 })
+          setTimeout(() => setAnimating(false), 800)
+        })
+      })
+    }
+    prevPos.current = { x: pos.x, y: pos.y }
+  }, [pos.x, pos.y])
+
+  const tx = pos.x + offset.x
+  const ty = pos.y + offset.y
+  const transition = animating ? 'transform 0.8s ease-in-out' : 'none'
+
   return (
     <g
-      style={{
-        transition: 'transform 0.8s ease-in-out',
-        transform: `translate(${pos.x}px, ${pos.y}px)`,
-      }}
+      ref={gRef}
+      style={{ transition, transform: `translate(${tx}px, ${ty}px)` }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -42,7 +70,7 @@ export default function SpecialistDot({ spec }: { spec: SpecialistData }) {
         opacity={isActive ? 0.95 : 0.5}
         filter={isWorking ? 'url(#pulse)' : undefined} />
 
-      {/* Emoji label above */}
+      {/* Emoji above */}
       <text y={-16} textAnchor="middle" fontSize="12" fill="#e0e8f0">{emoji}</text>
 
       {/* Name below */}
@@ -62,8 +90,7 @@ export default function SpecialistDot({ spec }: { spec: SpecialistData }) {
       {hovered && (
         <g>
           <rect x={-55} y={-52} width={110} height={56} rx="4"
-            fill="#080c14" fillOpacity="0.96" stroke={color} strokeWidth="0.5"
-            strokeOpacity="0.4" />
+            fill="#080c14" fillOpacity="0.96" stroke={color} strokeWidth="0.5" strokeOpacity="0.4" />
           <text y={-34} textAnchor="middle" fontSize="7" fill={color} fontWeight="bold">{emoji} {name}</text>
           <text y={-23} textAnchor="middle" fontSize="6" fill="#8899bb">
             {STATUS_LABELS[status] || status} · {room.label}
