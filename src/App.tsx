@@ -52,7 +52,7 @@ export default function App() {
       const data: ActivityResponse = await res.json()
       setApiOnline(true)
       if (data.specialists?.length) {
-        setSpecialists(data.specialists.map((s: any) => {
+        const apiSpecs = data.specialists.map((s: any) => {
           const rawName = s.name || s.id || ''
           const rawZone = s.zone || ''
           return {
@@ -64,7 +64,11 @@ export default function App() {
             task_runtime: s.task_runtime,
             started_at: s.started_at ? String(s.started_at) : undefined,
           }
-        }))
+        })
+        // CEO always present, even if not in API
+        const hasCEO = apiSpecs.some((s: SpecialistData) => s.name === 'ceo')
+        if (!hasCEO) apiSpecs.unshift({ name: 'ceo', emoji: '🧠', status: 'idle', roomId: 'ceo_office', task_label: '', task_runtime: 0, started_at: '' })
+        setSpecialists(apiSpecs)
       }
     } catch { setApiOnline(false) }
   }, [])
