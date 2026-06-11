@@ -1,0 +1,177 @@
+// Phase 4 — Agent Notification System (Spec §7.1) + announcements (§11.3).
+// Parallel interrupt channel: never changes lifecycle state.
+import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+
+const TYPE_COLOR = {
+  comment: '#4DD8FF', blocked: '#FF4D4D', unblocked: '#3DFF7A',
+  api_key_added: '#FFD24D', task_assigned: '#FFFFFF',
+};
+const PRI = {
+  normal: { color: '#FFE32C', pulses: 3, pause: 0, panel: 8 },
+  high: { color: '#FF4D4D', pulses: 3, pause: 3, panel: 12 },
+  alert: { color: '#FF4D4D', pulses: 6, pause: 5, panel: 20 },
+};
+
+export function initNotifications({ bus, sim, THREE, scene, byCard, anchors, rooms, agents }) {
+
+  // ---------------- visuals
+  function pingSphere(color, scale = 1) {
+    return new THREE.Mesh(new THREE.SphereGeometry(0.12 * scale, 12, 10),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending }));
+  }
+  function envelopeSprite(color, isKey) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 32;
+    const x = cv.getContext('2d');
+    x.strokeStyle = '#fff'; x.lineWidth = 2;
+    if (isKey) { x.beginPath(); x.arc(11, 16, 5, 0, 7); x.moveTo(16, 16); x.lineTo(28, 16); x.lineTo(28, 21); x.moveTo(23, 16); x.lineTo(23, 20); x.stroke(); }
+    else { x.strokeRect(4, 8, 24, 16); x.beginPath(); x.moveTo(4, 8); x.lineTo(16, 18); x.lineTo(28, 8); x.stroke(); }
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), color, depthTest: false, transparent: true }));
+    sp.scale.setScalar(0.22);
+    return sp;
+  }
+  function textPanel(author, text, color) {
+    const el = document.createElement('div');
+    el.className = 'note-panel';
+    el.style.borderTopColor = color;
+    el.innerHTML = `<b></b><span></span>`;
+    el.querySelector('b').textContent = author ?? '';
+    el.querySelector('span').textContent = text ?? '';
+    return new CSS2DObject(el);
+  }
+
+  // ---------------- per-agent queues (§7.1 queueing)
+  const queues = new Map();        // Agent -> {items:[], busy, envelope}
+  function q(agent) {
+    if (!queues.has(agent)) queues.set(agent, { items: [], busy: false, env: null });
+    return queues.get(agent);
+  }
+
+  function notifyAgent(agent, { type = 'comment', author, text }) {
+    const Q = q(agent);
+    Q.items.push({ type, author, text });
+    if (!Q.busy) drain(agent);
+    else updateBadge(agent);
+  }
+
+  function updateBadge(agent) {
+    const Q = q(agent);
+    if (Q.env && Q.items.length > 0) {
+      Q.env.material.opacity = 1;
+      // count badge: redraw via scale pulse (cheap)
+      Q.env.scale.setScalar(0.22 + Math.min(Q.items.length, 4) * 0.025);
+    }
+  }
+
+  function drain(agent) {
+    const Q = q(agent);
+    const item = Q.items.shift();
+    if (!item) { Q.busy = false; return; }
+    Q.busy = true;
+    const color = TYPE_COLOR[item.type] ?? TYPE_COLOR.comment;
+
+    // overlay-suppressed agents queue silently (§7.2)
+    if (agent.overlay !== 'ok') { Q.items.unshift(item); Q.busy = false; return; }
+
+    // ping: 3 pulses over 1.5s, attached above head
+    const ping = pingSphere(color);
+    agent.parts.head.add(ping); ping.position.y = 0.45;
+    const t0 = performance.now();
+    const pulse = () => {
+      const t = (performance.now() - t0) / 1500;
+      if (t >= 1 || !ping.parent) { ping.parent?.remove(ping); openEnvelope(); return; }
+      const k = (t * 3) % 1;
+      ping.scale.setScalar(Math.max(0.01, Math.sin(k * Math.PI) * 1.5));
+      requestAnimationFrame(pulse);
+    };
+    requestAnimationFrame(pulse);
+
+    function openEnvelope() {
+      const env = envelopeSprite(color, item.type === 'api_key_added');
+      agent.parts.head.add(env); env.position.y = 0.4;
+      Q.env = env; updateBadge(agent);
+
+      // per-state behavior (§7.1)
+      const st = agent.state ?? 'idle';
+      let readFor = 10;
+      const read = () => {
+        const panel = textPanel(item.author, item.text, color);
+        panel.position.set(0, 1.7, 0);
+        agent.group.add(panel);
+        setTimeout(() => {
+          agent.group.remove(panel); panel.element.remove();
+          agent.parts.head.remove(env); Q.env = null;
+          if (agent.pose === 'glance') agent.pose = agent.seated ? (st === 'working' ? 'type' : st === 'briefing' || st === 'debrief' ? 'talk' : 'sit') : 'idle';
+          drain(agent);
+        }, readFor * 1000);
+      };
+      if (st === 'idle' || st === 'spawning') {
+        readFor = 15;   // idle: walk to a desk, sit, read (§7.1)
+        agent.acquire('work', s => { agent.hold('work', s); agent.goto(s, () => { agent.sitAt(s, 'glance'); read(); }); });
+      } else if (st === 'working') {
+        readFor = 15; agent.pose = 'glance'; read();
+      } else if (agent.path.length) {
+        // walking: open on arrival
+        const prev = agent.onArrive;
+        agent.onArrive = () => { prev?.(); agent.pose = 'glance'; read(); };
+      } else {
+        readFor = 10; agent.pose = 'glance'; read();
+      }
+    }
+  }
+
+  // ---------------- system announcements (§11.3 / §7.1)
+  let announceEl = null;
+  function announce(message, priority = 'normal') {
+    const P = PRI[priority] ?? PRI.normal;
+    // room-wide pings at every announce_* anchor
+    for (const [name, a] of anchors) {
+      if (!name.startsWith('announce_')) continue;
+      const ping = pingSphere(P.color, 3);
+      ping.position.copy(a.pos); scene.add(ping);
+      const t0 = performance.now(), dur = P.pulses * 500;
+      const pulse = () => {
+        const t = (performance.now() - t0) / dur;
+        if (t >= 1) { scene.remove(ping); return; }
+        const k = (t * P.pulses) % 1;
+        ping.scale.setScalar(Math.max(0.01, Math.sin(k * Math.PI) * 1.5));
+        requestAnimationFrame(pulse);
+      };
+      requestAnimationFrame(pulse);
+    }
+    // agents pause + head-up (high/alert); walking agents stop in place
+    if (P.pause > 0) {
+      const until = performance.now() + P.pause * 1000;
+      for (const ag of agents) {
+        if (ag.overlay !== 'ok') continue;
+        ag.freezeUntil = until;
+        const prevPose = ag.pose;
+        ag.pose = 'glance';
+        setTimeout(() => { if (ag.pose === 'glance') ag.pose = prevPose; }, P.pause * 1000);
+      }
+    }
+    // screen-level banner panel
+    announceEl?.remove();
+    const el = document.createElement('div');
+    el.className = `announce ${priority}`;
+    el.textContent = message;
+    document.body.appendChild(el); announceEl = el;
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 400); }, P.panel * 1000);
+  }
+
+  // ---------------- bridge wiring
+  bus.addEventListener('bridge', ({ detail: ev }) => {
+    if (ev.event === 'card.comment') {
+      const a = byCard.get(ev.cardId);
+      if (a) notifyAgent(a, { type: ev.type ?? 'comment', author: ev.author, text: ev.comment });
+    }
+    if (ev.event === 'card.blocked') {
+      const a = byCard.get(ev.cardId);
+      if (a) notifyAgent(a, { type: 'blocked', author: ev.by, text: ev.reason ?? 'blocked' });
+    }
+    if (ev.event === 'card.unblocked') {
+      const a = byCard.get(ev.cardId);
+      if (a) notifyAgent(a, { type: 'unblocked', author: ev.by, text: 'unblocked' });
+    }
+    if (ev.event === 'system.announcement') announce(ev.message, ev.priority ?? 'normal');
+  });
+}

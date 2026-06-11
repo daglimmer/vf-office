@@ -1,0 +1,72 @@
+{
+  "comment": "Waypoint adjacency for office.glb. Node positions come from the GLB anchors; this file defines edges only. Rooms block lists room centers for camera targets.",
+  "edges": [
+    ["nav_corridor_01", "nav_corridor_02"],
+    ["nav_corridor_02", "nav_corridor_03"],
+    ["nav_corridor_03", "nav_corridor_04"],
+    ["nav_corridor_04", "nav_corridor_05"],
+    ["nav_corridor_05", "nav_corridor_06"],
+
+    ["nav_door_lounge", "nav_corridor_01"],
+    ["nav_door_lounge", "nav_corridor_02"],
+    ["nav_door_staff", "nav_corridor_02"],
+    ["nav_door_staff", "nav_corridor_03"],
+    ["nav_door_devops", "nav_corridor_04"],
+    ["nav_door_devops", "nav_corridor_05"],
+    ["nav_door_meeting", "nav_corridor_01"],
+    ["nav_door_meeting", "nav_corridor_02"],
+    ["nav_door_control", "nav_corridor_02"],
+    ["nav_door_control", "nav_corridor_03"],
+    ["nav_door_ceo", "nav_corridor_04"],
+    ["nav_door_ceo", "nav_corridor_05"],
+    ["nav_door_dc", "nav_corridor_06"],
+
+    ["nav_door_lounge", "lounge_seat_01"],
+    ["nav_door_lounge", "lounge_seat_02"],
+    ["nav_door_lounge", "lounge_seat_03"],
+    ["nav_door_lounge", "lounge_seat_04"],
+    ["nav_door_lounge", "lounge_seat_05"],
+    ["nav_door_lounge", "lounge_seat_06"],
+    ["nav_door_lounge", "lounge_seat_07"],
+    ["nav_door_lounge", "lounge_seat_08"],
+
+    ["nav_door_staff", "doc_desk_01"],
+    ["nav_door_staff", "doc_desk_02"],
+    ["nav_door_staff", "doc_desk_03"],
+    ["nav_door_staff", "doc_desk_04"],
+
+    ["nav_door_devops", "work_desk_01"],
+    ["nav_door_devops", "work_desk_02"],
+    ["nav_door_devops", "work_desk_03"],
+    ["nav_door_devops", "work_desk_04"],
+    ["nav_door_devops", "work_desk_05"],
+    ["nav_door_devops", "work_desk_06"],
+    ["nav_door_devops", "work_desk_07"],
+    ["nav_door_devops", "work_desk_08"],
+
+    ["nav_door_meeting", "meet_seat_ollie"],
+    ["nav_door_meeting", "meet_seat_01"],
+    ["nav_door_meeting", "meet_seat_02"],
+    ["nav_door_meeting", "meet_seat_03"],
+    ["nav_door_meeting", "meet_seat_04"],
+    ["nav_door_meeting", "meet_seat_05"],
+    ["nav_door_meeting", "meet_seat_06"],
+    ["nav_door_meeting", "meet_seat_07"],
+
+    ["nav_door_control", "ollie_station"],
+    ["nav_door_ceo", "ceo_desk"],
+
+    ["nav_door_dc", "spawn_dc"],
+    ["nav_door_dc", "despawn_dc"]
+  ],
+  "rooms": {
+    "lounge":  { "center": [8.5, 0, 3],     "cam": "cam_room_lounge" },
+    "staff":   { "center": [8.5, 0, 8.5],   "cam": "cam_room_staff" },
+    "devops":  { "center": [8.5, 0, 14],    "cam": "cam_room_devops" },
+    "corridor":{ "center": [20, 0, 8.5],    "cam": "cam_room_corridor" },
+    "meeting": { "center": [31.5, 0, 3],    "cam": "cam_room_meeting" },
+    "control": { "center": [31.5, 0, 8.75], "cam": "cam_room_control" },
+    "ceo":     { "center": [31.5, 0, 14.25],"cam": "cam_room_ceo" },
+    "dc":      { "center": [20, 0, 21],     "cam": "cam_room_dc" }
+  }
+}
