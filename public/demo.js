@@ -1,5 +1,7 @@
 // Phase 4 — demo mode: drives the full Mission Control experience with no
-// adapter. Activated automatically when the WebSocket cannot connect.
+// adapter. Phase 6: this is now an EXPLICIT last-resort fallback — it only
+// runs when the adapter is unreachable over HTTP (network error). A failed
+// WebSocket alone falls back to /snapshot polling instead (see main.js).
 
 const AGENTS = [
   { id: 'ollie', name: 'Ollie', color: '#4DD8FF' },

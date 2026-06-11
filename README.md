@@ -37,6 +37,33 @@ counters, the infra strip, and timeline pills. Steering buttons work locally
   client polls `/snapshot` every 2 s (badge shows "HTTP POLLING") before
   falling back to demo.
 
+## Phase 6 — Live data + Backups & Docs pages
+
+- **Transport**: WS -> `/snapshot` polling -> demo. Demo mode now only triggers
+  when the adapter is unreachable over HTTP (network error); while polling, the
+  client retries the WebSocket every 15 s and silently upgrades back.
+- **Backups tab** (HUD): per-system status grid (TrueNAS, Vaultwarden, K3s
+  volumes, VM snapshots) — last run + duration, next scheduled, 5-run size
+  sparkline, green/orange/red with red pulse on failures. Data:
+  `GET /api/backups`, fed by `adapter/sources/storekeeper.js` reading the
+  StoreKeeper scan report at `adapter/data/storekeeper-report.json`
+  (path: `mapping.json "backupsSource"`; a sample file ships in the repo —
+  StoreKeeper should overwrite it after each scan). Client polls every 5 min.
+- **Docs tab** (HUD): file-tree browser (skills/, souls/, memory/, docs/) with
+  in-app markdown rendering (built-in renderer, no deps). Roots default to
+  `<dirname(HERMES_DB)>/<name>`, override via `mapping.json "docsRoots"`. If no
+  roots are available and `"docsUrl"` is set, the panel embeds that site in an
+  iframe. Endpoints: `GET /api/docs/tree`, `GET /api/docs/file?path=`.
+- **Live roster**: `GET /api/agents` returns `{id, name, role, group, status,
+  lastSeen, anchor}`. Online agents claim a desk (work pool), idle/recently
+  offline agents stand ghosted at their last position, agents offline >24 h are
+  removed. Polled every 30 s; demo mode supplies its own roster.
+
+Note: the adapter keeps its zero-dependency stdlib WebSocket (RFC6455) rather
+than the `ws` npm package — same behavior (push snapshot on connect, 2 s kanban
+diff broadcast), no new deps. `storekeeper` source is plain CJS (`.js`, not
+`.ts`) to match the adapter.
+
 ## Production wiring
 
 1. Run the Phase 2 stack (`office-bridge`), replacing its `adapter/index.js` and

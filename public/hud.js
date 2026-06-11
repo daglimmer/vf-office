@@ -1,5 +1,8 @@
 // Phase 4 — HUD: Agent Status Dashboard (Spec §9) + VF infra strip & history.
+// Phase 6: tab strip (Office | Backups | Docs) wiring the new page panels.
 import { attachSteering } from './steering.js';
+import { initBackups, toggleBackups } from './backups.js';
+import { initDocs, toggleDocs } from './docs.js';
 
 const STATE_COLOR = {
   working: '#3DFF7A', briefing: '#4DD8FF', idle: '#8A8F98', lunch: '#FF9E2C',
@@ -12,6 +15,11 @@ const SORT_BAND = { blocked: 0, DOWN: 0, PAUSED: 1, working: 2, briefing: 3, deb
 export function initHud({ bus, sim, demo }) {
   const root = document.getElementById('hud');
   root.innerHTML = `
+    <div class="hud-tabs">
+      <button data-tab="office" class="on">3D Office</button>
+      <button data-tab="backups">Backups</button>
+      <button data-tab="docs">Docs</button>
+    </div>
     <div class="hud-stats">
       <div><b data-b="active">0</b><span>active</span></div>
       <div><b data-b="blocked" class="warn">0</b><span>blocked</span></div>
@@ -30,6 +38,18 @@ export function initHud({ bus, sim, demo }) {
       <div class="hist-rows" data-b="hist"></div>
     </div>`;
   const $ = s => root.querySelector(`[data-b="${s}"]`);
+
+  // ---------------- Phase 6: page tabs
+  const setTab = t => {
+    for (const b of root.querySelectorAll('.hud-tabs button'))
+      b.classList.toggle('on', b.dataset.tab === t);
+    toggleBackups(t === 'backups');
+    toggleDocs(t === 'docs');
+  };
+  initBackups({ onClose: () => setTab('office') });
+  initDocs({ onClose: () => setTab('office') });
+  for (const b of root.querySelectorAll('.hud-tabs button'))
+    b.onclick = e => { e.stopPropagation(); setTab(b.dataset.tab); };
 
   // ---------------- registry
   const reg = new Map();        // agentId -> {name,color,parent,type,runtime,fallbackActive,state,task,blockedSince,reason}

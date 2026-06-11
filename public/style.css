@@ -130,3 +130,69 @@ button.icon.kill.armed { color: #fff; border-color: var(--red);
 .pill i { width: 7px; height: 7px; border-radius: 50%; }
 .pill em { font-style: normal; color: var(--mut); font-size: 10px; }
 .pill:hover { background: rgba(255,255,255,.1); }
+
+/* ---------------- Phase 6: HUD tabs + page panels (Backups / Docs) ---------------- */
+.hud-tabs { display: none; gap: 4px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,.07); }
+.hud.open .hud-tabs, .hud:hover .hud-tabs { display: flex; }
+.hud-tabs button { flex: 1; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
+  color: var(--mut); border-radius: 6px; padding: 4px 0; font-size: 11px; cursor: pointer; }
+.hud-tabs button.on { color: var(--fg); border-color: #4DD8FF; }
+
+.page-panel { position: fixed; top: 52px; left: 10px; right: 46px; bottom: 56px; z-index: 18;
+  background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--line);
+  border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; animation: fade-in .2s ease; }
+.pp-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.08); flex: none; }
+.pp-head b { font-size: 13px; }
+.pp-src { color: var(--mut); font-size: 10px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pp-close { background: none; border: 1px solid rgba(255,255,255,.15); color: var(--mut);
+  border-radius: 5px; cursor: pointer; font-size: 11px; padding: 2px 8px; }
+.pp-close:hover { color: var(--fg); border-color: var(--red); }
+.pp-body { flex: 1; overflow: auto; padding: 12px; }
+.pp-wait { color: var(--mut); padding: 36px; text-align: center; font-size: 12px; }
+
+/* backups grid */
+.bk-grid { width: 100%; border-collapse: collapse; font-size: 12px; }
+.bk-grid th { text-align: left; color: var(--mut); font-size: 10px; text-transform: uppercase;
+  letter-spacing: .06em; padding: 6px 8px; }
+.bk-grid td { padding: 9px 8px; border-top: 1px solid rgba(255,255,255,.06); vertical-align: middle; }
+.bk-pill { padding: 2px 9px; border-radius: 99px; font-size: 10px; font-weight: 700; }
+.bk-success { background: rgba(61,255,122,.12); color: var(--green); }
+.bk-running { background: rgba(255,158,44,.14); color: #FF9E2C; }
+.bk-failed { background: rgba(255,77,77,.15); color: var(--red); animation: bk-pulse 1.2s infinite; }
+@keyframes bk-pulse { 50% { box-shadow: 0 0 10px rgba(255,77,77,.6); } }
+tr.bk-fail-row { background: rgba(255,77,77,.05); }
+.bk-ago, .bk-size { font-style: normal; color: var(--mut); font-size: 10px; margin-left: 5px; }
+.bk-spark { vertical-align: middle; }
+
+/* docs portal */
+.docs-wrap { display: flex; padding: 0; }
+.docs-tree { width: 250px; flex: none; overflow: auto; border-right: 1px solid rgba(255,255,255,.08);
+  padding: 10px; font-size: 12px; }
+.docs-content { flex: 1; overflow: auto; padding: 16px 24px; }
+.docs-frame { flex: 1; border: 0; width: 100%; height: 100%; background: #fff; }
+.dt-root { color: var(--mut); text-transform: uppercase; font-size: 10px; letter-spacing: .08em; margin: 12px 0 4px; }
+.dt-root:first-child { margin-top: 0; }
+.dt-item { padding: 2px 5px; cursor: pointer; border-radius: 4px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.dt-item:hover { background: rgba(255,255,255,.06); }
+.dt-item.on { color: #4DD8FF; background: rgba(77,216,255,.08); }
+.dt-dir { color: var(--mut); }
+.dt-folder .dt-children { display: none; }
+.dt-folder.dt-open > .dt-children { display: block; }
+
+/* mini markdown */
+.md { line-height: 1.6; font-size: 13px; max-width: 800px; }
+.md h1, .md h2, .md h3, .md h4, .md h5 { color: var(--fg); margin: 18px 0 8px; line-height: 1.3; }
+.md h1 { font-size: 19px; border-bottom: 1px solid rgba(255,255,255,.1); padding-bottom: 6px; }
+.md h2 { font-size: 16px; } .md h3 { font-size: 14px; }
+.md p { margin: 8px 0; color: var(--fg); }
+.md a { color: #4DD8FF; }
+.md code { background: rgba(255,255,255,.08); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+.md .md-code { background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.08); border-radius: 8px;
+  padding: 10px 12px; overflow-x: auto; font-size: 12px; }
+.md .md-code code { background: none; padding: 0; }
+.md ul, .md ol { margin: 8px 0; padding-left: 22px; }
+.md blockquote { border-left: 3px solid #4DD8FF; margin: 8px 0; padding: 2px 12px; color: var(--mut); }
+.md hr { border: 0; border-top: 1px solid rgba(255,255,255,.1); margin: 14px 0; }
+.md-pre { font-size: 12px; white-space: pre-wrap; }

@@ -43,6 +43,20 @@ const log = (...a) => console.log(new Date().toISOString(), '[adapter]', ...a);
 const mapping = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'mapping.json'), 'utf8'));
 const agentsCfg = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'agents.json'), 'utf8'));
 
+// Phase 6: StoreKeeper backup source + docs portal roots
+const { readBackups } = require('./sources/storekeeper');
+const BACKUPS_FILE = path.resolve(ROOT, mapping.backupsSource ?? 'data/storekeeper-report.json');
+const DOCS_URL = mapping.docsUrl ?? '';
+const HERMES_HOME = path.dirname(DB_PATH);
+const DOCS_ROOTS = {};
+{
+  const cfg = mapping.docsRoots ?? {};
+  for (const k of ['skills', 'souls', 'memory', 'docs'])
+    DOCS_ROOTS[k] = cfg[k] ? path.resolve(ROOT, cfg[k]) : path.join(HERMES_HOME, k);
+  for (const [k, v] of Object.entries(cfg))
+    if (!DOCS_ROOTS[k]) DOCS_ROOTS[k] = path.resolve(ROOT, v);
+}
+
 const SQL = Object.assign({
   events:   "SELECT id, task_id, event_type, payload, created_at FROM task_events WHERE id > ? ORDER BY id LIMIT 500",
   comments: "SELECT id, task_id, author, body, created_at FROM task_comments WHERE id > ? ORDER BY id LIMIT 200",
@@ -369,6 +383,73 @@ function reminderTick() {
 setInterval(reminderTick, 15000);
 reminderTick();
 
+// ------------------------------------------------------------------ agent roster (Phase 6 - /api/agents)
+function agentGroup(a) {
+  if ((a.type ?? 'agent') === 'infrastructure') return 'infrastructure';
+  if (a.id === 'ollie' || a.id === 'ceo') return 'command';
+  let cur = a, guard = 0;
+  while (cur.parent && agents.has(cur.parent) && guard++ < 4) cur = agents.get(cur.parent);
+  if (cur.id !== a.id) return cur.id;                       // child -> family root
+  if (a.ephemeralPattern || childrenOf(a.id).length) return a.id;   // family root itself
+  return 'specialist';
+}
+function agentStatus(id) {
+  const rt = runtime.get(id);
+  if (rt === 'down' || rt === 'killed') return 'offline';
+  if (rt === 'paused') return 'idle';
+  const lp = lastPush.get(id);
+  if (lp != null && Date.now() - lp <= 60000) return 'online';
+  if (lp != null && Date.now() - lp > 24 * 3600 * 1000) return 'offline';
+  return 'idle';
+}
+function agentRoster() {
+  return [...agents.values()].map(a => ({
+    id: a.id, name: a.name ?? a.id, color: a.color ?? null,
+    role: a.role ?? null, group: agentGroup(a),
+    status: agentStatus(a.id),
+    lastSeen: lastPush.has(a.id) ? Math.floor(lastPush.get(a.id) / 1000) : null,
+    anchor: a.anchor ?? null,
+  }));
+}
+
+// ------------------------------------------------------------------ docs portal (Phase 6 - /api/docs/*)
+const DOC_EXT = new Set(['.md', '.markdown', '.txt', '.json', '.yaml', '.yml']);
+function walkDocs(dir, rel, depth) {
+  if (depth > 4) return [];
+  let names = [];
+  try { names = fs.readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+  const out = [];
+  for (const e of names.slice(0, 200)) {
+    if (e.name.startsWith('.')) continue;
+    const r = rel + '/' + e.name;
+    if (e.isDirectory()) out.push({ name: e.name, path: r, dir: true, children: walkDocs(path.join(dir, e.name), r, depth + 1) });
+    else if (DOC_EXT.has(path.extname(e.name).toLowerCase())) out.push({ name: e.name, path: r, dir: false });
+  }
+  out.sort((x, y) => (y.dir - x.dir) || x.name.localeCompare(y.name));
+  return out;
+}
+function docsTree() {
+  const roots = [];
+  for (const [name, dir] of Object.entries(DOCS_ROOTS)) {
+    const available = fs.existsSync(dir);
+    roots.push({ name, available, entries: available ? walkDocs(dir, name, 0) : [] });
+  }
+  return { ok: true, docsUrl: DOCS_URL, roots };
+}
+function docsFile(res, rel) {
+  if (!rel) return json(res, 400, { ok: false, error: 'path required' });
+  const seg = String(rel).split('/').filter(Boolean);
+  const rootDir = DOCS_ROOTS[seg[0]];
+  if (!rootDir) return json(res, 404, { ok: false, error: 'unknown root' });
+  const f = path.normalize(path.join(rootDir, ...seg.slice(1)));
+  if (!f.startsWith(path.normalize(rootDir))) return json(res, 403, { ok: false, error: 'forbidden' });
+  try {
+    const st = fs.statSync(f);
+    if (!st.isFile() || st.size > 512 * 1024) return json(res, 413, { ok: false, error: 'not a readable file' });
+    return json(res, 200, { ok: true, path: seg.join('/'), content: fs.readFileSync(f, 'utf8') });
+  } catch { return json(res, 404, { ok: false, error: 'not found' }); }
+}
+
 // ------------------------------------------------------------------ http
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
@@ -408,6 +489,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
+    if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
+    if (req.method === 'GET' && p === '/api/agents') return json(res, 200, agentRoster());                // Phase 6
+    if (req.method === 'GET' && p === '/api/docs/tree') return json(res, 200, docsTree());                // Phase 6
+    if (req.method === 'GET' && p === '/api/docs/file') return docsFile(res, url.searchParams.get('path'));
     if (req.method === 'GET' && p === '/mapping.json') {
       return json(res, 200, { models: mapping.models ?? {}, budgets: mapping.budgets ?? {} });
     }

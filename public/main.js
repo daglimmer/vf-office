@@ -311,10 +311,17 @@ export class Agent {
     if (cardId) byCard.set(cardId, this);
     this.refreshStatus();
   }
+  setGhost(on) {                          // Phase 6 (4): idle/offline agents render ghosted
+    if (this.ghosted === on) return;
+    this.ghosted = on;
+    for (const m of this.materials) { m.transparent = on; m.opacity = on ? 0.35 : 1; m.needsUpdate = true; }
+    this.label.material.opacity = on ? 0.5 : 1;
+  }
   refreshStatus() {                       // Phase 5 (3): head color = live status
     let st = 'idle';
     if (this.blocked) st = 'blocked';
     else if (this.overlay === 'down' || this.overlay === 'killed') st = 'offline';
+    else if (this.rosterStatus === 'offline') st = 'offline';
     else if (['working', 'briefing', 'debrief', 'documentation'].includes(this.state)) st = 'active';
     const c = new THREE.Color(STATUS_COLOR[st]);
     this.headMat.color.copy(c); this.headMat.emissive.copy(c);
@@ -629,17 +636,71 @@ function pAgent(id) {
 }
 window.__inject = handleEvent;
 
+// ----------------------------------------------------------------- live agent roster (Phase 6 (4))
+// Polls /api/agents: online agents take a desk (via the work pool), idle and
+// recently-offline agents stand ghosted at their last known position, agents
+// offline for >24h are removed. Demo mode supplies its own roster instead.
+const ROSTER_PINNED = new Set(['ollie', 'ceo']);          // never relocated/removed
+function rosterRole(g) { return g === 'command' ? 'command' : g === 'specialist' ? 'specialist' : 'devops'; }
+async function pollRoster() {
+  if (demoMode) return;
+  let list;
+  try { list = await fetch('/api/agents').then(r => { if (!r.ok) throw 0; return r.json(); }); }
+  catch { return; }                                       // adapter offline: keep current scene
+  const cutoff = Math.floor(Date.now() / 1000) - 24 * 3600;
+  for (const r of list) {
+    if (r.group === 'infrastructure') continue;
+    let a = byId.get(r.id);
+    if (r.status === 'offline' && (r.lastSeen == null || r.lastSeen < cutoff)) {
+      if (a && !ROSTER_PINNED.has(r.id)) a.remove();      // offline >24h -> gone
+      continue;
+    }
+    if (!a) {
+      a = new Agent({ name: r.name ?? r.id, sub: r.role ?? r.group, color: r.color ?? undefined,
+                      agentId: r.id, role: rosterRole(r.group) });
+      a.fx = { kind: 'spawn', t: 0 }; a.group.scale.setScalar(0.001);
+    }
+    a.rosterStatus = r.status;
+    if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok' && !a.blocked) {
+      if (r.status === 'online') {
+        a.setGhost(false);
+        a.state = 'working';
+        const anchor = r.anchor && anchors.has(r.anchor) ? r.anchor : null;
+        if (anchor) { if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, 'type')); }
+        else if (!a.heldSlot && !a.waitingPool && !a.path.length)
+          a.acquire('work', s => { a.hold('work', s); a.goto(s, () => { a.sitAt(s, 'type'); deskGlow.get(s).material.emissiveIntensity = 1.4; }); });
+      } else {                                            // idle / offline <24h: ghost in place
+        a.setGhost(true);
+        a.state = 'idle';
+        if (a.heldSlot) { a.releaseSlot(); a.seated = null; a.pose = 'idle'; }
+      }
+    } else {
+      a.setGhost(r.status !== 'online');
+    }
+    a.refreshStatus();
+  }
+}
+setTimeout(pollRoster, 3000);
+setInterval(pollRoster, 30000);
+
 // ----------------------------------------------------------------- transport: WS -> HTTP polling -> demo
 // Phase 5 (5) Ray: if the WebSocket cannot connect, poll the adapter's /snapshot
 // endpoint before giving up and going full demo. Polling diffs card columns and
 // synthesizes card.moved / card.deleted events.
 export let demoMode = false;
-let polling = false;
+let polling = false, pollTimer = null, wsRetryTimer = null;
+function stopPolling() {                                   // Phase 6 (1): WS recovered
+  if (!polling) return;
+  polling = false;
+  clearInterval(pollTimer); clearInterval(wsRetryTimer);
+  pollTimer = wsRetryTimer = null;
+  document.getElementById('demobadge').style.display = 'none';
+}
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws`);   // proxied by vite in dev; direct on adapter
   const giveUp = setTimeout(() => { ws.close(); httpFallback(); }, 2000);
-  ws.onopen = () => clearTimeout(giveUp);
+  ws.onopen = () => { clearTimeout(giveUp); stopPolling(); };
   ws.onmessage = m => handleEvent(JSON.parse(m.data));
   ws.onclose = () => { if (!demoMode && !polling) setTimeout(connect, 2000); };
   ws.onerror = () => {};
@@ -668,10 +729,11 @@ async function httpFallback() {
     badge.textContent = 'HTTP POLLING - WebSocket unavailable';
     badge.style.display = 'block';
     applySnapshot(snap);
-    setInterval(async () => {
+    pollTimer = setInterval(async () => {
       try { applySnapshot(await fetch('/snapshot').then(r => r.json())); } catch { /* adapter blip */ }
     }, 2000);
-  } catch { startDemo(); }
+    wsRetryTimer = setInterval(connect, 15000);            // Phase 6 (1): keep trying to upgrade back to WS
+  } catch { startDemo(); }                                 // network error: adapter truly unreachable
 }
 function startDemo() {
   if (demoMode) return;

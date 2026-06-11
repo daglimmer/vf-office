@@ -15,6 +15,7 @@ export default defineConfig({
       '/agents': TARGET,
       '/announce': TARGET,
       '/snapshot': TARGET,
+      '/api': TARGET,
       '/mapping.json': TARGET,
       '/ws': { target: WS_TARGET, ws: true },
       '/timeline': {

@@ -1,0 +1,154 @@
+{
+  "generated": 1781180394,
+  "comment": "SAMPLE written by Phase 6 build. StoreKeeper should overwrite this file after each scan.",
+  "systems": [
+    {
+      "name": "TrueNAS",
+      "status": "success",
+      "nextRun": 1781261394,
+      "runs": [
+        {
+          "ts": 1780829394,
+          "durationSec": 311,
+          "sizeGb": 412.4,
+          "status": "success"
+        },
+        {
+          "ts": 1780915794,
+          "durationSec": 318,
+          "sizeGb": 413.7,
+          "status": "success"
+        },
+        {
+          "ts": 1781002194,
+          "durationSec": 325,
+          "sizeGb": 415.0,
+          "status": "success"
+        },
+        {
+          "ts": 1781088594,
+          "durationSec": 332,
+          "sizeGb": 416.3,
+          "status": "success"
+        },
+        {
+          "ts": 1781174994,
+          "durationSec": 339,
+          "sizeGb": 417.6,
+          "status": "success"
+        }
+      ]
+    },
+    {
+      "name": "Vaultwarden",
+      "status": "success",
+      "nextRun": 1781203794,
+      "runs": [
+        {
+          "ts": 1780829394,
+          "durationSec": 14,
+          "sizeGb": 0.8,
+          "status": "success"
+        },
+        {
+          "ts": 1780915794,
+          "durationSec": 21,
+          "sizeGb": 0.8,
+          "status": "success"
+        },
+        {
+          "ts": 1781002194,
+          "durationSec": 28,
+          "sizeGb": 0.8,
+          "status": "success"
+        },
+        {
+          "ts": 1781088594,
+          "durationSec": 35,
+          "sizeGb": 0.8,
+          "status": "success"
+        },
+        {
+          "ts": 1781174994,
+          "durationSec": 42,
+          "sizeGb": 0.8,
+          "status": "success"
+        }
+      ]
+    },
+    {
+      "name": "K3s volumes",
+      "status": "running",
+      "nextRun": 1781268594,
+      "runs": [
+        {
+          "ts": 1780829394,
+          "durationSec": 540,
+          "sizeGb": 96.2,
+          "status": "success"
+        },
+        {
+          "ts": 1780915794,
+          "durationSec": 547,
+          "sizeGb": 98.3,
+          "status": "success"
+        },
+        {
+          "ts": 1781002194,
+          "durationSec": 554,
+          "sizeGb": 100.4,
+          "status": "success"
+        },
+        {
+          "ts": 1781088594,
+          "durationSec": 561,
+          "sizeGb": 102.5,
+          "status": "success"
+        },
+        {
+          "ts": 1781174994,
+          "durationSec": 568,
+          "sizeGb": 104.6,
+          "status": "success"
+        }
+      ]
+    },
+    {
+      "name": "VM snapshots",
+      "status": "failed",
+      "nextRun": 1781192994,
+      "runs": [
+        {
+          "ts": 1780829394,
+          "durationSec": 422,
+          "sizeGb": 188.0,
+          "status": "success"
+        },
+        {
+          "ts": 1780915794,
+          "durationSec": 429,
+          "sizeGb": 188.9,
+          "status": "success"
+        },
+        {
+          "ts": 1781002194,
+          "durationSec": 436,
+          "sizeGb": 189.8,
+          "status": "success"
+        },
+        {
+          "ts": 1781088594,
+          "durationSec": 443,
+          "sizeGb": 190.7,
+          "status": "success"
+        },
+        {
+          "ts": 1781174994,
+          "durationSec": 450,
+          "sizeGb": 191.6,
+          "status": "failed"
+        }
+      ]
+    }
+  ]
+}
