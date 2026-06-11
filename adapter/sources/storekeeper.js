@@ -20,11 +20,12 @@ function readBackups(file) {
         durationSec: r.durationSec ?? null,
         sizeGb: r.sizeGb ?? null,
         status: r.status ?? 'success',
+        error: r.error ?? null,                  // Phase 7b: surfaced in run details
       }));
       const last = runs[runs.length - 1] ?? {};
       return {
         name: s.name ?? 'unknown',
-        status: s.status ?? last.status ?? 'success',
+        status: s.status ?? last.status ?? (runs.length ? 'success' : 'never'),   // Phase 7b: gray never-run
         lastRun: s.lastRun ?? last.ts ?? null,
         durationSec: s.durationSec ?? last.durationSec ?? null,
         nextRun: s.nextRun ?? null,

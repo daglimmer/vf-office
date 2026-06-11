@@ -51,7 +51,7 @@ const HERMES_HOME = path.dirname(DB_PATH);
 const DOCS_ROOTS = {};
 {
   const cfg = mapping.docsRoots ?? {};
-  for (const k of ['skills', 'souls', 'memory', 'docs'])
+  for (const k of ['skills', 'souls', 'memory', 'docs', 'prompts'])
     DOCS_ROOTS[k] = cfg[k] ? path.resolve(ROOT, cfg[k]) : path.join(HERMES_HOME, k);
   for (const [k, v] of Object.entries(cfg))
     if (!DOCS_ROOTS[k]) DOCS_ROOTS[k] = path.resolve(ROOT, v);
@@ -86,6 +86,7 @@ const patterns = [...agents.values()].filter(a => a.ephemeralPattern)
 // ------------------------------------------------------------------ runtime state
 const usage = new Map();      // agentId -> last pushed usage record
 const lastPush = new Map();   // agentId -> ms epoch
+const pushHist = new Map();   // agentId -> [ms epochs, last 24h] (Phase 7b: sessions24h)
 const runtime = new Map();    // agentId -> 'ok'|'paused'|'down'|'killed'
 const lastDownAnnounce = new Map();
 const recentDowns = [];
@@ -249,6 +250,13 @@ function intakeUsage(rec) {
   const prev = usage.get(id);
   usage.set(id, rec);
   lastPush.set(id, Date.now());
+  {
+    const h = pushHist.get(id) ?? [];
+    h.push(Date.now());
+    const cut = Date.now() - 24 * 3600 * 1000;
+    while (h.length && h[0] < cut) h.shift();
+    pushHist.set(id, h);
+  }
   if (runtime.get(id) === 'down') {
     runtime.set(id, 'ok');
     broadcast({ event: 'agent.recovered', agentId: id, downtime: rec.heartbeatAge ?? null, ts: now() });
@@ -412,6 +420,33 @@ function agentRoster() {
   }));
 }
 
+// ------------------------------------------------------------------ agent detail (Phase 7b - /api/agents/:id)
+function agentDetail(id) {
+  const a = agents.get(id);
+  if (!a) return null;
+  const u = usage.get(id) ?? {};
+  const cut = Date.now() - 24 * 3600 * 1000;
+  let tasks = [];
+  try {
+    tasks = db.prepare("SELECT id, title, status FROM tasks WHERE assignee = ? OR assignee = ? ORDER BY id DESC LIMIT 3")
+      .all(id, a.name ?? id)
+      .map(r => ({ cardId: String(r.id), title: r.title, status: colKey(r.status) }));
+  } catch (e) { log('agent detail task query failed:', e.message); }
+  return {
+    ok: true,
+    id, name: a.name ?? id, color: a.color ?? null,
+    role: a.role ?? null, group: agentGroup(a), parent: a.parent ?? null,
+    status: agentStatus(id), runtime: runtime.get(id) ?? 'ok',
+    model: u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null),
+    provider: u.modelProvider ?? null, fallbackActive: u.fallbackActive ?? false,
+    sessions24h: (pushHist.get(id) ?? []).filter(t => t >= cut).length,
+    tokensToday: u.tokens ?? null, costUsd: u.costUsd ?? null,
+    cacheHitRate: u.cacheHitRate ?? null,
+    lastSeen: lastPush.has(id) ? Math.floor(lastPush.get(id) / 1000) : null,
+    tasks,
+  };
+}
+
 // ------------------------------------------------------------------ docs portal (Phase 6 - /api/docs/*)
 const DOC_EXT = new Set(['.md', '.markdown', '.txt', '.json', '.yaml', '.yml']);
 function walkDocs(dir, rel, depth) {
@@ -491,6 +526,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
     if (req.method === 'GET' && p === '/api/agents') return json(res, 200, agentRoster());                // Phase 6
+    const adet = p.match(/^\/api\/agents\/([\w.\-]+)$/);                                                   // Phase 7b
+    if (req.method === 'GET' && adet) {
+      const d = agentDetail(adet[1]);
+      return d ? json(res, 200, d) : json(res, 404, { ok: false, error: 'unknown agent' });
+    }
     if (req.method === 'GET' && p === '/api/docs/tree') return json(res, 200, docsTree());                // Phase 6
     if (req.method === 'GET' && p === '/api/docs/file') return docsFile(res, url.searchParams.get('path'));
     if (req.method === 'GET' && p === '/mapping.json') {

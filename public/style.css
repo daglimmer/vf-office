@@ -228,3 +228,49 @@ tr.bk-fail-row { background: rgba(255,77,77,.05); }
   font-size: 12px; text-decoration: none; backdrop-filter: blur(14px); }
 #backdash:hover { border-color: #4DD8FF; color: #4DD8FF; }
 body.embed #presets { left: 118px; max-width: 50vw; }
+
+/* ---------------- Phase 7b: floating docs window ---------------- */
+.float-panel { position: fixed; top: 64px; right: 56px; width: 720px; height: 68vh;
+  min-width: 420px; min-height: 300px; max-width: 95vw; max-height: 88vh; z-index: 21;
+  background: var(--glass); backdrop-filter: blur(14px); border: 1px solid var(--line);
+  border-radius: 10px; display: flex; flex-direction: column; overflow: hidden;
+  resize: both; animation: fade-in .2s ease; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
+.float-panel .sp-head { cursor: move; user-select: none; }
+.docs-cols { flex: 1; display: flex; overflow: hidden; }
+.docs-tree-col { width: 240px; flex: none; overflow: auto; padding: 10px;
+  border-right: 1px solid rgba(255,255,255,.08); font-size: 12px; }
+.docs-view-col { flex: 1; overflow: auto; padding: 14px 20px; font-size: 12px; }
+
+/* ---------------- Phase 7b: backup run details ---------------- */
+.bk-row { cursor: pointer; }
+.bk-row:hover td { background: rgba(255,255,255,.03); }
+.bk-detail > td { background: rgba(0,0,0,.25); padding: 10px 14px; }
+.bk-runs { width: 100%; border-collapse: collapse; font-size: 11px; }
+.bk-runs th { text-align: left; color: var(--mut); font-size: 9px; text-transform: uppercase;
+  letter-spacing: .06em; padding: 3px 6px; }
+.bk-runs td { padding: 4px 6px; border-top: 1px solid rgba(255,255,255,.05); }
+.bk-err { color: var(--red); font-size: 10px; }
+.bk-never { background: rgba(138,143,152,.15); color: var(--mut); }
+.bk-detail-empty { color: var(--mut); font-style: italic; font-size: 11px; }
+
+/* ---------------- Phase 7b: agent drill-down card ---------------- */
+.agent-detail { position: fixed; z-index: 30; width: 280px; background: var(--glass);
+  backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 10px;
+  font-size: 12px; animation: fade-in .15s ease; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.ad-head { display: flex; align-items: center; gap: 7px; padding: 9px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08); }
+.ad-head b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-status { color: var(--mut); font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+.ad-body { padding: 8px 12px 10px; }
+.ad-row { display: flex; justify-content: space-between; gap: 10px; padding: 2.5px 0; }
+.ad-row span { color: var(--mut); font-size: 11px; }
+.ad-row b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-fb { color: var(--amber); font-style: normal; font-size: 9px; border: 1px solid var(--amber);
+  border-radius: 99px; padding: 0 5px; margin-left: 4px; }
+.ad-tasks-head { color: var(--mut); font-size: 9px; text-transform: uppercase; letter-spacing: .08em;
+  margin: 8px 0 3px; border-top: 1px solid rgba(255,255,255,.07); padding-top: 7px; }
+.ad-task { padding: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-task em { font-style: normal; color: #4DD8FF; font-size: 10px; margin-right: 4px; }
+.ad-task span { color: var(--mut); font-size: 10px; margin-left: 4px; }
+.ad-task.ad-none { color: var(--mut); font-style: italic; }
+.ad-offline { color: var(--mut); font-size: 10px; font-style: italic; margin-top: 8px; }

@@ -1,38 +1,57 @@
-// Phase 7 - Docs Portal: 380px frosted-glass drawer sliding in from the right.
-// Tree view of agent docs (skills/, souls/, memory/, docs/) from the bridge
-// adapter (/api/docs/tree, /api/docs/file). Clicking a file renders markdown
-// inline (built-in lightweight renderer, no deps); a back button returns to
-// the tree. States: skeleton shimmer while loading, "Docs unavailable -
-// adapter offline" on fetch failure, "No files in this folder" when empty.
+// Phase 7b - Docs Portal: floating frosted-glass window, draggable by its
+// header and resizable from the corner. Collapsible file tree on the left
+// (skills/, souls/, memory/, docs/, prompts/), markdown rendered on the right
+// (built-in lightweight renderer, no deps). Read-only. States: skeleton
+// shimmer while loading, "Docs unavailable - adapter offline" on fetch
+// failure, "No files in this folder" when empty.
 
-let root = null, body = null, backBtn = null, srcEl = null;
-let onCloseCb = null, treeEl = null;
+let root = null, treeCol = null, viewCol = null, srcEl = null;
+let onCloseCb = null, loaded = false;
 
 export function initDocs(opts = {}) {
   onCloseCb = opts.onClose ?? null;
   root = document.createElement('div');
   root.id = 'docs-panel';
-  root.className = 'side-panel';
+  root.className = 'float-panel';
+  root.style.display = 'none';
   root.innerHTML = `
-    <div class="sp-head">
-      <button class="sp-back" style="display:none">&larr; back</button>
+    <div class="sp-head" title="drag to move">
       <b>&#128196; Docs</b><span class="sp-src"></span>
       <button class="pp-close" title="close">&#10005;</button>
     </div>
-    <div class="sp-body"></div>`;
+    <div class="docs-cols">
+      <div class="docs-tree-col"></div>
+      <div class="docs-view-col"><div class="pp-wait">select a file on the left</div></div>
+    </div>`;
   document.body.appendChild(root);
-  body = root.querySelector('.sp-body');
+  treeCol = root.querySelector('.docs-tree-col');
+  viewCol = root.querySelector('.docs-view-col');
   srcEl = root.querySelector('.sp-src');
-  backBtn = root.querySelector('.sp-back');
-  backBtn.onclick = showTree;
   root.querySelector('.pp-close').onclick = () => { toggleDocs(false); if (onCloseCb) onCloseCb(); };
+
+  // drag by header (Phase 7b)
+  const head = root.querySelector('.sp-head');
+  head.addEventListener('pointerdown', e => {
+    if (e.target.closest('button')) return;
+    e.preventDefault();
+    const r0 = root.getBoundingClientRect();
+    const dx = e.clientX - r0.left, dy = e.clientY - r0.top;
+    const move = ev => {
+      root.style.left = Math.min(Math.max(0, ev.clientX - dx), innerWidth - 120) + 'px';
+      root.style.top = Math.min(Math.max(0, ev.clientY - dy), innerHeight - 60) + 'px';
+      root.style.right = 'auto'; root.style.bottom = 'auto';
+    };
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  });
   return { toggle: toggleDocs };
 }
 
 export function toggleDocs(on) {
   if (!root) return;
-  root.classList.toggle('open', !!on);
-  if (on && !treeEl) loadTree();
+  root.style.display = on ? 'flex' : 'none';
+  if (on && !loaded) loadTree();
 }
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -40,31 +59,29 @@ const skeleton = n => '<div class="skel-wrap">' +
   Array.from({ length: n }, (_, i) => `<div class="skel" style="width:${88 - (i * 13) % 40}%"></div>`).join('') + '</div>';
 
 async function loadTree() {
-  body.innerHTML = skeleton(8);
+  treeCol.innerHTML = skeleton(8);
   let data;
   try { data = await fetch('/api/docs/tree').then(r => { if (!r.ok) throw 0; return r.json(); }); }
   catch {
-    body.innerHTML = '<div class="pp-wait">Docs unavailable &mdash; adapter offline</div>';
+    treeCol.innerHTML = '<div class="pp-wait">Docs unavailable &mdash; adapter offline</div>';
     return;
   }
+  loaded = true;
   const any = data.roots?.some(r => r.available && r.entries.length);
   if (!any && data.docsUrl) {                       // optional Fumadocs iframe fallback
-    body.innerHTML = `<iframe class="docs-frame" src="${esc(data.docsUrl)}" title="docs"></iframe>`;
+    root.querySelector('.docs-cols').innerHTML =
+      `<iframe class="docs-frame" src="${esc(data.docsUrl)}" title="docs"></iframe>`;
     srcEl.textContent = data.docsUrl;
-    treeEl = body.firstElementChild;
     return;
   }
-  treeEl = document.createElement('div');
-  treeEl.className = 'docs-tree-v2';
-  treeEl.innerHTML = (data.roots ?? []).map(r => `
+  treeCol.innerHTML = (data.roots ?? []).map(r => `
     <div class="dt-root">${esc(r.name)}/</div>
     ${r.available && r.entries.length ? renderEntries(r.entries, 0)
       : `<div class="dt-empty">${r.available ? 'No files in this folder' : 'unavailable'}</div>`}`).join('');
-  for (const el of treeEl.querySelectorAll('.dt-item[data-path]'))
+  for (const el of treeCol.querySelectorAll('.dt-item[data-path]'))
     el.onclick = () => openFile(el.dataset.path);
-  for (const el of treeEl.querySelectorAll('.dt-item.dt-dir'))
+  for (const el of treeCol.querySelectorAll('.dt-item.dt-dir'))
     el.onclick = () => el.parentElement.classList.toggle('dt-open');
-  showTree();
 }
 
 function renderEntries(entries, depth) {
@@ -77,22 +94,18 @@ function renderEntries(entries, depth) {
   ).join('');
 }
 
-function showTree() {
-  backBtn.style.display = 'none';
-  srcEl.textContent = '';
-  if (treeEl) { body.innerHTML = ''; body.appendChild(treeEl); }
-}
-
 async function openFile(p) {
-  backBtn.style.display = '';
   srcEl.textContent = p;
-  body.innerHTML = skeleton(10);
+  for (const x of treeCol.querySelectorAll('.dt-item.on')) x.classList.remove('on');
+  const sel = treeCol.querySelector(`.dt-item[data-path="${CSS.escape(p)}"]`);
+  if (sel) sel.classList.add('on');
+  viewCol.innerHTML = skeleton(10);
   let data;
   try { data = await fetch('/api/docs/file?path=' + encodeURIComponent(p)).then(r => r.json()); }
-  catch { body.innerHTML = '<div class="pp-wait">Docs unavailable &mdash; adapter offline</div>'; return; }
-  if (!data.ok) { body.innerHTML = `<div class="pp-wait">${esc(data.error)}</div>`; return; }
+  catch { viewCol.innerHTML = '<div class="pp-wait">Docs unavailable &mdash; adapter offline</div>'; return; }
+  if (!data.ok) { viewCol.innerHTML = `<div class="pp-wait">${esc(data.error)}</div>`; return; }
   const ext = p.slice(p.lastIndexOf('.')).toLowerCase();
-  body.innerHTML = (ext === '.md' || ext === '.markdown')
+  viewCol.innerHTML = (ext === '.md' || ext === '.markdown')
     ? `<div class="md">${mdToHtml(data.content)}</div>`
     : `<pre class="md-pre">${esc(data.content)}</pre>`;
 }

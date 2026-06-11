@@ -78,6 +78,26 @@ diff broadcast), no new deps. `storekeeper` source is plain CJS (`.js`, not
   existing resize handler already fits the canvas to the iframe viewport.
   Without the flag, standalone behavior is identical to Phase 6.
 
+## Phase 7b — Dashboard integration + agent drill-down
+
+- **Embed v2**: embed mode now also auto-detects framing (`window.self !==
+  window.top`), not just `?embed=1`. While embedded the office speaks the
+  dashboard's postMessage protocol: `{type:'resize', height}` on load/resize,
+  `{type:'nav', route:'/'}` when Peak View is clicked, and a 30 s
+  `{type:'heartbeat', status:'ok'|'degraded'}` — `ok` only with a live
+  WebSocket (polling/demo report `degraded`).
+- **Backups**: rows click-expand to the last 5 runs (started, finished,
+  duration, size, status, errors). New gray `never` status for systems with no
+  recorded runs; run `error` fields are surfaced.
+- **Docs**: the panel is now a floating window — drag by the header, resize
+  from the corner, tree on the left / rendered markdown on the right. New
+  `prompts/` doc root (same convention: defaults to `<hermes>/prompts`).
+- **Agent drill-down**: click any puppet in the 3D scene to open a glass card
+  with role, group, status, model + provider (fallback badge), sessions in the
+  last 24 h, tokens today, cost, last seen and the agent's last 3 kanban tasks.
+  Backed by the new `GET /api/agents/:id`; closes on Esc or clicking elsewhere.
+  sessions24h counts usage pushes in the trailing 24 h.
+
 ## Production wiring
 
 1. Run the Phase 2 stack (`office-bridge`), replacing its `adapter/index.js` and

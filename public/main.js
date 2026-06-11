@@ -13,6 +13,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { initHud } from './hud.js';
+import { showAgentCard, hideAgentCard } from './agentcard.js';
 import { initNotifications } from './notifications.js';
 import { initTimeline } from './timeline.js';
 
@@ -24,12 +25,18 @@ const WALK_SPEED = 1.4, TURN_SPEED = 8.0;
 const SPECTRUM = ['#2E5BFF', '#9B30FF', '#FF3DBE', '#FF9E2C', '#FFE32C', '#3DFF7A'];
 const TIMINGS = { debrief: 20, documentation: 30, lunch: 45, fx: 1.5 };
 
-// ----------------------------------------------------------------- embed mode (Phase 7)
-// ?embed=1 -> running inside the VF Dashboard iframe: tag the body (CSS hooks),
-// add a "<- Dashboard" link. Standalone behavior is untouched without the flag.
-export const EMBED = new URLSearchParams(location.search).get('embed') === '1';
+// ----------------------------------------------------------------- embed mode (Phase 7 + 7b)
+// Embedded when ?embed=1 OR actually framed (window.self !== window.top).
+// Tags the body (CSS hooks), adds a "<- Dashboard" link, and speaks the
+// dashboard's postMessage protocol: resize, nav, heartbeat.
+const FRAMED = (() => { try { return window.self !== window.top; } catch { return true; } })();
+export const EMBED = FRAMED || new URLSearchParams(location.search).get('embed') === '1';
+const post = msg => { try { parent.postMessage(msg, '*'); } catch { /* host gone */ } };
 if (EMBED) {
   document.body.classList.add('embed');
+  const postResize = () => post({ type: 'resize', height: document.body.scrollHeight || innerHeight });
+  addEventListener('resize', postResize);
+  postResize();
   const back = document.createElement('a');
   back.id = 'backdash';
   back.href = '#';
@@ -534,7 +541,10 @@ for (const r of [...Object.keys(rooms), 'peak']) {
   const b = document.createElement('button');
   b.textContent = r === 'peak' ? '◈ Peak View' : r;
   if (r === 'peak') b.classList.add('peak');
-  b.onclick = () => sim.flyToRoom(r);
+  b.onclick = () => {
+    sim.flyToRoom(r);
+    if (EMBED && r === 'peak') post({ type: 'nav', route: '/' });   // Phase 7b: dashboard nav passthrough
+  };
   bar.appendChild(b);
 }
 
@@ -707,6 +717,7 @@ setInterval(pollRoster, 30000);
 // synthesizes card.moved / card.deleted events.
 export let demoMode = false;
 let polling = false, pollTimer = null, wsRetryTimer = null;
+let wsConnected = false;                                   // Phase 7b: heartbeat status
 function stopPolling() {                                   // Phase 6 (1): WS recovered
   if (!polling) return;
   polling = false;
@@ -718,9 +729,9 @@ function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws`);   // proxied by vite in dev; direct on adapter
   const giveUp = setTimeout(() => { ws.close(); httpFallback(); }, 2000);
-  ws.onopen = () => { clearTimeout(giveUp); stopPolling(); };
+  ws.onopen = () => { clearTimeout(giveUp); wsConnected = true; stopPolling(); };
   ws.onmessage = m => handleEvent(JSON.parse(m.data));
-  ws.onclose = () => { if (!demoMode && !polling) setTimeout(connect, 2000); };
+  ws.onclose = () => { wsConnected = false; if (!demoMode && !polling) setTimeout(connect, 2000); };
   ws.onerror = () => {};
 }
 const polledCols = new Map();             // cardId -> last seen column
@@ -760,6 +771,36 @@ function startDemo() {
   import('./demo.js').then(d => d.runDemo(handleEvent));
 }
 connect();
+
+// Phase 7b (5): dashboard health sync — heartbeat every 30 s while embedded.
+// 'ok' only with a live WebSocket; polling/demo/disconnected count as degraded.
+if (EMBED) {
+  const beat = () => post({ type: 'heartbeat', status: wsConnected && !demoMode ? 'ok' : 'degraded' });
+  setInterval(beat, 30000);
+  setTimeout(beat, 2000);
+}
+
+// ----------------------------------------------------------------- agent click -> drill-down (Phase 7b (4))
+{
+  const ray = new THREE.Raycaster();
+  const ptr = new THREE.Vector2();
+  let downXY = null;
+  renderer.domElement.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerup', e => {
+    if (!downXY) return;
+    const moved = Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]);
+    downXY = null;
+    if (moved > 5 || camMode === 'walk') return;             // orbit drag, not a click
+    ptr.x = (e.clientX / innerWidth) * 2 - 1;
+    ptr.y = -(e.clientY / innerHeight) * 2 + 1;
+    ray.setFromCamera(ptr, camera);
+    const hits = ray.intersectObjects(agents.map(a => a.group), true);
+    if (!hits.length) return;
+    let o = hits[0].object, target = null;
+    while (o && !target) { target = agents.find(a => a.group === o) ?? null; o = o.parent; }
+    if (target) showAgentCard(target, e.clientX, e.clientY);
+  });
+}
 
 // ----------------------------------------------------------------- modules
 initHud({ bus, sim, demo: () => demoMode });
