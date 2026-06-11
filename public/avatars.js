@@ -17,7 +17,11 @@ export const ROLE_STYLE = {
 };
 const SKIN = 0xd9c6b0;
 
-const cyl = (r1, r2, h, m, seg = 8) => new THREE.Mesh(new THREE.CylinderGeometry(r1, r2, h, seg), m);
+// Phase 8b: capsules instead of tubes - smooth, organic limbs
+const cyl = (r1, r2, h, m, seg = 8) => {
+  const r = Math.max(r1, r2) * 0.92;
+  return new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.02, h - r * 1.6), 3, Math.max(8, seg)), m);
+};
 
 export function buildHumanoid(accentHex, role = 'specialist', scale = 1) {
   const st = ROLE_STYLE[role] ?? ROLE_STYLE.specialist;
@@ -33,6 +37,7 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1) {
   const root = new THREE.Group();
   const parts = {};
   const S = st.tall * scale;
+  const shadowify = m => { m.castShadow = true; m.receiveShadow = false; return m; };
 
   // hips pivot - everything hangs off this so sitting = lower hips + fold legs
   const hips = new THREE.Group(); hips.position.y = 0.92 * S; root.add(hips);
@@ -108,6 +113,7 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1) {
   ring.visible = false;
   root.add(ring);
 
+  root.traverse(o => { if (o.isMesh && !o.material?.transparent) shadowify(o); });   // Phase 8b
   const materials = [clothMat, skinMat, tint, accMat, statusMat];
   return { root, parts, materials, tint, statusMat, ring, S };
 }

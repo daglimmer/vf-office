@@ -6,8 +6,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { initHud } from './hud.js';
@@ -54,6 +58,8 @@ if (EMBED) {
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;                        // Phase 8b: soft shadows
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.3;                       // Phase 5 (1): brighter overall
 document.getElementById('view').appendChild(renderer.domElement);
@@ -63,10 +69,42 @@ scene.background = new THREE.Color(0x0d0f13);
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
 camera.position.set(20, 28, 44);
 
+// Phase 8b: image-based ambience - every material picks up soft reflections.
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.4;                       // keep the dark mood
+}
+
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+const ssao = new SSAOPass(scene, camera, innerWidth, innerHeight);   // Phase 8b: contact AO
+ssao.kernelRadius = 0.5; ssao.minDistance = 0.0008; ssao.maxDistance = 0.12;
+composer.addPass(ssao);
 const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.5, 0.85);
 composer.addPass(bloom);
+// Phase 8c: crisp edges + filmic grade (gentle S-curve, teal shadows / warm
+// highlights, vignette) - the "expensive render" finish.
+composer.addPass(new SMAAPass(innerWidth, innerHeight));
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec3 x = max(vec3(0.0), c.rgb);
+      x = x * (1.06 + 0.16 * x) / (1.0 + 0.22 * x);              // soft S-curve
+      float l = dot(x, vec3(0.299, 0.587, 0.114));
+      x += (0.5 - abs(l - 0.5)) * vec3(-0.016, 0.003, 0.020) * (1.0 - l * 1.6);  // teal/warm split tone
+      float d = distance(vUv, vec2(0.5));
+      x *= 0.82 + 0.22 * smoothstep(0.85, 0.25, d);              // vignette
+      gl_FragColor = vec4(x, c.a);
+    }`,
+};
+composer.addPass(new ShaderPass(GradeShader));
 composer.addPass(new OutputPass());
 
 const css2d = new CSS2DRenderer();
@@ -86,7 +124,15 @@ const ambLight = new THREE.AmbientLight(0x39404f, 1.0);
 const hemiLight = new THREE.HemisphereLight(0xbfd4ff, 0x232730, 1.5);
 scene.add(ambLight, hemiLight);
 const key = new THREE.DirectionalLight(0xcfd8ff, 0.8);
-key.position.set(30, 40, 10); scene.add(key);
+key.position.set(30, 40, 10);
+key.castShadow = true;                                    // Phase 8b: one shadow caster
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.left = -26; key.shadow.camera.right = 26;
+key.shadow.camera.top = 26; key.shadow.camera.bottom = -26;
+key.shadow.camera.near = 10; key.shadow.camera.far = 90;
+key.shadow.bias = -0.0006;
+key.target.position.set(20, 0, 13);
+scene.add(key, key.target);
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
@@ -191,6 +237,26 @@ for (const [a, b] of wp.edges) {
       l.position.copy(cs[i]).setY(2.2);
       scene.add(l);
     }
+  }
+}
+
+// ---- Phase 8c: area lights (soft real illumination from glowing surfaces)
+RectAreaLightUniformsLib.init();
+{
+  const rect = (color, intensity, w, h, x, y, z, lookX, lookY, lookZ) => {
+    const l = new THREE.RectAreaLight(color, intensity, w, h);
+    l.position.set(x, y, z); l.lookAt(lookX, lookY, lookZ); scene.add(l);
+  };
+  rect(0x9db8e8, 2.2, 13, 3.4, 9, 2, 0.4, 9, 1.4, 6);        // lounge window glow (city)
+  rect(0x9db8e8, 1.6, 13, 3.4, 31, 2, 0.4, 31, 1.4, 6);      // meeting window glow
+  rect(0xfff2dc, 3.5, 2.4, 1.0, 2.3, 1.8, 14.2, 6, 1.6, 14.2);  // devops lightbox
+  rect(0x86c8ff, 2.4, 3.0, 1.6, 37.6, 1.7, 3.0, 31.5, 1.0, 3.0); // meeting media wall
+  // corridor light pools
+  for (const z of [3.5, 9, 14.5]) {
+    const sp = new THREE.SpotLight(0xcfe0ff, 14, 9, 0.5, 0.55, 1.6);
+    sp.position.set(20, 2.7, z);
+    sp.target.position.set(20, 0, z);
+    scene.add(sp, sp.target);
   }
 }
 

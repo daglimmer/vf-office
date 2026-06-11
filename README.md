@@ -98,6 +98,39 @@ diff broadcast), no new deps. `storekeeper` source is plain CJS (`.js`, not
   Backed by the new `GET /api/agents/:id`; closes on Esc or clicking elsewhere.
   sessions24h counts usage pushes in the trailing 24 h.
 
+## Phase 8c — Filmic pass (the practical ceiling for this stack)
+
+- **Post stack**: SMAA anti-aliasing + custom grade shader (gentle S-curve
+  contrast, teal-shadow/warm-highlight split toning, vignette) after bloom.
+- **Area lights**: RectAreaLights for the lounge/meeting window glow, the
+  DevOps lightbox and the meeting media wall; 3 corridor spotlight pools.
+- **Bump maps**: all procedural textures double as bump maps - wood grain,
+  concrete speckle, fabric weave and leather catch light.
+- **Hero reflection**: a real-time Reflector disc under the DC hex floor
+  (dark mirror, 1024px) - racks and LEDs reflect in the polished floor.
+- **Set dressing**: keyboards + mice on every desk, alternating mugs/papers,
+  rugs in lounge/meeting/CEO, staff desk lamps, brushed-metal door frames on
+  all 7 openings, corridor skirting.
+
+Honest scope note: this is "high-end archviz / polished indie game", not
+AAA photorealism - that would need baked GI and scanned asset libraries.
+
+## Phase 8b — Realism pass (animated-film look)
+
+- **Image-based ambience**: `RoomEnvironment` + PMREM — floors, glass and
+  metal pick up real reflections (`scene.environmentIntensity 0.4`).
+- **Soft shadows**: PCFSoft shadow map from the key light (2048px, whole
+  floorplan), every grounded object casts/receives.
+- **SSAO**: contact ambient occlusion pass (replaces the plain RenderPass).
+- **Rounded geometry**: `RoundedBoxGeometry` everywhere it matters — plump
+  sofa cushions + leaning pillows, beveled desks/monitors/racks, recline-angle
+  chairs with 5-star bases.
+- **Procedural textures**: canvas-generated wood grain (oak/dark/light),
+  speckled concrete, fabric and leather — used as maps; floors are
+  MeshPhysicalMaterial with clearcoat (polished look), DC glass has clearcoat
+  + boosted env reflections.
+- **Avatars**: capsule limbs/torso (smooth, organic), shadow-casting.
+
 ## Phase 8 — Visual + architectural overhaul (procedural, no Blender)
 
 The office is now **generated entirely in code** at load time by

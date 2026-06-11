@@ -13,6 +13,8 @@
 // Anchors come from /anchors.json (extracted from the Phase 3 GLB - positions
 // are bit-exact with what the old office.glb contained).
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { Reflector } from 'three/addons/objects/Reflector.js';
 
 const SPECTRUM = ['#2E5BFF', '#9B30FF', '#FF3DBE', '#FF9E2C', '#FFE32C', '#3DFF7A'];
 const ZONES = ['#2E5BFF', '#2E9BFF', '#3DFF7A', '#FFE32C', '#FF9E2C', '#FF4D4D'];
@@ -35,20 +37,77 @@ export function buildOffice(report) {
   }
   const A = n => anchors.get(n).pos;
 
+  // ---------------------------------------------------------------- procedural textures (Phase 8b)
+  function canvasTex(draw, w = 256, h = 256, rx = 1, ry = 1) {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    draw(cv.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(cv);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(rx, ry);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }
+  let texSeed = 31;
+  const trnd = () => (texSeed = (texSeed * 16807) % 2147483647) / 2147483647;
+  function woodTex(base, dark, rx = 2, ry = 2) {
+    return canvasTex((c, w, h) => {
+      c.fillStyle = base; c.fillRect(0, 0, w, h);
+      for (let i = 0; i < 60; i++) {                       // grain streaks
+        c.strokeStyle = `rgba(${dark},${0.12 + trnd() * 0.25})`;
+        c.lineWidth = 0.5 + trnd() * 1.8;
+        const y = trnd() * h;
+        c.beginPath(); c.moveTo(0, y);
+        for (let x = 0; x <= w; x += 16) c.lineTo(x, y + Math.sin(x * 0.05 + i) * 2.5 + trnd() * 2);
+        c.stroke();
+      }
+      for (let i = 0; i < 7; i++) {                        // knots
+        const x = trnd() * w, y = trnd() * h;
+        c.strokeStyle = `rgba(${dark},.3)`; c.lineWidth = 1;
+        c.beginPath(); c.ellipse(x, y, 3 + trnd() * 5, 2 + trnd() * 3, trnd(), 0, Math.PI * 2); c.stroke();
+      }
+    }, 256, 256, rx, ry);
+  }
+  function speckleTex(base, fleck, n = 900, rx = 4, ry = 4) {
+    return canvasTex((c, w, h) => {
+      c.fillStyle = base; c.fillRect(0, 0, w, h);
+      for (let i = 0; i < n; i++) {
+        c.fillStyle = `rgba(${fleck},${0.04 + trnd() * 0.12})`;
+        const r = 0.5 + trnd() * 2.2;
+        c.beginPath(); c.arc(trnd() * w, trnd() * h, r, 0, Math.PI * 2); c.fill();
+      }
+      for (let i = 0; i < 14; i++) {                       // larger mottling
+        c.fillStyle = `rgba(${fleck},.05)`;
+        c.beginPath(); c.arc(trnd() * w, trnd() * h, 12 + trnd() * 30, 0, Math.PI * 2); c.fill();
+      }
+    }, 256, 256, rx, ry);
+  }
+  const T = {
+    concrete: speckleTex('#1d2025', '200,205,215', 900, 5, 4),
+    oak:      woodTex('#8a5a2e', '40,22,8', 2, 2),
+    woodDark: woodTex('#2e2014', '10,6,2', 2, 2),
+    woodLight: woodTex('#a97f4f', '70,48,24', 3, 3),
+    fabric:   speckleTex('#3c3c42', '180,180,195', 1600, 3, 3),
+    leather:  speckleTex('#4a2c18', '20,10,4', 500, 2, 2),
+  };
+  // Phase 8c: the same canvases double as bump maps - surfaces catch light
+  const BUMP = { concrete: 0.012, oak: 0.02, woodDark: 0.02, woodLight: 0.02, fabric: 0.025, leather: 0.015 };
+
   // ---------------------------------------------------------------- materials
   const std = (name, o) => { const m = new THREE.MeshStandardMaterial(o); m.name = name; return m; };
+  const phys = (name, o) => { const m = new THREE.MeshPhysicalMaterial(o); m.name = name; return m; };
   const M = {
-    concrete:  std('dark_concrete', { color: 0x1a1c20, roughness: 0.3, metalness: 0.15 }),
-    woodDark:  std('dark_wood',     { color: 0x2e2014, roughness: 0.5 }),
-    oak:       std('warm_oak',      { color: 0x8a5a2e, roughness: 0.5 }),
-    woodLight: std('light_wood',    { color: 0xa97f4f, roughness: 0.55 }),
-    wall:      std('charcoal_wall', { color: 0x23262c, roughness: 0.45 }),
-    glass:     std('smoked_glass',  { color: 0x9fb4c0, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false }),
-    glassDC:   std('dc_glass',      { color: 0xaaccd4, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.16, depthWrite: false }),
-    metal:     std('brushed_metal', { color: 0xb9bdc4, roughness: 0.3, metalness: 0.9 }),
+    // floors: polished, slight clearcoat reflection (Phase 8b)
+    concrete:  phys('dark_concrete', { map: T.concrete, bumpMap: T.concrete, bumpScale: BUMP.concrete, color: 0xcfd2d8, roughness: 0.42, metalness: 0.05, clearcoat: 0.45, clearcoatRoughness: 0.35 }),
+    woodDark:  phys('dark_wood',     { map: T.woodDark, bumpMap: T.woodDark, bumpScale: BUMP.woodDark, color: 0xffffff, roughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.4 }),
+    oak:       std('warm_oak',      { map: T.oak, bumpMap: T.oak, bumpScale: BUMP.oak, color: 0xffffff, roughness: 0.5 }),
+    woodLight: std('light_wood',    { map: T.woodLight, bumpMap: T.woodLight, bumpScale: BUMP.woodLight, color: 0xffffff, roughness: 0.55 }),
+    wall:      std('charcoal_wall', { color: 0x23262c, roughness: 0.5 }),
+    glass:     phys('smoked_glass', { color: 0x9fb4c0, roughness: 0.06, metalness: 0, transparent: true, opacity: 0.2, depthWrite: false, envMapIntensity: 1.4 }),
+    glassDC:   phys('dc_glass',     { color: 0xaaccd4, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.15, depthWrite: false, envMapIntensity: 1.8, clearcoat: 1, clearcoatRoughness: 0.05 }),
+    metal:     std('brushed_metal', { color: 0xb9bdc4, roughness: 0.28, metalness: 0.95, envMapIntensity: 1.2 }),
     prop:      std('dark_prop',     { color: 0x17191e, roughness: 0.5 }),
-    sofa:      std('sofa_gray',     { color: 0x3c3c42, roughness: 0.9 }),
-    leather:   std('leather_brown', { color: 0x4a2c18, roughness: 0.6 }),
+    sofa:      std('sofa_gray',     { map: T.fabric, bumpMap: T.fabric, bumpScale: BUMP.fabric, color: 0xffffff, roughness: 0.95 }),
+    leather:   phys('leather_brown', { map: T.leather, bumpMap: T.leather, bumpScale: BUMP.leather, color: 0xffffff, roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.5 }),
     white:     std('white_panel',   { color: 0xdfe1e5, roughness: 0.6, emissive: 0xfff8e8, emissiveIntensity: 0.9 }),
     screen:    std('screen_code',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x73c0ff, emissiveIntensity: 1.4 }),
     screenDash:std('screen_dash',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x5ce6b8, emissiveIntensity: 1.3 }),
@@ -75,9 +134,25 @@ export function buildOffice(report) {
 
   // ---------------------------------------------------------------- helpers
   const D2R = Math.PI / 180;
-  function add(mesh, name) { mesh.name = name; G.add(mesh); return mesh; }
+  const NO_SHADOW = /^(backdrop|floor_dc_hexgrid|prop_trace|prop_guide|hot_|prop_band|prop_logo)/;
+  function add(mesh, name) {
+    mesh.name = name;
+    if (!NO_SHADOW.test(name)) {                          // Phase 8b: grounded objects
+      const tr = !!mesh.material?.transparent;
+      mesh.castShadow = !tr;
+      mesh.receiveShadow = !tr;
+    }
+    G.add(mesh); return mesh;
+  }
   function box(name, x, y, z, sx, sy, sz, mat, rotDeg = 0) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z); m.rotation.y = rotDeg * D2R;
+    return add(m, name);
+  }
+  // rounded box - the de-blockifier (Phase 8b). r = corner radius.
+  function rbox(name, x, y, z, sx, sy, sz, mat, rotDeg = 0, r = 0.04) {
+    const rad = Math.min(r, sx / 2.2, sy / 2.2, sz / 2.2);
+    const m = new THREE.Mesh(new RoundedBoxGeometry(sx, sy, sz, 2, rad), mat);
     m.position.set(x, y, z); m.rotation.y = rotDeg * D2R;
     return add(m, name);
   }
@@ -226,15 +301,20 @@ export function buildOffice(report) {
 
   // ---------------------------------------------------------------- lounge
   for (const [zz, dz] of [[1.7, -0.45], [4.3, 0.45]]) {
-    box(`prop_sofa_base_${zz}`, 8.5, 0.22, zz, 8.2, 0.44, 1.0, M.sofa);
-    box(`prop_sofa_back_${zz}`, 8.5, 0.55, zz + dz, 8.2, 0.55, 0.25, M.sofa);
+    rbox(`prop_sofa_base_${zz}`, 8.5, 0.18, zz, 8.2, 0.36, 1.0, M.sofa, 0, 0.07);
+    rbox(`prop_sofa_back_${zz}`, 8.5, 0.58, zz + dz, 8.2, 0.6, 0.28, M.sofa, 0, 0.09);
+    for (let c = 0; c < 4; c++)                            // plump seat cushions
+      rbox(`prop_sofa_cush_${zz}_${c}`, 5.05 + c * 1.97, 0.43, zz - dz * 0.1, 1.86, 0.2, 0.92, M.sofa, 0, 0.09);
   }
-  box('prop_sofa_corner', 3.7, 0.22, 3.0, 1.0, 0.44, 3.6, M.sofa);
-  box('prop_sofa_cback', 3.25, 0.55, 3.0, 0.25, 0.55, 3.6, M.sofa);
-  for (let i = 0; i < 8; i++)
-    box(`prop_pillow_${i}`, 5.0 + (i % 4) * 2.0, 0.56, i < 4 ? 1.45 : 4.55, 0.45, 0.32, 0.16,
-        pillowMats[i % 6], 8 * ((i % 3) - 1));
-  box('prop_ctable', 8.5, 0.2, 3.0, 2.2, 0.4, 1.1, M.oak);
+  rbox('prop_sofa_corner', 3.7, 0.18, 3.0, 1.0, 0.36, 3.6, M.sofa, 0, 0.07);
+  rbox('prop_sofa_ccush', 3.7, 0.43, 3.0, 0.92, 0.2, 3.4, M.sofa, 0, 0.09);
+  rbox('prop_sofa_cback', 3.25, 0.58, 3.0, 0.28, 0.6, 3.6, M.sofa, 0, 0.09);
+  for (let i = 0; i < 8; i++) {
+    const pw = rbox(`prop_pillow_${i}`, 5.0 + (i % 4) * 2.0, 0.62, i < 4 ? 1.52 : 4.48, 0.46, 0.34, 0.2,
+        pillowMats[i % 6], 8 * ((i % 3) - 1), 0.1);
+    pw.rotation.x = (i < 4 ? -1 : 1) * 0.22;               // lean against the backrest
+  }
+  rbox('prop_ctable', 8.5, 0.2, 3.0, 2.2, 0.4, 1.1, M.oak, 0, 0.05);
   box('hot_peak_table', 8.5, 0.415, 3.0, 1.7, 0.035, 0.8, M.screenDash);
   const cloudSpots = [[6, 2.1, 3.1], [8.2, 2.6, 2.0], [10.5, 2.3, 3.4], [12.5, 2.8, 2.6], [7.2, 3.0, 4.2]];
   cloudSpots.forEach(([x, y, z], i) => {
@@ -259,7 +339,7 @@ export function buildOffice(report) {
 
   // ---------------------------------------------------------------- desks & co
   function desk(idx, x, z, faceDeg, w, monitors, room) {
-    box(`prop_desk_${room}${idx}`, x, 0.72, z, w, 0.05, 0.7, M.woodDark, faceDeg);
+    rbox(`prop_desk_${room}${idx}`, x, 0.72, z, w, 0.06, 0.7, M.woodDark, faceDeg, 0.025);
     const a = faceDeg * D2R, fx = Math.sin(a), fz = Math.cos(a);
     for (const sx of [-1, 1])
       box(`prop_dleg_${room}${idx}${sx}`, x + Math.cos(a) * sx * (w / 2 - 0.08), 0.35,
@@ -268,17 +348,35 @@ export function buildOffice(report) {
       const off = (mi - (monitors - 1) / 2) * 0.5;
       const mx = x + Math.cos(a) * off + fx * 0.22, mz = z - Math.sin(a) * off + fz * 0.22;
       const rot = faceDeg + (monitors === 1 || mi === 1 ? 0 : mi === 0 ? -14 : 14);
-      box(`prop_mon_${room}${idx}_${mi}`, mx, 1.02, mz, 0.48, 0.3, 0.03, M.screen, rot + 180);
+      rbox(`prop_mon_${room}${idx}_${mi}`, mx, 1.02, mz, 0.48, 0.3, 0.035, M.screen, rot + 180, 0.012);
       box(`prop_monstand_${room}${idx}_${mi}`, mx, 0.78, mz, 0.06, 0.14, 0.05, M.prop, rot);
+    }
+    // Phase 8c set dressing: keyboard + mouse, sometimes a mug or papers
+    rbox(`prop_kbd_${room}${idx}`, x - fx * 0.02, 0.755, z - fz * 0.02, 0.42, 0.025, 0.15, M.prop, faceDeg, 0.01);
+    rbox(`prop_mouse_${room}${idx}`, x + Math.cos(a) * 0.32 - fx * 0.02, 0.755, z - Math.sin(a) * 0.32 - fz * 0.02,
+         0.07, 0.03, 0.11, M.prop, faceDeg, 0.015);
+    if (idx % 2 === 0) {
+      cyl(`prop_mug_${room}${idx}`, x - Math.cos(a) * 0.5, 0.795, z + Math.sin(a) * 0.5, 0.045, 0.11,
+          pillowMats[(idx * 2 + room.length) % 6], 10);
+    } else {
+      const pp = box(`prop_paper_${room}${idx}`, x - Math.cos(a) * 0.48, 0.752, z + Math.sin(a) * 0.48,
+                     0.22, 0.008, 0.3, M.white, faceDeg + 9 * ((idx % 3) - 1));
+      pp.material = pp.material.clone(); pp.material.emissiveIntensity = 0.12;
     }
   }
   function chair(idx, x, z, faceDeg, room, mat) {
     mat = mat ?? M.prop;
     const a = faceDeg * D2R;
-    box(`prop_chair_${room}${idx}`, x, 0.45, z, 0.46, 0.06, 0.46, mat, faceDeg);
-    box(`prop_chairback_${room}${idx}`, x - Math.sin(a) * 0.23, 0.75, z - Math.cos(a) * 0.23, 0.46, 0.55, 0.06, mat, faceDeg);
-    cyl(`prop_chairpost_${room}${idx}`, x, 0.25, z, 0.03, 0.4, M.metal, 8);
-    box(`prop_chairbase_${room}${idx}`, x, 0.03, z, 0.4, 0.04, 0.4, M.metal, faceDeg + 45);
+    rbox(`prop_chair_${room}${idx}`, x, 0.45, z, 0.48, 0.1, 0.48, mat, faceDeg, 0.05);
+    const back = rbox(`prop_chairback_${room}${idx}`, x - Math.sin(a) * 0.25, 0.78,
+                      z - Math.cos(a) * 0.25, 0.46, 0.6, 0.08, mat, faceDeg, 0.05);
+    back.rotation.x = -0.08;                              // slight recline
+    cyl(`prop_chairpost_${room}${idx}`, x, 0.25, z, 0.03, 0.4, M.metal, 10);
+    for (let l = 0; l < 5; l++) {                          // 5-star base
+      const la = faceDeg * D2R + l * Math.PI * 2 / 5;
+      rbox(`prop_chairleg_${room}${idx}_${l}`, x + Math.sin(la) * 0.14, 0.035,
+           z + Math.cos(la) * 0.14, 0.05, 0.035, 0.3, M.metal, -la / D2R, 0.015);
+    }
   }
   function ringPendant(name, x, y, z, R = 0.45) {
     torus(name, x, y, z, R, 0.035, M.ringWarm, 28, 90);
@@ -354,7 +452,7 @@ export function buildOffice(report) {
       if (ang > -80 && ang < 80) continue;              // opening behind Ollie
       const rad = ang * D2R;
       const px = cx + Math.sin(rad) * R, pz = cz + Math.cos(rad) * R;
-      box(`prop_cmd_${i}`, px, 0.72, pz, 1.55, 0.06, 0.7, M.prop, -ang);
+      rbox(`prop_cmd_${i}`, px, 0.72, pz, 1.55, 0.07, 0.7, M.prop, -ang, 0.03);
       box(`hot_costs_front_${i}`, px + Math.sin(rad) * 0.36, 0.38, pz + Math.cos(rad) * 0.36,
           1.55, 0.7, 0.05, zoneMats[i % 6], -ang);
       box(`prop_cmdmon_${i}`, px - Math.sin(rad) * 0.1, 1.1, pz - Math.cos(rad) * 0.1,
@@ -373,11 +471,12 @@ export function buildOffice(report) {
   // ---------------------------------------------------------------- ceo
   {
     const p = A('ceo_desk');
-    box('prop_ceo_desk', p.x, 0.73, p.z + 0.5, 2.2, 0.07, 0.9, M.oak);
+    rbox('prop_ceo_desk', p.x, 0.73, p.z + 0.5, 2.2, 0.08, 0.9, M.oak, 0, 0.035);
     for (const sx of [-1, 1]) box(`prop_ceo_dleg${sx}`, p.x + sx, 0.36, p.z + 0.5, 0.08, 0.72, 0.8, M.oak);
     chair(1, p.x, p.z, 0, 'ceo', M.leather);
-    box('prop_ceo_sofa', 27.0, 0.25, 16.2, 1.8, 0.5, 0.8, M.leather);
-    box('prop_ceo_sofab', 27.0, 0.6, 16.55, 1.8, 0.5, 0.2, M.leather);
+    rbox('prop_ceo_sofa', 27.0, 0.22, 16.2, 1.8, 0.44, 0.8, M.leather, 0, 0.08);
+    rbox('prop_ceo_cush', 27.0, 0.48, 16.12, 1.68, 0.16, 0.7, M.leather, 0, 0.07);
+    rbox('prop_ceo_sofab', 27.0, 0.6, 16.55, 1.8, 0.52, 0.24, M.leather, 0, 0.09);
     box('prop_ceo_side', 28.3, 0.3, 16.2, 0.5, 0.6, 0.5, M.oak);
     cyl('prop_ceo_pot', 36.8, 0.25, 16.4, 0.25, 0.5, M.prop, 12);
     for (let j = 0; j < 5; j++)
@@ -413,7 +512,7 @@ export function buildOffice(report) {
       const px = cx + Math.sin(rad) * 3.4, pz = cz + Math.cos(rad) * 3.4;
       const zone = zoneMats[Math.min(5, Math.floor(i / n * 6))];
       const face = -ang + 180;
-      box(`rack_${i}`, px, 1.05, pz, 0.62, 2.1, 0.85, M.rack, face);
+      rbox(`rack_${i}`, px, 1.05, pz, 0.62, 2.1, 0.85, M.rack, face, 0.035);
       const bx = px - Math.sin(rad) * 0.445, bz = pz - Math.cos(rad) * 0.445;
       box(`prop_rbezel_${i}`, bx, 1.05, bz, 0.56, 2.0, 0.03, M.prop, face);
       for (let g = 0; g < 5; g++)
@@ -464,6 +563,53 @@ export function buildOffice(report) {
                      0.08, 0.1, R, M.metal);
       sp.rotation.set(-28 * D2R, -ang * D2R, 0, 'YXZ');
     }
+  }
+
+  // ---------------------------------------------------------------- 8c set dressing: rugs, lamps, frames, mirror
+  const rug = (n, x, z, w, d, c) => {
+    const m = std(n + '_mat', { color: c, roughness: 1, bumpMap: T.fabric, bumpScale: 0.02 });
+    box(n, x, 0.012, z, w, 0.018, d, m);
+  };
+  rug('prop_rug_lounge', 8.5, 3.0, 5.4, 3.4, 0x2a2d36);
+  rug('prop_rug_meeting', 31.5, 3.0, 6.0, 4.2, 0x23262e);
+  rug('prop_rug_ceo', 31.5, 14.5, 4.4, 3.2, 0x33291e);
+  for (let i = 1; i <= 4; i++) {                          // staff desk lamps
+    const p = A(`doc_desk_${String(i).padStart(2, '0')}`);
+    box(`prop_lamparm_${i}`, p.x - 0.6, 0.88, p.z - 0.7, 0.03, 0.32, 0.03, M.metal);
+    const head = sphere(`prop_lamphead_${i}`, p.x - 0.55, 1.05, p.z - 0.62, 0.06, M.ringWarm, 0.7, 8, 6);
+    head.material = M.ringWarm.clone(); head.material.emissiveIntensity = 1.2;
+  }
+  // door frames at every opening (verticals + lintel)
+  const frame = (n, x, z, alongX) => {
+    const fw = 1.92;
+    if (alongX) {                                          // door in a wall that runs along X
+      box(`${n}_l`, x - fw / 2, 1.12, z, 0.09, 2.24, 0.22, M.metal);
+      box(`${n}_r`, x + fw / 2, 1.12, z, 0.09, 2.24, 0.22, M.metal);
+      box(`${n}_t`, x, 2.26, z, fw + 0.09, 0.09, 0.22, M.metal);
+    } else {
+      box(`${n}_l`, x, 1.12, z - fw / 2, 0.22, 2.24, 0.09, M.metal);
+      box(`${n}_r`, x, 1.12, z + fw / 2, 0.22, 2.24, 0.09, M.metal);
+      box(`${n}_t`, x, 2.26, z, 0.22, 0.09, fw + 0.09, M.metal);
+    }
+  };
+  frame('prop_frame_lounge', CX0, 3.0, false);
+  frame('prop_frame_staff', CX0, 8.5, false);
+  frame('prop_frame_devops', CX0, 14.0, false);
+  frame('prop_frame_meeting', CX1, 3.0, false);
+  frame('prop_frame_control', CX1, 8.75, false);
+  frame('prop_frame_ceo', CX1, 14.25, false);
+  frame('prop_frame_dc', 20.0, ZW1, true);
+  // skirting along the corridor walls
+  for (const x of [CX0 + 0.1, CX1 - 0.1])
+    box(`prop_skirt_${Math.round(x * 10)}`, x, 0.07, (Z0 + ZW1) / 2, 0.05, 0.14, ZW1 - Z0 - 0.5, M.prop);
+  // Phase 8c hero reflection: subtle dark mirror under the DC hex floor
+  {
+    const mirror = new Reflector(new THREE.CircleGeometry(DC.r - 0.35, 48), {
+      textureWidth: 1024, textureHeight: 1024, color: 0x1d2126,
+    });
+    mirror.rotation.x = -Math.PI / 2;
+    mirror.position.set(DC.x, 0.006, DC.z);
+    add(mirror, 'floor_dc_mirror');
   }
 
   // ---------------------------------------------------------------- corridor guides
