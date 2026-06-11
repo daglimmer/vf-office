@@ -15,7 +15,10 @@ export const ROLE_STYLE = {
   specialist: { trim: '#4DD8FF', cloth: 0x243038, tall: 0.98 },
   sentinel:   { trim: '#FF9E2C', cloth: 0x332a22, tall: 1.0 },
 };
-const SKIN = 0xd9c6b0;
+// 8d: varied, warmer people - skin and hair picked per agent (stable by name)
+const SKINS = [0xe8c39a, 0xd9a06b, 0xc08552, 0x9a6a44, 0xf0d5b8, 0x7d5235];
+const HAIRS = [0x241a12, 0x3a2a18, 0x141414, 0x5a4630, 0x6e6862, 0x8a5a2e];
+const hash = s => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
 
 // Phase 8b: capsules instead of tubes - smooth, organic limbs
 const cyl = (r1, r2, h, m, seg = 8) => {
@@ -23,11 +26,13 @@ const cyl = (r1, r2, h, m, seg = 8) => {
   return new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.02, h - r * 1.6), 3, Math.max(8, seg)), m);
 };
 
-export function buildHumanoid(accentHex, role = 'specialist', scale = 1) {
+export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedName = '') {
   const st = ROLE_STYLE[role] ?? ROLE_STYLE.specialist;
+  const h = hash(seedName || accentHex || role);
   const accent = new THREE.Color(accentHex ?? st.trim);
   const clothMat = new THREE.MeshStandardMaterial({ color: st.cloth, roughness: 0.8 });
-  const skinMat = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.6 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: SKINS[h % SKINS.length], roughness: 0.55 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: HAIRS[(h >> 3) % HAIRS.length], roughness: 0.85 });
   const trimC = new THREE.Color(st.trim);
   const tint = new THREE.MeshStandardMaterial({ color: trimC, emissive: trimC, emissiveIntensity: 0.7 });
   const accMat = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.6 });
@@ -55,22 +60,27 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1) {
   const badge = new THREE.Mesh(new THREE.SphereGeometry(0.028 * S, 8, 6), accMat);
   badge.position.set(0.06 * S, 0.46 * S, 0.13 * S); torsoG.add(badge);
 
-  // head on the torso (notifications attach to parts.head)
-  const headG = new THREE.Group(); headG.position.y = 0.72 * S; torsoG.add(headG);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.115 * S, 14, 10), skinMat);
-  head.scale.y = 1.12; headG.add(head);
-  for (const sx of [-1, 1]) {                                  // simple eyes
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.014 * S, 6, 4),
+  // head + neck (notifications attach to parts.head)
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.038 * S, 0.045 * S, 0.07 * S, 8), skinMat);
+  neck.position.y = 0.62 * S; torsoG.add(neck);
+  const headG = new THREE.Group(); headG.position.y = 0.73 * S; torsoG.add(headG);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.108 * S, 14, 10), skinMat);
+  head.scale.y = 1.15; headG.add(head);
+  for (const sx of [-1, 1]) {                                  // eyes
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.013 * S, 6, 4),
       new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.3 }));
-    eye.position.set(sx * 0.042 * S, 0.012 * S, 0.1 * S); headG.add(eye);
+    eye.position.set(sx * 0.04 * S, 0.012 * S, 0.095 * S); headG.add(eye);
   }
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.118 * S, 12, 8,
-    0, Math.PI * 2, 0, Math.PI * 0.55), clothMat);
-  hair.position.y = 0.012 * S; hair.scale.y = 1.1; headG.add(hair);
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.035 * S, 0.008 * S, 0.01 * S),
+    new THREE.MeshStandardMaterial({ color: 0x8a5a50, roughness: 0.6 }));
+  mouth.position.set(0, -0.045 * S, 0.102 * S); headG.add(mouth);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.112 * S, 12, 8,
+    0, Math.PI * 2, 0, Math.PI * 0.58), hairMat);
+  hair.position.y = 0.015 * S; hair.scale.y = 1.12; headG.add(hair);
   parts.head = headG;
-  // status light hovering above the head
-  const status = new THREE.Mesh(new THREE.SphereGeometry(0.035 * S, 8, 6), statusMat);
-  status.position.y = 0.22 * S; headG.add(status);
+  // status light - smaller, hovers a touch higher (8d)
+  const status = new THREE.Mesh(new THREE.SphereGeometry(0.026 * S, 8, 6), statusMat);
+  status.position.y = 0.24 * S; headG.add(status);
   parts.status = status;
 
   // arms: shoulder pivot -> upper arm -> elbow pivot -> forearm + hand
@@ -114,7 +124,7 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1) {
   root.add(ring);
 
   root.traverse(o => { if (o.isMesh && !o.material?.transparent) shadowify(o); });   // Phase 8b
-  const materials = [clothMat, skinMat, tint, accMat, statusMat];
+  const materials = [clothMat, skinMat, hairMat, tint, accMat, statusMat];
   return { root, parts, materials, tint, statusMat, ring, S };
 }
 
@@ -150,17 +160,20 @@ export function animateHumanoid(agent, aY, dt) {
       headX = 0.5; lean = 0.18;
       if (agent.seated) { hipsY = 0.46 * S; thigh = -Math.PI / 2 + 0.12; shin = Math.PI / 2 - 0.1; armX = -0.5; foreX = -0.6; }
       break;
-    case 'collapsed':
-      // downed agent lies flat - deliberate, unlike sitting
-      agent.group.rotation.x = -Math.PI / 2;
-      agent.group.position.y = aY + 0.25;
+    case 'collapsed': {
+      // downed agent eases to the floor (8d: no snap)
+      const kk = Math.min((dt ?? 0.016) * 4, 1);
+      agent.group.rotation.x += (-Math.PI / 2 - agent.group.rotation.x) * kk;
+      const fall = -agent.group.rotation.x / (Math.PI / 2);
+      agent.group.position.y = aY + 0.25 * fall;
       return;
+    }
     default:                                                      // idle: weight shift
       sway = Math.sin(t * 1.6) * 0.03;
       bob = Math.sin(t * 1.6) * 0.012;
       gesture = Math.sin(t * 0.9) * 0.04;
   }
-  agent.group.rotation.x = 0;
+  agent.group.rotation.x += (0 - agent.group.rotation.x) * k;   // 8d: ease back upright
 
   p.hips.position.y += (hipsY - p.hips.position.y) * k;
   lerpTo(p.torso, 'x', lean, k);

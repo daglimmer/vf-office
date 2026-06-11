@@ -103,12 +103,13 @@ export function buildOffice(report) {
     woodLight: std('light_wood',    { map: T.woodLight, bumpMap: T.woodLight, bumpScale: BUMP.woodLight, color: 0xffffff, roughness: 0.55 }),
     wall:      std('charcoal_wall', { color: 0x23262c, roughness: 0.5 }),
     glass:     phys('smoked_glass', { color: 0x9fb4c0, roughness: 0.06, metalness: 0, transparent: true, opacity: 0.2, depthWrite: false, envMapIntensity: 1.4 }),
-    glassDC:   phys('dc_glass',     { color: 0xaaccd4, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.15, depthWrite: false, envMapIntensity: 1.8, clearcoat: 1, clearcoatRoughness: 0.05 }),
+    glassDC:   phys('dc_glass',     { color: 0xaaccd4, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.12, depthWrite: false, envMapIntensity: 1.0, clearcoat: 1, clearcoatRoughness: 0.05 }),   // 8d: DC dimmed
     metal:     std('brushed_metal', { color: 0xb9bdc4, roughness: 0.28, metalness: 0.95, envMapIntensity: 1.2 }),
     prop:      std('dark_prop',     { color: 0x17191e, roughness: 0.5 }),
     sofa:      std('sofa_gray',     { map: T.fabric, bumpMap: T.fabric, bumpScale: BUMP.fabric, color: 0xffffff, roughness: 0.95 }),
     leather:   phys('leather_brown', { map: T.leather, bumpMap: T.leather, bumpScale: BUMP.leather, color: 0xffffff, roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.5 }),
-    white:     std('white_panel',   { color: 0xdfe1e5, roughness: 0.6, emissive: 0xfff8e8, emissiveIntensity: 0.9 }),
+    white:     std('white_panel',   { color: 0xdfe1e5, roughness: 0.6, emissive: 0xfff8e8, emissiveIntensity: 0.45 }),   // 8d: halved (Ray)
+    whiteCeil: std('white_ceiling', { color: 0xc9ccd2, roughness: 0.7, emissive: 0xfff6e6, emissiveIntensity: 0.22 }),
     screen:    std('screen_code',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x73c0ff, emissiveIntensity: 1.4 }),
     screenDash:std('screen_dash',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x5ce6b8, emissiveIntensity: 1.3 }),
     cloudFrost:std('cloud_frost',   { color: 0xdde2e8, roughness: 0.4, transparent: true, opacity: 0.85 }),
@@ -116,8 +117,8 @@ export function buildOffice(report) {
     ringWarm:  std('ring_warm',     { color: 0xffb35c, emissive: 0xff9e38, emissiveIntensity: 1.8 }),
     neon:      std('neon_cyan',     { color: 0x4dd8ff, emissive: 0x4dd8ff, emissiveIntensity: 2.2 }),
     amber:     std('amber_neon',    { color: 0xffa733, emissive: 0xff9926, emissiveIntensity: 2.0 }),
-    frost:     std('frost_band',    { color: 0xe6e8eb, roughness: 0.6, transparent: true, opacity: 0.85, emissive: 0xe6e8eb, emissiveIntensity: 0.25 }),
-    hexf:      std('hex_floor',     { color: 0x9fd0ff, emissive: 0x8cc4ff, emissiveIntensity: 1.3 }),
+    frost:     std('frost_band',    { color: 0xe6e8eb, roughness: 0.6, transparent: true, opacity: 0.8, emissive: 0xe6e8eb, emissiveIntensity: 0.12 }),
+    hexf:      std('hex_floor',     { color: 0x9fd0ff, emissive: 0x8cc4ff, emissiveIntensity: 0.7 }),
     rack:      std('rack_metal',    { color: 0x101318, roughness: 0.4, metalness: 0.6 }),
     leaf:      [std('leaf_0', { color: 0x1f5c26, roughness: 0.75 }),
                 std('leaf_1', { color: 0x2c7a30, roughness: 0.75 }),
@@ -126,7 +127,14 @@ export function buildOffice(report) {
     shoe:      std('shoe',          { color: 0x14161a, roughness: 0.5 }),
   };
   const zoneMats = ZONES.map((c, i) => std(`rack_zone_${i}`,
-    { color: new THREE.Color(c), emissive: new THREE.Color(c), emissiveIntensity: 1.9 }));
+    { color: new THREE.Color(c), emissive: new THREE.Color(c), emissiveIntensity: 1.5 }));
+  // 8d: blinking data LEDs - 6 phase groups, animated by tick()
+  const blinkMats = ZONES.map((c, i) => std(`rack_blink_${i}`,
+    { color: 0x101820, emissive: new THREE.Color(c), emissiveIntensity: 0.8 }));
+  // 8e: steady status LEDs (realistic server front - green fleet, few ambers, rare red)
+  const srvOk = std('srv_ok', { color: 0x0a1410, emissive: 0x35d97a, emissiveIntensity: 1.0 });
+  const srvAmber = std('srv_amber', { color: 0x141005, emissive: 0xffb02e, emissiveIntensity: 1.0 });
+  const srvRed = std('srv_red', { color: 0x140808, emissive: 0xff4d4d, emissiveIntensity: 1.1 });
   const pillowMats = SPECTRUM.map((c, i) => std(`spectrum_${i}`,
     { color: new THREE.Color(c), roughness: 0.85, emissive: new THREE.Color(c), emissiveIntensity: 0.22 }));
   const cableMats = SPECTRUM.map((c, i) => std(`cable_${i}`,
@@ -263,40 +271,102 @@ export function buildOffice(report) {
   // ceilings
   const ceil = (n, x0, x1, z0, z1, h, mat) => box(n, (x0 + x1) / 2, h, (z0 + z1) / 2, x1 - x0, 0.08, z1 - z0, mat ?? M.wall);
   ceil('ceiling_lounge', WX0, WX1, Z0, 5.75, H_LOUNGE);
-  ceil('ceiling_staff', WX0, WX1, 5.75, 11.25, H_OFFICE, M.white);
+  ceil('ceiling_staff', WX0, WX1, 5.75, 11.25, H_OFFICE, M.whiteCeil);   // 8d: was glaring
   ceil('ceiling_devops', WX0, WX1, 11.25, ZW1, H_OFFICE);
   ceil('ceiling_corridor', CX0, CX1, Z0, ZW1, H_CORR);
   ceil('ceiling_meeting', EX0, EX1, Z0, 5.75, H_MEET);
   ceil('ceiling_control', EX0, EX1, 5.75, 11.5, H_OFFICE);
-  ceil('ceiling_ceo', EX0, EX1, 11.5, ZW1, H_OFFICE, M.white);
+  ceil('ceiling_ceo', EX0, EX1, 11.5, ZW1, H_OFFICE, M.whiteCeil);
   [[9, 8.5, H_OFFICE], [9, 14.3, H_OFFICE], [20, 4, H_CORR], [20, 12, H_CORR],
    [31, 8.75, H_OFFICE], [31, 14.25, H_OFFICE]].forEach(([x, z, h], i) =>
     box(`prop_ceillight_${i}`, x, h - 0.06, z, 1.6, 0.04, 0.7, M.white));
   for (let i = 0; i < 3; i++) box(`prop_beam_l${i}`, (WX0 + WX1) / 2, H_LOUNGE - 0.25, 1.4 + i * 1.6, WX1 - WX0, 0.18, 0.14, M.prop);
   for (let i = 0; i < 5; i++) box(`prop_beam_c${i}`, (CX0 + CX1) / 2, H_CORR - 0.2, 2 + i * 3.2, CX1 - CX0, 0.14, 0.12, M.prop);
 
-  // ---------------------------------------------------------------- skyline backdrop
+  // ---------------------------------------------------------------- skyline backdrop (8d: dusk, layered, hazy)
   {
     const cv = document.createElement('canvas');
-    cv.width = 1024; cv.height = 256;
+    cv.width = 2048; cv.height = 512;
     const c2 = cv.getContext('2d');
-    const grad = c2.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, '#0b1220'); grad.addColorStop(1, '#1b2438');
-    c2.fillStyle = grad; c2.fillRect(0, 0, 1024, 256);
-    for (let i = 0; i < 40; i++) {                     // buildings
-      const w = 20 + rnd() * 50, h = 60 + rnd() * 170, x = rnd() * 1024;
-      c2.fillStyle = '#070b14'; c2.fillRect(x, 256 - h, w, h);
-      c2.fillStyle = 'rgba(255,210,120,.8)';
-      for (let wy = 256 - h + 6; wy < 248; wy += 9)
-        for (let wx = x + 3; wx < x + w - 4; wx += 7)
-          if (rnd() < 0.28) c2.fillRect(wx, wy, 3, 4);
+    const sky = c2.createLinearGradient(0, 0, 0, 512);
+    sky.addColorStop(0, '#070b18'); sky.addColorStop(0.5, '#101a33');
+    sky.addColorStop(0.78, '#2c2b48'); sky.addColorStop(1, '#544243');     // dusk
+    c2.fillStyle = sky; c2.fillRect(0, 0, 2048, 512);
+    for (let i = 0; i < 180; i++) {                                        // stars
+      c2.fillStyle = `rgba(255,255,255,${0.12 + rnd() * 0.35})`;
+      c2.fillRect(rnd() * 2048, rnd() * 200, 1.2, 1.2);
     }
-    const mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) });
+    for (let i = 0; i < 7; i++) {                                          // thin clouds
+      c2.fillStyle = 'rgba(120,130,170,.07)';
+      c2.beginPath();
+      c2.ellipse(rnd() * 2048, 60 + rnd() * 140, 120 + rnd() * 180, 10 + rnd() * 16, 0, 0, Math.PI * 2);
+      c2.fill();
+    }
+    c2.fillStyle = 'rgba(235,240,255,.95)';                                // moon + glow
+    c2.beginPath(); c2.arc(1620, 84, 20, 0, Math.PI * 2); c2.fill();
+    c2.fillStyle = 'rgba(200,210,240,.18)';
+    c2.beginPath(); c2.arc(1620, 84, 48, 0, Math.PI * 2); c2.fill();
+    const pollution = c2.createRadialGradient(1024, 512, 80, 1024, 512, 800);  // city light dome
+    pollution.addColorStop(0, 'rgba(255,170,90,.16)'); pollution.addColorStop(1, 'rgba(255,170,90,0)');
+    c2.fillStyle = pollution; c2.fillRect(0, 0, 2048, 512);
+    // layer 1: far haze silhouettes
+    for (let i = 0; i < 60; i++) {
+      const w = 26 + rnd() * 60, hh = 50 + rnd() * 110, x = rnd() * 2048;
+      c2.fillStyle = 'rgba(42,52,84,.55)'; c2.fillRect(x, 512 - hh - 70, w, hh + 70);
+    }
+    // layer 2: mid towers, faint windows, water towers
+    for (let i = 0; i < 42; i++) {
+      const w = 34 + rnd() * 64, hh = 100 + rnd() * 180, x = rnd() * 2048;
+      c2.fillStyle = '#141a2a'; c2.fillRect(x, 512 - hh, w, hh);
+      c2.fillStyle = 'rgba(255,205,130,.35)';
+      for (let wy = 512 - hh + 8; wy < 495; wy += 12)
+        for (let wx = x + 4; wx < x + w - 5; wx += 10)
+          if (rnd() < 0.16) c2.fillRect(wx, wy, 3.5, 4.5);
+      if (rnd() < 0.3) {                                                   // rooftop water tower
+        c2.fillStyle = '#10141f';
+        c2.fillRect(x + w * 0.2, 512 - hh - 14, 11, 14);
+        c2.beginPath(); c2.moveTo(x + w * 0.2 - 2, 512 - hh - 14);
+        c2.lineTo(x + w * 0.2 + 13, 512 - hh - 14); c2.lineTo(x + w * 0.2 + 5.5, 512 - hh - 22);
+        c2.closePath(); c2.fill();
+      }
+    }
+    // layer 3: near towers - setback tops, brighter windows, antennas, beacons
+    for (let i = 0; i < 26; i++) {
+      const w = 50 + rnd() * 95, hh = 160 + rnd() * 260, x = rnd() * 2048;
+      c2.fillStyle = '#0b0f18';
+      c2.fillRect(x, 512 - hh, w, hh);
+      const sb = w * (0.55 + rnd() * 0.2);                                 // setback crown
+      c2.fillRect(x + (w - sb) / 2, 512 - hh - 18, sb, 18);
+      // soft glow behind window field
+      c2.fillStyle = 'rgba(255,190,110,.05)'; c2.fillRect(x + 2, 512 - hh + 4, w - 4, hh - 10);
+      for (let wy = 512 - hh + 8; wy < 498; wy += 11) {
+        for (let wx = x + 4; wx < x + w - 5; wx += 9) {
+          const r = rnd();
+          if (r < 0.30) {
+            c2.fillStyle = r < 0.065 ? 'rgba(150,205,255,.85)' : 'rgba(255,206,120,.85)';
+            c2.fillRect(wx, wy, 4, 5.5);
+          }
+        }
+      }
+      if (hh > 300) {                                                      // antenna + red beacon
+        c2.fillStyle = '#0a0d14'; c2.fillRect(x + w / 2 - 1.5, 512 - hh - 46, 3, 46);
+        c2.fillStyle = 'rgba(255,60,60,.95)';
+        c2.beginPath(); c2.arc(x + w / 2, 512 - hh - 48, 2.6, 0, Math.PI * 2); c2.fill();
+      }
+    }
+    const haze = c2.createLinearGradient(0, 360, 0, 512);
+    haze.addColorStop(0, 'rgba(80,88,124,0)'); haze.addColorStop(1, 'rgba(80,88,124,.55)');
+    c2.fillStyle = haze; c2.fillRect(0, 360, 2048, 152);
+    const mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), fog: false });
     mat.name = 'city_night';
-    const sky = new THREE.Mesh(new THREE.PlaneGeometry(55, 14), mat);
-    sky.position.set(20, 6, -3.5); add(sky, 'backdrop');
-    const skyW = new THREE.Mesh(new THREE.PlaneGeometry(34, 12), mat);
-    skyW.position.set(-1.8, 5, 8.5); skyW.rotation.y = Math.PI / 2; add(skyW, 'backdrop_west');
+    const sky1 = new THREE.Mesh(new THREE.PlaneGeometry(120, 30), mat);
+    sky1.position.set(20, 11, -34); add(sky1, 'backdrop');
+    const skyW = new THREE.Mesh(new THREE.PlaneGeometry(110, 30), mat);
+    skyW.position.set(-32, 11, 13); skyW.rotation.y = Math.PI / 2; add(skyW, 'backdrop_west');
+    const skyE = new THREE.Mesh(new THREE.PlaneGeometry(110, 30), mat);
+    skyE.position.set(72, 11, 13); skyE.rotation.y = -Math.PI / 2; add(skyE, 'backdrop_east');
+    const skyN = new THREE.Mesh(new THREE.PlaneGeometry(120, 30), mat);
+    skyN.position.set(20, 11, 60); skyN.rotation.y = Math.PI; add(skyN, 'backdrop_north');
   }
 
   // ---------------------------------------------------------------- lounge
@@ -514,15 +584,33 @@ export function buildOffice(report) {
       const face = -ang + 180;
       rbox(`rack_${i}`, px, 1.05, pz, 0.62, 2.1, 0.85, M.rack, face, 0.035);
       const bx = px - Math.sin(rad) * 0.445, bz = pz - Math.cos(rad) * 0.445;
-      box(`prop_rbezel_${i}`, bx, 1.05, bz, 0.56, 2.0, 0.03, M.prop, face);
-      for (let g = 0; g < 5; g++)
-        box(`prop_rvent_${i}_${g}`, bx - Math.sin(rad) * 0.02, 0.45 + g * 0.38, bz - Math.cos(rad) * 0.02,
-            0.46, 0.02, 0.015, M.rack, face);
-      box(`rack_led_${i}`, bx - Math.sin(rad) * 0.025, 1.05, bz - Math.cos(rad) * 0.025, 0.05, 1.9, 0.02, zone, face);
-      for (let d = 0; d < 4; d++)
-        box(`prop_rdot_${i}_${d}`, bx - Math.sin(rad) * 0.025 + Math.cos(rad) * (0.18 - d * 0.1), 1.98,
-            bz - Math.cos(rad) * 0.025 - Math.sin(rad) * (0.18 - d * 0.1), 0.03, 0.03, 0.015, zoneMats[(i + d) % 6], face);
-      box(`prop_rcable_${i}`, px, 2.2, pz, 0.1, 0.1, 0.6, M.prop, face);
+      // 8e (Ray): REAL server fronts - 8 stacked 1U units per rack, each with a
+      // faceplate, drive-bay groove, two steady status LEDs and one data LED
+      // that blinks. Zone color is a subtle strip on top, not a light tube.
+      const lat = (off) => [bx - Math.sin(rad) * 0.026 + Math.cos(rad) * off,
+                            bz - Math.cos(rad) * 0.026 - Math.sin(rad) * off];
+      box(`prop_rframe_${i}`, bx, 1.05, bz, 0.58, 2.02, 0.02, M.prop, face);
+      for (let u = 0; u < 8; u++) {
+        const uy = 0.28 + u * 0.225;
+        const [fpx, fpz] = lat(0);
+        box(`prop_rsrv_${i}_${u}`, fpx, uy, fpz, 0.54, 0.185, 0.028, M.rack, face);
+        const [bgx, bgz] = lat(0.1);                       // drive-bay groove
+        box(`prop_rbay_${i}_${u}`, bgx, uy - 0.03, bgz, 0.3, 0.05, 0.012, M.prop, face);
+        const [hgx, hgz] = lat(0.1);                       // vent line above bays
+        box(`prop_rvent_${i}_${u}`, hgx, uy + 0.05, hgz, 0.3, 0.018, 0.012, M.prop, face);
+        // status LEDs: power (steady green), health (mostly green, some amber,
+        // a rare red), activity (blinks via tick)
+        const [l1x, l1z] = lat(-0.21);
+        box(`prop_rok_${i}_${u}`, l1x, uy + 0.045, l1z, 0.018, 0.018, 0.012, srvOk, face);
+        const health = (i * 7 + u) % 11 === 0 ? srvRed : (i + u) % 5 === 0 ? srvAmber : srvOk;
+        const [l2x, l2z] = lat(-0.175);
+        box(`prop_rhp_${i}_${u}`, l2x, uy + 0.045, l2z, 0.018, 0.018, 0.012, health, face);
+        const [l3x, l3z] = lat(-0.1925);
+        box(`prop_ract_${i}_${u}`, l3x, uy - 0.04, l3z, 0.032, 0.014, 0.012, blinkMats[(i * 3 + u) % 6], face);
+      }
+      // zone indicator: thin strip across the rack top (keeps the blue->red ring readable)
+      const [ztx, ztz] = lat(0);
+      box(`rack_led_${i}`, ztx, 2.04, ztz, 0.5, 0.035, 0.014, zone, face);
     }
     const hotDC = cyl('hot_infra_ring', cx, 1.1, cz, 3.9, 2.3, M.glassDC.clone(), 24);
     hotDC.material.opacity = 0.04; hotDC.material.name = 'dc_hot';
@@ -615,10 +703,127 @@ export function buildOffice(report) {
     }
   } catch (e) { console.warn('[office] DC mirror disabled:', e); }
 
+  // ---------------------------------------------------------------- environs (8d): the office sits in a real place
+  {
+    const plazaMat = phys('plaza', { map: speckleTex('#141619', '110,118,132', 700, 10, 8),
+      bumpMap: T.concrete, bumpScale: 0.01, color: 0xb8bcc4, roughness: 0.55, clearcoat: 0.2, clearcoatRoughness: 0.5 });
+    box('floor_plaza', 20, -0.17, 14, 130, 0.2, 100, plazaMat);
+    // neighbor towers with lit-window facades (emissiveMap from canvas)
+    const towerTex = () => canvasTex((c, w, h) => {
+      c.fillStyle = '#07090d'; c.fillRect(0, 0, w, h);
+      for (let wy = 8; wy < h - 8; wy += 14)
+        for (let wx = 6; wx < w - 6; wx += 11) {
+          const r = rnd();
+          if (r < 0.30) { c.fillStyle = r < 0.07 ? 'rgba(150,200,255,.85)' : 'rgba(255,205,125,.8)'; c.fillRect(wx, wy, 6, 8); }
+        }
+    }, 128, 256, 1, 1);
+    const towers = [
+      [-16, 5, 26, 9, 9], [-13, -10, 18, 8, 8], [-18, 36, 22, 10, 9],
+      [54, 2, 30, 10, 10], [57, 20, 16, 9, 9], [50, 38, 24, 9, 8],
+      [8, 44, 20, 11, 9], [34, 46, 27, 10, 10],
+    ];
+    towers.forEach(([x, z, h, w, d], i) => {
+      const tx = towerTex();
+      const tm = std(`tower_${i}`, { color: 0x10131a, roughness: 0.7,
+        emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: 0.75 });
+      box(`env_tower_${i}`, x, h / 2 - 0.1, z, w, h, d, tm);
+      box(`env_towertop_${i}`, x, h + 0.2, z, w * 0.6, 0.5, d * 0.6, M.prop);
+      if (i % 3 === 0) box(`env_antenna_${i}`, x, h + 1.6, z, 0.15, 2.4, 0.15, M.prop);
+    });
+    // plaza trees (south + west approach)
+    const treeSpots = [[-2, -4], [8, -5], [18, -4.5], [28, -5], [38, -4], [-6, 6], [-6, 14], [44, 10]];
+    treeSpots.forEach(([x, z], i) => {
+      cyl(`env_trunk_${i}`, x, 0.9, z, 0.12, 1.8, M.woodDark, 8);
+      for (let j = 0; j < 3; j++)
+        sphere(`env_crown_${i}_${j}`, x + Math.cos(j * 2.3 + i) * 0.45, 2.0 + j * 0.4,
+               z + Math.sin(j * 2.3 + i) * 0.45, 0.7 - j * 0.12, M.leaf[(i + j) % 3], 0.8, 8, 6);
+    });
+    // street lamps along the south walk
+    for (let i = 0; i < 5; i++) {
+      const x = 2 + i * 9;
+      cyl(`env_lamppost_${i}`, x, 1.6, -2.5, 0.05, 3.2, M.metal, 8);
+      const head = sphere(`env_lamphead_${i}`, x, 3.3, -2.5, 0.12, M.ringWarm.clone(), 0.8, 8, 6);
+      head.material.emissiveIntensity = 1.3;
+      head.material.name = 'lamp_glow';
+    }
+
+    // ---- 8e (Ray): finish the grounds - lawns, palms, path, parking, benches
+    const grassMat = std('grass', { map: speckleTex('#1c3a1e', '90,160,80', 1400, 6, 6),
+      bumpMap: T.fabric, bumpScale: 0.02, color: 0xb9ccb0, roughness: 1 });
+    const lawn = (n, x, z, w, d) => box(n, x, -0.075, z, w, 0.02, d, grassMat);
+    lawn('env_lawn_sw', -9, -8, 26, 26);
+    lawn('env_lawn_se', 50, -6, 30, 28);
+    lawn('env_lawn_n', 20, 40, 56, 20);
+    lawn('env_lawn_w', -10, 16, 14, 20);
+    // lit walkway from the street to the entrance + facade walk
+    const pathMat = phys('path', { map: speckleTex('#2a2d33', '170,175,185', 500, 6, 2),
+      color: 0xcfd2d8, roughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.5 });
+    box('floor_path_entry', 20, -0.06, -9.5, 4.4, 0.025, 20, pathMat);
+    box('floor_path_facade', 20, -0.06, -1.4, 42, 0.025, 2.6, pathMat);
+    // palm trees on the lawns
+    const palmSpots = [[-12, -10], [-5, -3], [46, -10], [55, -2], [62, -12], [14, 41], [30, 42]];
+    palmSpots.forEach(([x, z], i) => {
+      let px = x, pz = z;
+      for (let seg = 0; seg < 4; seg++) {                   // gently leaning trunk
+        cyl(`env_palmtrunk_${i}_${seg}`, px, 0.5 + seg * 0.95, pz, 0.11 - seg * 0.015, 1.0, M.woodDark, 7);
+        px += 0.12; pz += 0.05;
+      }
+      for (let f = 0; f < 6; f++) {                         // fronds
+        const fa = f / 6 * Math.PI * 2;
+        const frond = sphere(`env_frond_${i}_${f}`, px + Math.cos(fa) * 0.85, 4.05 + Math.sin(f * 2.1) * 0.1,
+                             pz + Math.sin(fa) * 0.85, 0.55, M.leaf[(i + f) % 3], 0.16, 8, 5);
+        frond.rotation.y = -fa;
+        frond.rotation.z = 0.35;
+      }
+      sphere(`env_palmtop_${i}`, px, 3.95, pz, 0.16, M.woodDark, 1, 7, 5);
+    });
+    // small parking row, west side
+    const carColors = [0x2b2f38, 0x3a2024, 0x20303a, 0x33312a, 0x23262c, 0x2f2335];
+    for (let i = 0; i < 6; i++) {
+      const cx2 = -13, cz2 = 4 + i * 3.1;
+      const paint = phys(`car_${i}`, { color: carColors[i], roughness: 0.25, clearcoat: 0.8, clearcoatRoughness: 0.15 });
+      rbox(`env_car_${i}`, cx2, 0.34, cz2, 3.9, 0.55, 1.75, paint, 4 * ((i % 3) - 1), 0.12);
+      rbox(`env_carcab_${i}`, cx2 - 0.25, 0.78, cz2, 1.9, 0.45, 1.55,
+           phys(`carglass_${i}`, { color: 0x0e1216, roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.08 }),
+           4 * ((i % 3) - 1), 0.16);
+      for (const [dx, dz] of [[-1.3, -0.85], [1.3, -0.85], [-1.3, 0.85], [1.3, 0.85]]) {
+        const wheel = cyl(`env_wheel_${i}_${dx}_${dz}`, cx2 + dx, 0.3, cz2 + dz, 0.3, 0.22, M.prop, 12);
+        wheel.rotation.z = Math.PI / 2;
+      }
+    }
+    box('floor_parking', -13, -0.065, 12, 6.5, 0.02, 22, pathMat);
+    // benches along the facade walk
+    for (let i = 0; i < 4; i++) {
+      const bx2 = 5 + i * 10;
+      rbox(`env_bench_${i}`, bx2, 0.42, -1.4, 1.7, 0.07, 0.5, M.oak, 0, 0.03);
+      for (const sx of [-0.7, 0.7])
+        box(`env_benchleg_${i}_${sx}`, bx2 + sx, 0.2, -1.4, 0.08, 0.4, 0.45, M.metal);
+    }
+    // hedges + entrance planters
+    for (let i = 0; i < 10; i++) {
+      const hx2 = 2.5 + i * 3.6;
+      if (hx2 > 16 && hx2 < 24) continue;                   // keep the entrance clear
+      rbox(`env_hedge_${i}`, hx2, 0.3, -0.1, 3.0, 0.6, 0.5, M.leaf[i % 3], 0, 0.18);
+    }
+    for (const sx of [17.2, 22.8]) {
+      cyl(`env_planter_${sx}`, sx, 0.3, -1.2, 0.45, 0.6, M.prop, 14);
+      for (let j = 0; j < 4; j++)
+        sphere(`env_plant_${sx}_${j}`, sx + Math.cos(j * 1.8) * 0.22, 0.85 + (j % 2) * 0.15,
+               -1.2 + Math.sin(j * 1.8) * 0.22, 0.2, M.leaf[j % 3], 0.75, 7, 5);
+    }
+  }
+
   // ---------------------------------------------------------------- corridor guides
   for (const x of [CX0 + 0.12, CX1 - 0.12])
     box(`prop_guide_${Math.round(x)}`, x, 0.04, (Z0 + ZW1) / 2, 0.04, 0.03, ZW1 - Z0 - 0.6, M.neon);
   box('prop_guide_dc', 20, 0.04, (ZW1 + 18.8) / 2, 1.4, 0.03, 1.6, M.neon);
 
-  return { group: G, anchors };
+  // 8d: runtime animation hook - rack data LEDs blink in pseudo-random bursts
+  function tick(t) {
+    for (let i = 0; i < blinkMats.length; i++) {
+      const v = Math.sin(t * (2.6 + i * 1.31) + i * 9.7) + Math.sin(t * (6.4 + i * 0.77) + i * 3.1);
+      blinkMats[i].emissiveIntensity = v > 0.55 ? 1.7 : v < -1.2 ? 0.1 : 0.45;
+    }
+  }
+  return { group: G, anchors, tick };
 }

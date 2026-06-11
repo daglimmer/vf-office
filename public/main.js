@@ -264,7 +264,7 @@ RectAreaLightUniformsLib.init();
   };
   rect(0x9db8e8, 2.2, 13, 3.4, 9, 2, 0.4, 9, 1.4, 6);        // lounge window glow (city)
   rect(0x9db8e8, 1.6, 13, 3.4, 31, 2, 0.4, 31, 1.4, 6);      // meeting window glow
-  rect(0xfff2dc, 3.5, 2.4, 1.0, 2.3, 1.8, 14.2, 6, 1.6, 14.2);  // devops lightbox
+  rect(0xfff2dc, 1.7, 2.4, 1.0, 2.3, 1.8, 14.2, 6, 1.6, 14.2);  // devops lightbox (8d: halved)
   rect(0x86c8ff, 2.4, 3.0, 1.6, 37.6, 1.7, 3.0, 31.5, 1.0, 3.0); // meeting media wall
   // corridor light pools
   for (const z of [3.5, 9, 14.5]) {
@@ -354,8 +354,8 @@ function queueSpot(door, i) {
 // Status = small light above the head (statusMat is exposed as headMat so the
 // Phase 5 refreshStatus() keeps working unchanged).
 const STATUS_COLOR = { active: '#3DFF7A', idle: '#FF9E2C', offline: '#8A8F98', blocked: '#FF4D4D' };
-function makeAvatar(colorHex, scale = 1, role = 'specialist') {
-  const h = buildHumanoid(colorHex, role, scale);
+function makeAvatar(colorHex, scale = 1, role = 'specialist', seedName = '') {
+  const h = buildHumanoid(colorHex, role, scale, seedName);
   return { root: h.root, parts: h.parts, materials: h.materials, tint: h.tint,
            headMat: h.statusMat, ring: h.ring, S: h.S };
 }
@@ -387,7 +387,7 @@ export class Agent {
   constructor({ name, sub, color, scale = 1, startAnchor = 'spawn_dc', agentId = null, cardId = null, role = null }) {
     this.name = name; this.agentId = agentId; this.cardId = cardId;
     this.role = role ?? (cardId ? 'devops' : 'specialist');
-    const av = makeAvatar(color ?? SPECTRUM[agents.length % 6], scale, this.role);
+    const av = makeAvatar(color ?? SPECTRUM[agents.length % 6], scale, this.role, name);
     Object.assign(this, { group: av.root, parts: av.parts, materials: av.materials, tintMat: av.tint, headMat: av.headMat, ring: av.ring });
     this.avatarScale = av.S ?? scale;
     this.label = makeLabel(name, sub); this.group.add(this.label);
@@ -461,7 +461,10 @@ export class Agent {
     this.releaseSlot(); this.leaveBriefing();
     this.state = target;
     switch (target) {
-      case 'spawning': this.fx = { kind: 'spawn', t: 0 }; this.group.scale.setScalar(0.92); this.pose = 'idle'; break;
+      case 'spawning':
+        this.fx = { kind: 'spawn', t: 0 };
+        this.materials.forEach(m => { m.transparent = true; m.opacity = 0; });
+        this.pose = 'idle'; break;
       case 'briefing': this.acquire('meet', s => { this.hold('meet', s); this.goto(s, () => { this.sitAt(s, 'talk'); this.enterBriefing(); }); }); break;
       case 'working': this.acquire('work', s => { this.hold('work', s); this.goto(s, () => { this.sitAt(s, 'type'); deskGlow.get(s).material.emissiveIntensity = 1.4; }); }); break;
       case 'debrief': this.acquire('meet', s => { this.hold('meet', s); this.goto(s, () => { this.sitAt(s, 'talk'); this.enterBriefing(); this.timer = TIMINGS.debrief; }); }); break;
@@ -505,17 +508,16 @@ export class Agent {
     this.t += dt;
     if (this.fx) {
       this.fx.t += dt; const k = Math.min(this.fx.t / TIMINGS.fx, 1);
-      if (this.fx.kind === 'spawn') {            // Phase 8: fade-in, no floor pop
-        this.group.scale.setScalar(0.92 + 0.08 * k);
+      if (this.fx.kind === 'spawn') {            // 8d: pure fade, zero scale tricks
         this.materials.forEach(m => { m.transparent = true; m.opacity = k; });
         this.tintMat.emissiveIntensity = 0.7 + 1.8 * Math.sin(k * Math.PI);
         if (k >= 1) {
           this.fx = null; this.tintMat.emissiveIntensity = 0.7;
           if (!this.ghosted) this.materials.forEach(m => { m.opacity = 1; m.transparent = false; });
         }
-      } else {
-        this.group.scale.setScalar(1 - k);
+      } else {                                   // despawn: fade out in place
         this.materials.forEach(m => { m.transparent = true; m.opacity = 1 - k; });
+        this.label.material.opacity = 1 - k;
         if (k >= 1) { this.remove(); return; }
       }
     }
@@ -740,7 +742,8 @@ async function pollRoster() {
     if (!a) {
       a = new Agent({ name: r.name ?? r.id, sub: r.role ?? r.group, color: r.color ?? undefined,
                       agentId: r.id, role: rosterRole(r.group) });
-      a.fx = { kind: 'spawn', t: 0 }; a.group.scale.setScalar(0.92);
+      a.fx = { kind: 'spawn', t: 0 };
+      a.materials.forEach(m => { m.transparent = true; m.opacity = 0; });
     }
     a.rosterStatus = r.status;
     if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok' && !a.blocked) {
@@ -867,8 +870,11 @@ initTimeline({ sim, demo: () => demoMode });
 
 // ----------------------------------------------------------------- loop
 const clock = new THREE.Clock();
+let simT = 0;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
+  simT += dt;
+  office.tick?.(simT);                                     // 8d: rack data LEDs
   for (const a of [...agents]) a.update(dt);
   holo.rotation.y += dt * 0.8;
   const op = holo.children[0].material.opacity;

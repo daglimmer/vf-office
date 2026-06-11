@@ -98,6 +98,39 @@ diff broadcast), no new deps. `storekeeper` source is plain CJS (`.js`, not
   Backed by the new `GET /api/agents/:id`; closes on Esc or clicking elsewhere.
   sessions24h counts usage pushes in the trailing 24 h.
 
+## Phase 8e — "Make it a place" (Ray round 2)
+
+- **Server racks v3**: every rack is now 8 stacked 1U units - faceplate,
+  drive-bay groove, vent line, power LED (steady green), health LED (green
+  fleet, occasional amber, rare red) and an activity LED that blinks with the
+  data tick. Zone color reduced to a slim strip on the rack top. Reads as a
+  data center, not a light installation.
+- **Skyline v3**: three silhouette depth layers + far haze, setback rooftops,
+  water towers, antennas with red beacons, warm/cool windows with soft glow,
+  thin clouds, stars, moon, city light-pollution dome.
+- **Grounds**: four grass lawns, 7 leaning palm trees, lit entry walkway +
+  facade walk, a west parking row with 6 clearcoat-painted cars, 4 oak
+  benches, hedges along the facade (entrance kept clear) and two entrance
+  planters.
+
+## Phase 8d — Ray's live-review fixes
+
+- **Whites halved**: white panels 0.9 -> 0.45 emissive, staff/CEO ceilings get a
+  dedicated dim material, devops lightbox area light 3.5 -> 1.7.
+- **DC dimmed overall**: glass env reflections 1.8 -> 1.0, hex floor 1.3 -> 0.7,
+  frost band 0.25 -> 0.12, LED zones 1.9 -> 1.5.
+- **Server-room density**: every rack gets 16 small data LEDs in 6 phase groups
+  that blink in pseudo-random bursts (office.tick() animation hook).
+- **Avatars humanized v2**: per-agent skin + hair tones (stable hash of the
+  name), neck, mouth, smaller status orb. Spawn/despawn are now pure opacity
+  fades - no scale-from-the-feet, so nobody "comes out of the ground" - and
+  the downed/collapse pose eases instead of snapping.
+- **Environs**: the office now sits somewhere - plaza ground plane, 8 neighbor
+  towers with lit-window facades, trees and street lamps on the approach.
+- **Skyline v2**: 2048px dusk canvas with layered silhouettes, lit windows in
+  two color temperatures, antennas, stars, a moon with glow, ground haze -
+  wrapped on all four sides now.
+
 ## Phase 8c — Filmic pass (the practical ceiling for this stack)
 
 - **Post stack**: SMAA anti-aliasing + custom grade shader (gentle S-curve
