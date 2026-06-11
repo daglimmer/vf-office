@@ -1,0 +1,940 @@
+{
+ "comment": "Ground truth extracted from Phase 3 office.glb. Anchors are glTF Y-up world positions; build_office.py MUST reproduce these exactly (tolerance 0.01m).",
+ "count": 62,
+ "rooms": {
+  "lounge": {
+   "center": [
+    8.5,
+    0,
+    3
+   ],
+   "cam": "cam_room_lounge"
+  },
+  "staff": {
+   "center": [
+    8.5,
+    0,
+    8.5
+   ],
+   "cam": "cam_room_staff"
+  },
+  "devops": {
+   "center": [
+    8.5,
+    0,
+    14
+   ],
+   "cam": "cam_room_devops"
+  },
+  "corridor": {
+   "center": [
+    20,
+    0,
+    8.5
+   ],
+   "cam": "cam_room_corridor"
+  },
+  "meeting": {
+   "center": [
+    31.5,
+    0,
+    3
+   ],
+   "cam": "cam_room_meeting"
+  },
+  "control": {
+   "center": [
+    31.5,
+    0,
+    8.75
+   ],
+   "cam": "cam_room_control"
+  },
+  "ceo": {
+   "center": [
+    31.5,
+    0,
+    14.25
+   ],
+   "cam": "cam_room_ceo"
+  },
+  "dc": {
+   "center": [
+    20,
+    0,
+    21
+   ],
+   "cam": "cam_room_dc"
+  }
+ },
+ "anchors": [
+  {
+   "name": "announce_ceo",
+   "pos": [
+    31.5,
+    2.5,
+    14.25
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "announce_control",
+   "pos": [
+    31.5,
+    2.5,
+    8.75
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "announce_corridor",
+   "pos": [
+    20,
+    2.5,
+    8.5
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "announce_dc",
+   "pos": [
+    20,
+    2.5,
+    21
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "announce_devops",
+   "pos": [
+    8.5,
+    2.5,
+    14
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "announce_lounge",
+   "pos": [
+    8.5,
+    2.5,
+    3
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "announce_meeting",
+   "pos": [
+    31.5,
+    2.5,
+    3
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "announce_staff",
+   "pos": [
+    8.5,
+    2.5,
+    8.5
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "cam_room_ceo",
+   "pos": [
+    37.96,
+    7,
+    16
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "cam_room_control",
+   "pos": [
+    37.96,
+    7,
+    10.5
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "cam_room_corridor",
+   "pos": [
+    22,
+    7,
+    13.94
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "cam_room_dc",
+   "pos": [
+    35.2,
+    7,
+    23.56
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "cam_room_devops",
+   "pos": [
+    14.96,
+    7,
+    15.92
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "cam_room_lounge",
+   "pos": [
+    14.96,
+    7,
+    4.92
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "cam_room_meeting",
+   "pos": [
+    37.96,
+    7,
+    4.92
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "cam_room_staff",
+   "pos": [
+    14.96,
+    7,
+    10
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "ceo_desk",
+   "pos": [
+    31.5,
+    0,
+    14.6
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "despawn_dc",
+   "pos": [
+    24.5,
+    0,
+    21
+   ],
+   "quat": [
+    0,
+    -0.707108,
+    0,
+    0.707106
+   ]
+  },
+  {
+   "name": "doc_desk_01",
+   "pos": [
+    4,
+    0,
+    9.5
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "doc_desk_02",
+   "pos": [
+    7,
+    0,
+    9.5
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "doc_desk_03",
+   "pos": [
+    10,
+    0,
+    9.5
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "doc_desk_04",
+   "pos": [
+    13,
+    0,
+    9.5
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "lounge_seat_01",
+   "pos": [
+    5.5,
+    0,
+    1.7
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "lounge_seat_02",
+   "pos": [
+    7.5,
+    0,
+    1.7
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "lounge_seat_03",
+   "pos": [
+    9.5,
+    0,
+    1.7
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "lounge_seat_04",
+   "pos": [
+    11.5,
+    0,
+    1.7
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "lounge_seat_05",
+   "pos": [
+    5.5,
+    0,
+    4.3
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "lounge_seat_06",
+   "pos": [
+    7.5,
+    0,
+    4.3
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "lounge_seat_07",
+   "pos": [
+    9.5,
+    0,
+    4.3
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "lounge_seat_08",
+   "pos": [
+    11.5,
+    0,
+    4.3
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "meet_holo",
+   "pos": [
+    31.5,
+    1,
+    3
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "meet_seat_01",
+   "pos": [
+    29.662,
+    0,
+    1.656
+   ],
+   "quat": [
+    0,
+    -0.891638,
+    0,
+    0.452749
+   ]
+  },
+  {
+   "name": "meet_seat_02",
+   "pos": [
+    31.5,
+    0,
+    1.1
+   ],
+   "quat": [
+    0,
+    1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "meet_seat_03",
+   "pos": [
+    33.338,
+    0,
+    1.656
+   ],
+   "quat": [
+    0,
+    0.891638,
+    0,
+    0.452749
+   ]
+  },
+  {
+   "name": "meet_seat_04",
+   "pos": [
+    34.1,
+    0,
+    3
+   ],
+   "quat": [
+    0,
+    0.707108,
+    0,
+    0.707106
+   ]
+  },
+  {
+   "name": "meet_seat_05",
+   "pos": [
+    33.338,
+    0,
+    4.344
+   ],
+   "quat": [
+    0,
+    0.452753,
+    0,
+    0.891636
+   ]
+  },
+  {
+   "name": "meet_seat_06",
+   "pos": [
+    31.5,
+    0,
+    4.9
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "meet_seat_07",
+   "pos": [
+    29.662,
+    0,
+    4.344
+   ],
+   "quat": [
+    0,
+    -0.452753,
+    0,
+    0.891636
+   ]
+  },
+  {
+   "name": "meet_seat_ollie",
+   "pos": [
+    28.9,
+    0,
+    3
+   ],
+   "quat": [
+    0,
+    -0.707108,
+    0,
+    0.707106
+   ]
+  },
+  {
+   "name": "nav_corridor_01",
+   "pos": [
+    20,
+    0,
+    2
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_corridor_02",
+   "pos": [
+    20,
+    0,
+    5
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_corridor_03",
+   "pos": [
+    20,
+    0,
+    8
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_corridor_04",
+   "pos": [
+    20,
+    0,
+    11
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_corridor_05",
+   "pos": [
+    20,
+    0,
+    14
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_corridor_06",
+   "pos": [
+    20,
+    0,
+    16
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_door_ceo",
+   "pos": [
+    23,
+    0,
+    14.25
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_door_control",
+   "pos": [
+    23,
+    0,
+    8.75
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_door_dc",
+   "pos": [
+    20,
+    0,
+    17
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_door_devops",
+   "pos": [
+    17,
+    0,
+    14
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_door_lounge",
+   "pos": [
+    17,
+    0,
+    3
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_door_meeting",
+   "pos": [
+    23,
+    0,
+    3
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "nav_door_staff",
+   "pos": [
+    17,
+    0,
+    8.5
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "ollie_station",
+   "pos": [
+    31.5,
+    0,
+    8.75
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "spawn_dc",
+   "pos": [
+    15.5,
+    0,
+    21
+   ],
+   "quat": [
+    0,
+    0.707108,
+    0,
+    0.707106
+   ]
+  },
+  {
+   "name": "work_desk_01",
+   "pos": [
+    4,
+    0,
+    13
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "work_desk_02",
+   "pos": [
+    7,
+    0,
+    13
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "work_desk_03",
+   "pos": [
+    10,
+    0,
+    13
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "work_desk_04",
+   "pos": [
+    13,
+    0,
+    13
+   ],
+   "quat": [
+    0,
+    0,
+    0,
+    1
+   ]
+  },
+  {
+   "name": "work_desk_05",
+   "pos": [
+    4,
+    0,
+    15.5
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "work_desk_06",
+   "pos": [
+    7,
+    0,
+    15.5
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "work_desk_07",
+   "pos": [
+    10,
+    0,
+    15.5
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  },
+  {
+   "name": "work_desk_08",
+   "pos": [
+    13,
+    0,
+    15.5
+   ],
+   "quat": [
+    0,
+    -1,
+    0,
+    4e-06
+   ]
+  }
+ ]
+}

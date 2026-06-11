@@ -274,3 +274,9 @@ body.embed #presets { left: 118px; max-width: 50vw; }
 .ad-task span { color: var(--mut); font-size: 10px; margin-left: 4px; }
 .ad-task.ad-none { color: var(--mut); font-style: italic; }
 .ad-offline { color: var(--mut); font-size: 10px; font-style: italic; margin-top: 8px; }
+
+/* ---------------- Phase 8: clickable-object tooltip ---------------- */
+#hot-tip { position: fixed; z-index: 40; pointer-events: none; background: var(--glass);
+  backdrop-filter: blur(14px); border: 1px solid #4DD8FF; border-radius: 6px;
+  color: var(--fg); font-size: 11px; padding: 4px 10px; max-width: 320px;
+  animation: fade-in .15s ease; }

@@ -534,7 +534,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/api/docs/tree') return json(res, 200, docsTree());                // Phase 6
     if (req.method === 'GET' && p === '/api/docs/file') return docsFile(res, url.searchParams.get('path'));
     if (req.method === 'GET' && p === '/mapping.json') {
-      return json(res, 200, { models: mapping.models ?? {}, budgets: mapping.budgets ?? {} });
+      return json(res, 200, { models: mapping.models ?? {}, budgets: mapping.budgets ?? {}, dashboardUrl: mapping.dashboardUrl ?? '' });   // Phase 8
     }
     if (req.method === 'POST' && p === '/announce') {
       const { message, priority } = await readBody(req);

@@ -98,6 +98,44 @@ diff broadcast), no new deps. `storekeeper` source is plain CJS (`.js`, not
   Backed by the new `GET /api/agents/:id`; closes on Esc or clicking elsewhere.
   sessions24h counts usage pushes in the trailing 24 h.
 
+## Phase 8 — Visual + architectural overhaul (procedural, no Blender)
+
+The office is now **generated entirely in code** at load time by
+`public/office.js` — `office.glb` and the Blender pipeline are no longer used
+(`office-art/` is kept for reference; `anchors.json` extracted from the
+original GLB keeps all 62 anchors at their exact Phase 3 positions).
+
+What the procedural build delivers (~830 objects):
+
+- Real building shell: corridors with doorways and headers, varied ceiling
+  heights (lounge/meeting 4 m, offices 3 m, corridor 2.8 m), exposed beams,
+  recessed light panels, floor-to-ceiling south/west glazing with a canvas-
+  rendered city skyline (lit windows) behind it.
+- Lounge: L-sectional + spectrum pillows, oak coffee table with dashboard
+  screen (clickable → Peak View), 5 cloud pendants, living green wall (70
+  plants), shelves, palm.
+- Data center: circular glass ring with frosted brand band, 14 closed-lid
+  racks (bezels, vent grooves, blue→red LED zone gradient, status dots, cable
+  arms), hex floor with glowing seams (single merged mesh), domed skylight
+  with radial spokes. Racks clickable → Infrastructure.
+- DevOps: 8 triple-monitor desks, rainbow cable bundles, RGB floor traces,
+  amber shield window into the DC, edge-lit lightbox. Desks clickable →
+  Agent Health.
+- Meeting: oval table + silver trim, 8 chairs on the exact seat anchors,
+  amber ring light, media wall (clickable → Kanban), holo puck.
+- Control: curved spectrum-front command desk (clickable → Costs), neon cloud
+  + amber circuit shield signs, equipment rack.
+- CEO: oak desk, leather chair + loveseat, cloud lamp, glass front, wall
+  screen (clickable → Docs), plant.
+- Humanoid avatars (`avatars.js`): jointed mannequins that sit down properly,
+  walk with gait + arm swing, fade in; role styling as clothing tint + glowing
+  trim, status light above the head.
+- Phase 8 light profile: balanced ambient, soft bloom, subtle depth fog,
+  Peak View walls 50% + room name labels, 800 ms camera flights.
+
+`mapping.json "dashboardUrl"` controls where standalone clicks open the
+dashboard (embedded mode posts `{type:'nav', route}` instead).
+
 ## Production wiring
 
 1. Run the Phase 2 stack (`office-bridge`), replacing its `adapter/index.js` and

@@ -5,8 +5,6 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -14,6 +12,9 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { initHud } from './hud.js';
 import { showAgentCard, hideAgentCard } from './agentcard.js';
+import { buildHumanoid, animateHumanoid } from './avatars.js';
+import { buildOffice } from './office.js';
+import { initInteractive, updateInteractive, clickInteractive } from './interactive.js';
 import { initNotifications } from './notifications.js';
 import { initTimeline } from './timeline.js';
 
@@ -80,8 +81,10 @@ controls.minDistance = 5; controls.maxDistance = 80;
 controls.enableDamping = true;
 
 // Phase 5 (1) Ray: much brighter scene. Ambient ~3x, plus a soft blue-white skylight.
-scene.add(new THREE.AmbientLight(0x39404f, 1.0));
-scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x232730, 1.5));   // skylight
+// Phase 8 retunes these after the GLB loads (v8 profile: balanced, softer glow).
+const ambLight = new THREE.AmbientLight(0x39404f, 1.0);
+const hemiLight = new THREE.HemisphereLight(0xbfd4ff, 0x232730, 1.5);
+scene.add(ambLight, hemiLight);
 const key = new THREE.DirectionalLight(0xcfd8ff, 0.8);
 key.position.set(30, 40, 10); scene.add(key);
 
@@ -98,50 +101,55 @@ let rooms = {};
 const deskGlow = new Map();
 let holo = null, holoTarget = 0.25;
 
-const loader = new GLTFLoader();
-const draco = new DRACOLoader();
-draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
-loader.setDRACOLoader(draco);
-
-const [gltf, wp] = await Promise.all([
-  loader.loadAsync('/office.glb'),
+// ---- Phase 8 (procedural): the office is generated in code by office.js.
+// No GLB, no Blender - anchors come from /anchors.json (extracted from the
+// original Phase 3 build, positions unchanged).
+const [officeReport, wp] = await Promise.all([
+  fetch('/anchors.json').then(r => r.json()),
   fetch('/waypoints.json').then(r => r.json()),
 ]);
-scene.add(gltf.scene);
-gltf.scene.traverse(o => {
-  if (!o.isMesh && o.name && !/^(floor_|wall_|prop_|mullion|ceiling_|backdrop|office$)/.test(o.name)) {
-    anchors.set(o.name, { pos: o.getWorldPosition(new THREE.Vector3()), quat: o.getWorldQuaternion(new THREE.Quaternion()) });
-  }
-});
+const office = buildOffice(officeReport);
+scene.add(office.group);
+for (const [k, v] of office.anchors) anchors.set(k, v);
 rooms = wp.rooms;
 
-// ---- Phase 5 (1) Ray: boost emissive accents 2x (spectrum LEDs, cloud lamps,
-// floor traces, ring lights, guide neon). Screens/skyline left as-is.
-{
-  const boosted = new Set();
-  gltf.scene.traverse(o => {
-    if (!o.isMesh || !o.material) return;
-    const m = o.material;
-    if (boosted.has(m.uuid)) return;
-    if (/^(spectrum_|cloud_cool|ring_warm|neon_cyan|hex_floor)/.test(m.name ?? '')) {
-      m.emissiveIntensity *= 2;
-      boosted.add(m.uuid);
-    }
-  });
-}
+// Phase 8 light profile (balanced: visible rooms, soft glow, subtle depth fog)
+const V8 = true;
+ambLight.intensity = 0.75; ambLight.color.set(0x434a55);
+hemiLight.intensity = 1.05; hemiLight.color.set(0xcfd9ee);
+key.intensity = 0.55;
+renderer.toneMappingExposure = 1.22;
+bloom.strength = 0.45; bloom.threshold = 0.82;
+scene.fog = new THREE.Fog(0x0d0f13, 30, 100);
+
+// (legacy 2x emissive boost removed - office.js materials are pre-tuned)
 
 // ---- Phase 5 (2) Ray: walls/ceilings fade in Peak View. Materials are shared
 // across meshes in the GLB, so clone per-mesh before we animate opacity.
 const peakFade = [];                       // { mat, base, peak }
-gltf.scene.traverse(o => {
+office.group.traverse(o => {
   if (!o.isMesh) return;
-  const peak = /^(wall_|mullion|green_wall)/.test(o.name) ? 0.3
-             : /^ceiling_/.test(o.name) ? 0.1 : null;
+  const peak = /^(wall_|mullion|green_wall)/.test(o.name) ? 0.5
+             : /^ceiling_/.test(o.name) ? 0.1 : null;     // Phase 8: 50% walls in Peak View
   if (peak == null) return;
   o.material = o.material.clone();
   peakFade.push({ mat: o.material, base: o.material.opacity ?? 1, peak });
 });
 let peakOn = false, peakK = 0;
+// Phase 8: room name labels, visible only in Peak View
+const roomLabels = [];
+for (const [r, info] of Object.entries(wp.rooms)) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const x = cv.getContext('2d');
+  x.fillStyle = 'rgba(13,15,19,.55)'; x.fillRect(0, 0, 256, 64);
+  x.fillStyle = '#e8eaee'; x.font = 'bold 34px sans-serif'; x.textAlign = 'center';
+  x.fillText(r.toUpperCase(), 128, 43);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0, depthTest: false }));
+  sp.scale.set(4.2, 1.05, 1);
+  sp.position.set(info.center[0], 4.6, info.center[2]);
+  sp.visible = false;
+  scene.add(sp); roomLabels.push(sp);
+}
 const grid = new THREE.GridHelper(64, 64, 0x4dd8ff, 0x2a2e3a);   // subtle floor grid for Peak View
 grid.position.set(20, 0.03, 12);
 grid.material.transparent = true; grid.material.opacity = 0;
@@ -211,10 +219,11 @@ for (const [a, b] of wp.edges) {
   for (let i = 1; i <= 8; i++) {
     const name = `work_desk_${String(i).padStart(2, '0')}`;
     const a = anchors.get(name);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.05),
+    const m = new THREE.Mesh(
+      V8 ? new THREE.BoxGeometry(0.9, 0.05, 0.05) : new THREE.BoxGeometry(0.9, 0.5, 0.05),
       new THREE.MeshStandardMaterial({ color: 0x111418, emissive: 0x3dff7a, emissiveIntensity: 0.05 }));
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(a.quat);
-    m.position.copy(a.pos).addScaledVector(fwd, 0.75).setY(1.15);
+    m.position.copy(a.pos).addScaledVector(fwd, V8 ? 0.5 : 0.75).setY(V8 ? 0.78 : 1.15);
     m.quaternion.copy(a.quat);
     scene.add(m); deskGlow.set(name, m);
   }
@@ -260,40 +269,16 @@ function queueSpot(door, i) {
 }
 
 // ----------------------------------------------------------------- avatar
-// Phase 5 (3) Ray: puppet avatars - sphere head + tapered cylinder body, ~1.2u.
-// Head color = live status, body color = role group, accent collar keeps the
-// per-agent spectrum color (also drives spawn/kill/fallback glow fx).
-const ROLE_COLOR = { command: '#FFD24D', devops: '#2E5BFF', specialist: '#E8EAEE' };
+// Phase 8 (4): humanoid avatars - jointed mannequins built in avatars.js.
+// Status = small light above the head (statusMat is exposed as headMat so the
+// Phase 5 refreshStatus() keeps working unchanged).
 const STATUS_COLOR = { active: '#3DFF7A', idle: '#FF9E2C', offline: '#8A8F98', blocked: '#FF4D4D' };
 function makeAvatar(colorHex, scale = 1, role = 'specialist') {
-  const accent = new THREE.Color(colorHex);
-  const roleC = new THREE.Color(ROLE_COLOR[role] ?? ROLE_COLOR.specialist);
-  const bodyMat = new THREE.MeshStandardMaterial({ color: roleC, emissive: roleC, emissiveIntensity: 0.18, roughness: 0.55, metalness: 0.1 });
-  const idleC = new THREE.Color(STATUS_COLOR.idle);
-  const headMat = new THREE.MeshStandardMaterial({ color: idleC, emissive: idleC, emissiveIntensity: 0.6, roughness: 0.4 });
-  const tint = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.55 });
-  const root = new THREE.Group(), parts = {};
-  parts.body = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.24, 0.72, 20), bodyMat);
-  parts.body.position.y = 0.4;
-  parts.collar = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.028, 10, 24), tint);
-  parts.collar.rotation.x = Math.PI / 2; parts.collar.position.y = 0.79;
-  parts.head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 20, 16), headMat);
-  parts.head.position.y = 1.0;
-  // particle ring at the feet - shown while the agent is actively working
-  const ring = new THREE.Group();
-  const rm = new THREE.SpriteMaterial({ color: 0x3dff7a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
-  for (let i = 0; i < 10; i++) {
-    const sp = new THREE.Sprite(rm);
-    const a = i / 10 * Math.PI * 2;
-    sp.position.set(Math.cos(a) * 0.32, 0.06, Math.sin(a) * 0.32);
-    sp.scale.setScalar(0.06);
-    ring.add(sp);
-  }
-  ring.visible = false;
-  root.add(parts.body, parts.collar, parts.head, ring);
-  root.scale.setScalar(scale);
-  return { root, parts, materials: [bodyMat, headMat, tint], tint, headMat, ring };
+  const h = buildHumanoid(colorHex, role, scale);
+  return { root: h.root, parts: h.parts, materials: h.materials, tint: h.tint,
+           headMat: h.statusMat, ring: h.ring, S: h.S };
 }
+
 function makeLabel(name, sub) {
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 72;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
@@ -323,6 +308,7 @@ export class Agent {
     this.role = role ?? (cardId ? 'devops' : 'specialist');
     const av = makeAvatar(color ?? SPECTRUM[agents.length % 6], scale, this.role);
     Object.assign(this, { group: av.root, parts: av.parts, materials: av.materials, tintMat: av.tint, headMat: av.headMat, ring: av.ring });
+    this.avatarScale = av.S ?? scale;
     this.label = makeLabel(name, sub); this.group.add(this.label);
     this.lastNode = startAnchor;
     this.group.position.copy(anchors.get(startAnchor).pos);
@@ -394,7 +380,7 @@ export class Agent {
     this.releaseSlot(); this.leaveBriefing();
     this.state = target;
     switch (target) {
-      case 'spawning': this.fx = { kind: 'spawn', t: 0 }; this.group.scale.setScalar(0.001); this.pose = 'idle'; break;
+      case 'spawning': this.fx = { kind: 'spawn', t: 0 }; this.group.scale.setScalar(0.92); this.pose = 'idle'; break;
       case 'briefing': this.acquire('meet', s => { this.hold('meet', s); this.goto(s, () => { this.sitAt(s, 'talk'); this.enterBriefing(); }); }); break;
       case 'working': this.acquire('work', s => { this.hold('work', s); this.goto(s, () => { this.sitAt(s, 'type'); deskGlow.get(s).material.emissiveIntensity = 1.4; }); }); break;
       case 'debrief': this.acquire('meet', s => { this.hold('meet', s); this.goto(s, () => { this.sitAt(s, 'talk'); this.enterBriefing(); this.timer = TIMINGS.debrief; }); }); break;
@@ -438,10 +424,14 @@ export class Agent {
     this.t += dt;
     if (this.fx) {
       this.fx.t += dt; const k = Math.min(this.fx.t / TIMINGS.fx, 1);
-      if (this.fx.kind === 'spawn') {
-        this.group.scale.setScalar(k);
-        this.tintMat.emissiveIntensity = 0.55 + 2.5 * Math.sin(k * Math.PI);
-        if (k >= 1) { this.fx = null; this.tintMat.emissiveIntensity = 0.55; }
+      if (this.fx.kind === 'spawn') {            // Phase 8: fade-in, no floor pop
+        this.group.scale.setScalar(0.92 + 0.08 * k);
+        this.materials.forEach(m => { m.transparent = true; m.opacity = k; });
+        this.tintMat.emissiveIntensity = 0.7 + 1.8 * Math.sin(k * Math.PI);
+        if (k >= 1) {
+          this.fx = null; this.tintMat.emissiveIntensity = 0.7;
+          if (!this.ghosted) this.materials.forEach(m => { m.opacity = 1; m.transparent = false; });
+        }
       } else {
         this.group.scale.setScalar(1 - k);
         this.materials.forEach(m => { m.transparent = true; m.opacity = 1 - k; });
@@ -478,25 +468,8 @@ export class Agent {
     }
     this.animate(dt);
   }
-  animate() {                              // Phase 5 (3): puppet poses + idle bob
-    const p = this.parts, t = this.t;
-    this.group.rotation.x = 0;
-    p.head.position.y = 1.0;
-    let baseY = Math.sin(t * 2.2) * 0.05;            // idle float, +/-0.05
-    switch (this.pose) {
-      case 'walk': baseY = Math.abs(Math.sin(t * 8)) * 0.06; this.group.rotation.x = 0.06; break;
-      case 'sit': case 'type': case 'talk':
-        baseY = -0.18 + Math.sin(t * 2.2) * 0.02;
-        if (this.pose === 'type') p.head.position.y = 1.0 + Math.sin(t * 12) * 0.015;
-        if (this.pose === 'talk') p.head.position.y = 1.0 + Math.sin(t * 4) * 0.03;
-        break;
-      case 'glance': p.head.position.y = 1.07; baseY = this.seated ? -0.18 : baseY; break;
-      case 'headdown': p.head.position.y = 0.9; baseY = 0; break;
-      case 'collapsed': this.group.rotation.x = -Math.PI / 2; baseY = 0.25; break;   // lying
-    }
-    if (this.ring.visible) this.ring.rotation.y = t * 1.5;
-    const aY = this.seated ? anchors.get(this.seated).pos.y : 0;
-    this.group.position.y = aY + baseY;
+  animate(dt) {                             // Phase 8: humanoid pose driver
+    animateHumanoid(this, this.seated ? anchors.get(this.seated).pos.y : 0, dt);
   }
 }
 
@@ -686,7 +659,7 @@ async function pollRoster() {
     if (!a) {
       a = new Agent({ name: r.name ?? r.id, sub: r.role ?? r.group, color: r.color ?? undefined,
                       agentId: r.id, role: rosterRole(r.group) });
-      a.fx = { kind: 'spawn', t: 0 }; a.group.scale.setScalar(0.001);
+      a.fx = { kind: 'spawn', t: 0 }; a.group.scale.setScalar(0.92);
     }
     a.rosterStatus = r.status;
     if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok' && !a.blocked) {
@@ -795,15 +768,19 @@ if (EMBED) {
     ptr.y = -(e.clientY / innerHeight) * 2 + 1;
     ray.setFromCamera(ptr, camera);
     const hits = ray.intersectObjects(agents.map(a => a.group), true);
-    if (!hits.length) return;
-    let o = hits[0].object, target = null;
-    while (o && !target) { target = agents.find(a => a.group === o) ?? null; o = o.parent; }
+    let target = null;
+    if (hits.length) {
+      let o = hits[0].object;
+      while (o && !target) { target = agents.find(a => a.group === o) ?? null; o = o.parent; }
+    }
     if (target) showAgentCard(target, e.clientX, e.clientY);
+    else clickInteractive(e);                              // Phase 8: hot objects
   });
 }
 
 // ----------------------------------------------------------------- modules
 initHud({ bus, sim, demo: () => demoMode });
+initInteractive({ scene, gltfScene: office.group, camera, renderer, sim, isEmbed: () => EMBED, post });   // Phase 8 (5)
 initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents });
 initTimeline({ sim, demo: () => demoMode });
 
@@ -828,10 +805,12 @@ renderer.setAnimationLoop(() => {
     }
     grid.visible = peakK > 0.001;
     grid.material.opacity = 0.35 * peakK;
+    for (const sp of roomLabels) { sp.visible = peakK > 0.001; sp.material.opacity = peakK; }
   }
+  updateInteractive(dt);                                   // Phase 8: hover pulse
   if (camMode === 'walk') walkUpdate(dt);
   if (flight && camMode !== 'walk') {
-    flight.k = Math.min(flight.k + dt * 1.3, 1);
+    flight.k = Math.min(flight.k + dt / 0.8, 1);             // Phase 8: 800ms ease
     const e = flight.k * flight.k * (3 - 2 * flight.k);
     camera.position.lerpVectors(flight.from, flight.to, e);
     controls.target.lerpVectors(flight.t0, flight.t1, e);

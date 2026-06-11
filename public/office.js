@@ -1,0 +1,475 @@
+// Phase 8 - procedural office. The entire building is generated here in
+// Three.js at load time (no Blender, no GLB): real architecture with corridors,
+// doors and ceilings, floor-to-ceiling city glazing, the lounge sectional +
+// cloud pendants + green wall, the circular glass data center with closed-lid
+// racks and the domed skylight, DevOps triple-monitor desks with rainbow cable
+// bundles, the oval meeting table under the amber ring, the curved spectrum
+// command desk, and the oak CEO suite.
+//
+// Naming conventions consumed elsewhere:
+//   wall_* / mullion* / green_wall -> Peak View fade to 50%
+//   ceiling_*                      -> Peak View fade to 10%
+//   hot_<route>_*                  -> clickable (interactive.js)
+// Anchors come from /anchors.json (extracted from the Phase 3 GLB - positions
+// are bit-exact with what the old office.glb contained).
+import * as THREE from 'three';
+
+const SPECTRUM = ['#2E5BFF', '#9B30FF', '#FF3DBE', '#FF9E2C', '#FFE32C', '#3DFF7A'];
+const ZONES = ['#2E5BFF', '#2E9BFF', '#3DFF7A', '#FFE32C', '#FF9E2C', '#FF4D4D'];
+
+// layout constants (same as the Blender script)
+const WX0 = 2.0, WX1 = 16.2, CX0 = 16.2, CX1 = 23.8, EX0 = 23.8, EX1 = 38.0;
+const Z0 = 0.3, ZW1 = 17.2, DCX0 = 12.0, DCX1 = 28.0, DCZ1 = 27.6;
+const H_LOUNGE = 4.0, H_OFFICE = 3.0, H_CORR = 2.8, H_MEET = 4.0;
+const DC = { x: 20.0, z: 21.0, r: 5.0 };
+
+export function buildOffice(report) {
+  const G = new THREE.Group();
+  G.name = 'office_v8';
+  const anchors = new Map();
+  for (const a of report.anchors) {
+    anchors.set(a.name, {
+      pos: new THREE.Vector3(...a.pos),
+      quat: new THREE.Quaternion(...(a.quat ?? [0, 0, 0, 1])),
+    });
+  }
+  const A = n => anchors.get(n).pos;
+
+  // ---------------------------------------------------------------- materials
+  const std = (name, o) => { const m = new THREE.MeshStandardMaterial(o); m.name = name; return m; };
+  const M = {
+    concrete:  std('dark_concrete', { color: 0x1a1c20, roughness: 0.3, metalness: 0.15 }),
+    woodDark:  std('dark_wood',     { color: 0x2e2014, roughness: 0.5 }),
+    oak:       std('warm_oak',      { color: 0x8a5a2e, roughness: 0.5 }),
+    woodLight: std('light_wood',    { color: 0xa97f4f, roughness: 0.55 }),
+    wall:      std('charcoal_wall', { color: 0x23262c, roughness: 0.45 }),
+    glass:     std('smoked_glass',  { color: 0x9fb4c0, roughness: 0.08, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false }),
+    glassDC:   std('dc_glass',      { color: 0xaaccd4, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.16, depthWrite: false }),
+    metal:     std('brushed_metal', { color: 0xb9bdc4, roughness: 0.3, metalness: 0.9 }),
+    prop:      std('dark_prop',     { color: 0x17191e, roughness: 0.5 }),
+    sofa:      std('sofa_gray',     { color: 0x3c3c42, roughness: 0.9 }),
+    leather:   std('leather_brown', { color: 0x4a2c18, roughness: 0.6 }),
+    white:     std('white_panel',   { color: 0xdfe1e5, roughness: 0.6, emissive: 0xfff8e8, emissiveIntensity: 0.9 }),
+    screen:    std('screen_code',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x73c0ff, emissiveIntensity: 1.4 }),
+    screenDash:std('screen_dash',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x5ce6b8, emissiveIntensity: 1.3 }),
+    cloudFrost:std('cloud_frost',   { color: 0xdde2e8, roughness: 0.4, transparent: true, opacity: 0.85 }),
+    cloudCool: std('cloud_cool',    { color: 0x6cc4ff, emissive: 0x4db4ff, emissiveIntensity: 1.6 }),
+    ringWarm:  std('ring_warm',     { color: 0xffb35c, emissive: 0xff9e38, emissiveIntensity: 1.8 }),
+    neon:      std('neon_cyan',     { color: 0x4dd8ff, emissive: 0x4dd8ff, emissiveIntensity: 2.2 }),
+    amber:     std('amber_neon',    { color: 0xffa733, emissive: 0xff9926, emissiveIntensity: 2.0 }),
+    frost:     std('frost_band',    { color: 0xe6e8eb, roughness: 0.6, transparent: true, opacity: 0.85, emissive: 0xe6e8eb, emissiveIntensity: 0.25 }),
+    hexf:      std('hex_floor',     { color: 0x9fd0ff, emissive: 0x8cc4ff, emissiveIntensity: 1.3 }),
+    rack:      std('rack_metal',    { color: 0x101318, roughness: 0.4, metalness: 0.6 }),
+    leaf:      [std('leaf_0', { color: 0x1f5c26, roughness: 0.75 }),
+                std('leaf_1', { color: 0x2c7a30, roughness: 0.75 }),
+                std('leaf_2', { color: 0x49983a, roughness: 0.75 })],
+    soil:      std('living_wall',   { color: 0x182013, roughness: 0.95 }),
+    shoe:      std('shoe',          { color: 0x14161a, roughness: 0.5 }),
+  };
+  const zoneMats = ZONES.map((c, i) => std(`rack_zone_${i}`,
+    { color: new THREE.Color(c), emissive: new THREE.Color(c), emissiveIntensity: 1.9 }));
+  const pillowMats = SPECTRUM.map((c, i) => std(`spectrum_${i}`,
+    { color: new THREE.Color(c), roughness: 0.85, emissive: new THREE.Color(c), emissiveIntensity: 0.22 }));
+  const cableMats = SPECTRUM.map((c, i) => std(`cable_${i}`,
+    { color: new THREE.Color(c), emissive: new THREE.Color(c), emissiveIntensity: 0.8 }));
+
+  // ---------------------------------------------------------------- helpers
+  const D2R = Math.PI / 180;
+  function add(mesh, name) { mesh.name = name; G.add(mesh); return mesh; }
+  function box(name, x, y, z, sx, sy, sz, mat, rotDeg = 0) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+    m.position.set(x, y, z); m.rotation.y = rotDeg * D2R;
+    return add(m, name);
+  }
+  function cyl(name, x, y, z, r, h, mat, seg = 20, rTop = null) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop ?? r, r, h, seg), mat);
+    m.position.set(x, y, z);
+    return add(m, name);
+  }
+  function sphere(name, x, y, z, r, mat, squash = 1, seg = 12, ring = 8) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(r, seg, ring), mat);
+    m.position.set(x, y, z); m.scale.y = squash;
+    return add(m, name);
+  }
+  function torus(name, x, y, z, R, r, mat, seg = 32, tiltDeg = 90) {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(R, r, 8, seg), mat);
+    m.position.set(x, y, z); m.rotation.x = tiltDeg * D2R;   // 90 = flat (ring pendant)
+    return add(m, name);
+  }
+  let wallN = 0, mullN = 0;
+  const wall = (x, y, z, sx, sy, sz, mat, rot = 0) => box(`wall_${++wallN}`, x, y, z, sx, sy, sz, mat ?? M.wall, rot);
+  const mull = (x, y, z, sx, sy, sz) => box(`mullion_${++mullN}`, x, y, z, sx, sy, sz, M.prop);
+
+  function wallRunX(z, x0, x1, h, gaps = [], mat = null, t = 0.15) {
+    let cur = x0;
+    for (const [c, w] of gaps.sort((a, b) => a[0] - b[0])) {
+      const a = c - w / 2, b = c + w / 2;
+      if (a > cur) wall((cur + a) / 2, h / 2, z, a - cur, h, t, mat);
+      wall((a + b) / 2, h - (h - 2.2) / 2, z, b - a, h - 2.2, t, mat);   // door header
+      cur = b;
+    }
+    if (cur < x1) wall((cur + x1) / 2, h / 2, z, x1 - cur, h, t, mat);
+  }
+  function wallRunZ(x, z0, z1, h, gaps = [], mat = null, t = 0.15) {
+    let cur = z0;
+    for (const [c, w] of gaps.sort((a, b) => a[0] - b[0])) {
+      const a = c - w / 2, b = c + w / 2;
+      if (a > cur) wall(x, h / 2, (cur + a) / 2, t, h, a - cur, mat);
+      wall(x, h - (h - 2.2) / 2, (a + b) / 2, t, h - 2.2, b - a, mat);
+      cur = b;
+    }
+    if (cur < z1) wall(x, h / 2, (cur + z1) / 2, t, h, z1 - cur, mat);
+  }
+  function glazeX(z, x0, x1, h) {
+    wall((x0 + x1) / 2, h / 2, z, x1 - x0, h, 0.06, M.glass);
+    const n = Math.max(2, Math.round((x1 - x0) / 2));
+    for (let i = 0; i <= n; i++) mull(x0 + (x1 - x0) * i / n, h / 2, z, 0.08, h, 0.12);
+    mull((x0 + x1) / 2, 0.04, z, x1 - x0, 0.08, 0.12);
+    mull((x0 + x1) / 2, h - 0.04, z, x1 - x0, 0.08, 0.12);
+  }
+  function glazeZ(x, z0, z1, h) {
+    wall(x, h / 2, (z0 + z1) / 2, 0.06, h, z1 - z0, M.glass);
+    const n = Math.max(2, Math.round((z1 - z0) / 2));
+    for (let i = 0; i <= n; i++) mull(x, h / 2, z0 + (z1 - z0) * i / n, 0.12, h, 0.08);
+    mull(x, 0.04, (z0 + z1) / 2, 0.12, 0.08, z1 - z0);
+    mull(x, h - 0.04, (z0 + z1) / 2, 0.12, 0.08, z1 - z0);
+  }
+  // crisp glowing text via canvas texture (no font assets needed)
+  function textPanel(name, text, w, h, x, y, z, faceDeg = 0, color = '#cfe8ff', font = 'bold 72px sans-serif') {
+    const cv = document.createElement('canvas');
+    cv.width = 512; cv.height = Math.round(512 * h / w);
+    const c2 = cv.getContext('2d');
+    c2.fillStyle = color; c2.font = font;
+    c2.textAlign = 'center'; c2.textBaseline = 'middle';
+    c2.fillText(text, cv.width / 2, cv.height / 2);
+    const mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, side: THREE.DoubleSide });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    m.position.set(x, y, z); m.rotation.y = faceDeg * D2R;
+    return add(m, name);
+  }
+  // seeded pseudo-random (stable layout)
+  let seed = 8;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  // ---------------------------------------------------------------- floors
+  const floor = (n, x0, x1, z0, z1, mat) => box(n, (x0 + x1) / 2, -0.05, (z0 + z1) / 2, x1 - x0, 0.1, z1 - z0, mat);
+  floor('floor_lounge', WX0, WX1, Z0, 5.75, M.concrete);
+  floor('floor_staff', WX0, WX1, 5.75, 11.25, M.woodLight);
+  floor('floor_devops', WX0, WX1, 11.25, ZW1, M.concrete);
+  floor('floor_corridor', CX0, CX1, Z0, ZW1, M.concrete);
+  floor('floor_meeting', EX0, EX1, Z0, 5.75, M.woodDark);
+  floor('floor_control', EX0, EX1, 5.75, 11.5, M.concrete);
+  floor('floor_ceo', EX0, EX1, 11.5, ZW1, M.oak);
+  floor('floor_dc_hall', DCX0, DCX1, ZW1, DCZ1, M.concrete);
+
+  // ---------------------------------------------------------------- architecture
+  glazeX(Z0, WX0, WX1, H_LOUNGE);                       // south glazing: lounge
+  glazeX(Z0, EX0, EX1, H_MEET);                         // south glazing: meeting
+  wallRunX(Z0, CX0, CX1, H_CORR);                       // corridor entrance wall
+  wallRunZ(WX0, Z0, 5.75, H_LOUNGE);                    // west: lounge solid (green wall)
+  glazeZ(WX0, 5.75, 11.25, H_OFFICE);                   // west: staff window
+  glazeZ(WX0, 11.25, ZW1, H_OFFICE);                    // west: devops window
+  wallRunZ(EX1, Z0, ZW1, H_MEET);                       // east facade
+  wallRunZ(DCX0, ZW1, DCZ1, H_OFFICE + 1.4);            // DC hall shell
+  wallRunZ(DCX1, ZW1, DCZ1, H_OFFICE + 1.4);
+  wallRunX(DCZ1, DCX0, DCX1, H_OFFICE + 1.4);
+  wallRunX(ZW1, WX0, DCX0, H_OFFICE);                   // close wings to DC hall
+  wallRunX(ZW1, DCX1, EX1, H_OFFICE);
+  wallRunX(ZW1, CX0, CX1, H_CORR, [[20.0, 2.8]]);       // corridor -> DC opening
+  wallRunZ(CX0, Z0, ZW1, H_CORR, [[3.0, 1.8], [8.5, 1.8], [14.0, 1.8]]);   // west doors
+  wallRunZ(CX1, Z0, 11.5, H_CORR, [[3.0, 1.8], [8.75, 1.8]]);              // east doors
+  glazeZ(CX1, 11.5, ZW1, H_CORR);                       // CEO glass front
+  wallRunZ(CX1, 11.5, ZW1, H_CORR, [[14.25, 1.8]], M.glass, 0.04);
+  wallRunX(5.75, WX0, CX0, H_OFFICE);                   // west dividers
+  wallRunX(11.25, WX0, CX0, H_OFFICE);
+  wallRunX(5.75, CX1, EX1, H_OFFICE, [], M.glass);      // meeting smoked glass
+  wallRunX(11.5, CX1, EX1, H_OFFICE);
+
+  // ceilings
+  const ceil = (n, x0, x1, z0, z1, h, mat) => box(n, (x0 + x1) / 2, h, (z0 + z1) / 2, x1 - x0, 0.08, z1 - z0, mat ?? M.wall);
+  ceil('ceiling_lounge', WX0, WX1, Z0, 5.75, H_LOUNGE);
+  ceil('ceiling_staff', WX0, WX1, 5.75, 11.25, H_OFFICE, M.white);
+  ceil('ceiling_devops', WX0, WX1, 11.25, ZW1, H_OFFICE);
+  ceil('ceiling_corridor', CX0, CX1, Z0, ZW1, H_CORR);
+  ceil('ceiling_meeting', EX0, EX1, Z0, 5.75, H_MEET);
+  ceil('ceiling_control', EX0, EX1, 5.75, 11.5, H_OFFICE);
+  ceil('ceiling_ceo', EX0, EX1, 11.5, ZW1, H_OFFICE, M.white);
+  [[9, 8.5, H_OFFICE], [9, 14.3, H_OFFICE], [20, 4, H_CORR], [20, 12, H_CORR],
+   [31, 8.75, H_OFFICE], [31, 14.25, H_OFFICE]].forEach(([x, z, h], i) =>
+    box(`prop_ceillight_${i}`, x, h - 0.06, z, 1.6, 0.04, 0.7, M.white));
+  for (let i = 0; i < 3; i++) box(`prop_beam_l${i}`, (WX0 + WX1) / 2, H_LOUNGE - 0.25, 1.4 + i * 1.6, WX1 - WX0, 0.18, 0.14, M.prop);
+  for (let i = 0; i < 5; i++) box(`prop_beam_c${i}`, (CX0 + CX1) / 2, H_CORR - 0.2, 2 + i * 3.2, CX1 - CX0, 0.14, 0.12, M.prop);
+
+  // ---------------------------------------------------------------- skyline backdrop
+  {
+    const cv = document.createElement('canvas');
+    cv.width = 1024; cv.height = 256;
+    const c2 = cv.getContext('2d');
+    const grad = c2.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#0b1220'); grad.addColorStop(1, '#1b2438');
+    c2.fillStyle = grad; c2.fillRect(0, 0, 1024, 256);
+    for (let i = 0; i < 40; i++) {                     // buildings
+      const w = 20 + rnd() * 50, h = 60 + rnd() * 170, x = rnd() * 1024;
+      c2.fillStyle = '#070b14'; c2.fillRect(x, 256 - h, w, h);
+      c2.fillStyle = 'rgba(255,210,120,.8)';
+      for (let wy = 256 - h + 6; wy < 248; wy += 9)
+        for (let wx = x + 3; wx < x + w - 4; wx += 7)
+          if (rnd() < 0.28) c2.fillRect(wx, wy, 3, 4);
+    }
+    const mat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) });
+    mat.name = 'city_night';
+    const sky = new THREE.Mesh(new THREE.PlaneGeometry(55, 14), mat);
+    sky.position.set(20, 6, -3.5); add(sky, 'backdrop');
+    const skyW = new THREE.Mesh(new THREE.PlaneGeometry(34, 12), mat);
+    skyW.position.set(-1.8, 5, 8.5); skyW.rotation.y = Math.PI / 2; add(skyW, 'backdrop_west');
+  }
+
+  // ---------------------------------------------------------------- lounge
+  for (const [zz, dz] of [[1.7, -0.45], [4.3, 0.45]]) {
+    box(`prop_sofa_base_${zz}`, 8.5, 0.22, zz, 8.2, 0.44, 1.0, M.sofa);
+    box(`prop_sofa_back_${zz}`, 8.5, 0.55, zz + dz, 8.2, 0.55, 0.25, M.sofa);
+  }
+  box('prop_sofa_corner', 3.7, 0.22, 3.0, 1.0, 0.44, 3.6, M.sofa);
+  box('prop_sofa_cback', 3.25, 0.55, 3.0, 0.25, 0.55, 3.6, M.sofa);
+  for (let i = 0; i < 8; i++)
+    box(`prop_pillow_${i}`, 5.0 + (i % 4) * 2.0, 0.56, i < 4 ? 1.45 : 4.55, 0.45, 0.32, 0.16,
+        pillowMats[i % 6], 8 * ((i % 3) - 1));
+  box('prop_ctable', 8.5, 0.2, 3.0, 2.2, 0.4, 1.1, M.oak);
+  box('hot_peak_table', 8.5, 0.415, 3.0, 1.7, 0.035, 0.8, M.screenDash);
+  const cloudSpots = [[6, 2.1, 3.1], [8.2, 2.6, 2.0], [10.5, 2.3, 3.4], [12.5, 2.8, 2.6], [7.2, 3.0, 4.2]];
+  cloudSpots.forEach(([x, y, z], i) => {
+    sphere(`prop_cloudglow_l${i}`, x, y - 0.12, z, 0.16, i % 2 ? M.ringWarm : M.cloudCool, 1, 10, 6);
+    for (let j = 0; j < 4; j++)
+      sphere(`prop_cloud_l${i}_${j}`, x + Math.cos(j * 1.7 + i) * 0.25, y + (j % 2) * 0.1,
+             z + Math.sin(j * 2.1 + i) * 0.18, 0.22 + (j % 3) * 0.05, M.cloudFrost, 0.65, 10, 6);
+    box(`prop_cloudwire_l${i}`, x, (y + H_LOUNGE) / 2, z, 0.015, H_LOUNGE - y, 0.015, M.prop);
+  });
+  box('green_wall', WX0 + 0.12, 1.9, 3.0, 0.18, 3.6, 5.0, M.soil);
+  for (let i = 0; i < 70; i++)
+    sphere(`prop_leaf_${i}`, WX0 + 0.26, 0.25 + rnd() * 3.4, 0.7 + rnd() * 4.6,
+           0.1 + rnd() * 0.09, M.leaf[i % 3], 0.7, 7, 5);
+  [1.6, 2.2].forEach((y, i) => {
+    box(`prop_shelf_${i}`, 13.5, y, 5.55, 2.4, 0.05, 0.3, M.oak);
+    for (let j = 0; j < 3; j++)
+      box(`prop_book_${i}${j}`, 12.8 + j * 0.7, y + 0.14, 5.55, 0.3, 0.24, 0.2, pillowMats[(i * 3 + j) % 6]);
+  });
+  cyl('prop_pot_lounge', 14.8, 0.25, 1.0, 0.3, 0.5, M.prop, 12);
+  for (let j = 0; j < 6; j++)
+    sphere(`prop_palm_${j}`, 14.8 + Math.cos(j) * 0.3, 1.0 + j * 0.12, 1.0 + Math.sin(j) * 0.3, 0.22, M.leaf[1], 0.5, 7, 5);
+
+  // ---------------------------------------------------------------- desks & co
+  function desk(idx, x, z, faceDeg, w, monitors, room) {
+    box(`prop_desk_${room}${idx}`, x, 0.72, z, w, 0.05, 0.7, M.woodDark, faceDeg);
+    const a = faceDeg * D2R, fx = Math.sin(a), fz = Math.cos(a);
+    for (const sx of [-1, 1])
+      box(`prop_dleg_${room}${idx}${sx}`, x + Math.cos(a) * sx * (w / 2 - 0.08), 0.35,
+          z - Math.sin(a) * sx * (w / 2 - 0.08), 0.06, 0.7, 0.6, M.metal, faceDeg);
+    for (let mi = 0; mi < monitors; mi++) {
+      const off = (mi - (monitors - 1) / 2) * 0.5;
+      const mx = x + Math.cos(a) * off + fx * 0.22, mz = z - Math.sin(a) * off + fz * 0.22;
+      const rot = faceDeg + (monitors === 1 || mi === 1 ? 0 : mi === 0 ? -14 : 14);
+      box(`prop_mon_${room}${idx}_${mi}`, mx, 1.02, mz, 0.48, 0.3, 0.03, M.screen, rot + 180);
+      box(`prop_monstand_${room}${idx}_${mi}`, mx, 0.78, mz, 0.06, 0.14, 0.05, M.prop, rot);
+    }
+  }
+  function chair(idx, x, z, faceDeg, room, mat) {
+    mat = mat ?? M.prop;
+    const a = faceDeg * D2R;
+    box(`prop_chair_${room}${idx}`, x, 0.45, z, 0.46, 0.06, 0.46, mat, faceDeg);
+    box(`prop_chairback_${room}${idx}`, x - Math.sin(a) * 0.23, 0.75, z - Math.cos(a) * 0.23, 0.46, 0.55, 0.06, mat, faceDeg);
+    cyl(`prop_chairpost_${room}${idx}`, x, 0.25, z, 0.03, 0.4, M.metal, 8);
+    box(`prop_chairbase_${room}${idx}`, x, 0.03, z, 0.4, 0.04, 0.4, M.metal, faceDeg + 45);
+  }
+  function ringPendant(name, x, y, z, R = 0.45) {
+    torus(name, x, y, z, R, 0.035, M.ringWarm, 28, 90);
+    box(name + '_wire', x, y + 0.5, z, 0.015, 1.0, 0.015, M.prop);
+  }
+  function cableBundle(name, x, z, faceDeg, n = 6) {
+    const a = faceDeg * D2R;
+    for (let i = 0; i < n; i++) {
+      const off = (i - (n - 1) / 2) * 0.055;
+      cyl(`${name}_${i}`, x + Math.cos(a) * off, 0.36, z - Math.sin(a) * off, 0.02, 0.72, cableMats[i % 6], 8);
+    }
+  }
+
+  // ---------------------------------------------------------------- staff
+  for (let i = 1; i <= 4; i++) {
+    const p = A(`doc_desk_${String(i).padStart(2, '0')}`);
+    desk(i, p.x, p.z - 0.55, 180, 1.5, 1, 'st');
+    chair(i, p.x, p.z, 180, 'st');
+    ringPendant(`prop_ringp_st${i}`, p.x, 2.45, p.z - 0.4);
+  }
+  cableBundle('prop_cable_staff', A('doc_desk_02').x, A('doc_desk_02').z - 0.55, 180);
+
+  // ---------------------------------------------------------------- devops
+  for (let i = 1; i <= 8; i++) {
+    const p = A(`work_desk_${String(i).padStart(2, '0')}`);
+    const face = i <= 4 ? 0 : 180, dz = i <= 4 ? 0.55 : -0.55;
+    desk(i, p.x, p.z + dz, face, 1.8, 3, 'dv');
+    chair(i, p.x, p.z, face, 'dv');
+    cableBundle(`prop_cable_dv${i}`, p.x, p.z + dz, face);
+    if (i % 2 === 1) ringPendant(`prop_ringp_dv${i}`, p.x + 1.4, 2.5, p.z + dz);
+  }
+  {                                                     // clickable monitor field -> /agents
+    const hot = box('hot_agents_desks', 8.5, 1.05, 14.25, 11.5, 0.9, 3.6, M.glass);
+    hot.material = M.glass.clone(); hot.material.opacity = 0.05;
+  }
+  const traceMat = std('dv_trace', { color: 0x000000, emissive: 0x4dd8ff, emissiveIntensity: 1.5 });
+  [[3, 12.2, 14.5, 12.2], [3, 16.3, 14.5, 16.3], [14.5, 12.2, 14.5, 16.3], [3, 14.25, 9, 14.25]]
+    .forEach(([x0, z0, x1, z1], i) => {
+      const L = Math.hypot(x1 - x0, z1 - z0);
+      box(`prop_trace_${i}`, (x0 + x1) / 2, 0.012, (z0 + z1) / 2, L, 0.015, 0.05,
+          traceMat, -Math.atan2(z1 - z0, x1 - x0) / D2R);
+    });
+  box('prop_shieldframe', 15.0, 1.7, 16.6, 1.7, 2.0, 0.1, M.amber, 40);   // shield window into DC
+  box('wall_shieldglass', 15.0, 1.7, 16.6, 1.5, 1.8, 0.04, M.glassDC, 40);
+  box('prop_lightbox', WX0 + 0.12, 1.8, 14.2, 0.08, 1.0, 2.6, M.white);
+  textPanel('prop_logo_dv', '110lymph.nl', 2.2, 0.55, WX0 + 0.18, 1.8, 14.2, 90, '#1a1d22');
+
+  // ---------------------------------------------------------------- meeting
+  {
+    const table = cyl('prop_meet_table', 31.5, 0.72, 3.0, 1.0, 0.07, M.prop, 36);
+    table.scale.set(2.4, 1, 1.5);
+    const trim = torus('prop_meet_trim', 31.5, 0.755, 3.0, 1.0, 0.015, M.metal, 36, 90);
+    trim.scale.set(2.4, 1.5, 1);
+    cyl('prop_meet_leg', 31.5, 0.36, 3.0, 0.3, 0.72, M.prop, 16);
+    for (let i = 1; i <= 7; i++) {
+      const a = anchors.get(`meet_seat_${String(i).padStart(2, '0')}`);
+      const ang = 2 * Math.atan2(a.quat.y, a.quat.w) / D2R;
+      chair(i, a.pos.x, a.pos.z, ang, 'mt');
+    }
+    const ao = anchors.get('meet_seat_ollie');
+    chair(9, ao.pos.x, ao.pos.z, 90, 'mt', M.leather);
+    torus('meet_ring', 31.5, 3.3, 3.0, 1.6, 0.05, M.ringWarm, 40, 90);
+    box('hot_kanban_media', EX1 - 0.25, 1.7, 3.0, 0.1, 1.7, 3.2, M.screen);
+    box('prop_media_frame', EX1 - 0.2, 1.7, 3.0, 0.06, 1.9, 3.5, M.prop);
+    cyl('prop_holopuck', 31.5, 0.78, 3.0, 0.12, 0.04, M.neon, 16);
+  }
+
+  // ---------------------------------------------------------------- control
+  {
+    const cx = 31.5, cz = 8.75, R = 1.7, segs = 7;
+    for (let i = 0; i < segs; i++) {
+      const ang = -150 + i * 300 / segs;
+      if (ang > -80 && ang < 80) continue;              // opening behind Ollie
+      const rad = ang * D2R;
+      const px = cx + Math.sin(rad) * R, pz = cz + Math.cos(rad) * R;
+      box(`prop_cmd_${i}`, px, 0.72, pz, 1.55, 0.06, 0.7, M.prop, -ang);
+      box(`hot_costs_front_${i}`, px + Math.sin(rad) * 0.36, 0.38, pz + Math.cos(rad) * 0.36,
+          1.55, 0.7, 0.05, zoneMats[i % 6], -ang);
+      box(`prop_cmdmon_${i}`, px - Math.sin(rad) * 0.1, 1.1, pz - Math.cos(rad) * 0.1,
+          0.8, 0.5, 0.04, M.screenDash, -ang + 180);
+    }
+    [[-0.55, 0.28], [0, 0.4], [0.55, 0.3], [-0.28, 0.33], [0.28, 0.35]].forEach(([dx, r], j) =>
+      sphere(`prop_ncloud_${j}`, 30.0 + dx, 2.25 + (j % 2 ? 0.08 : 0), 5.95, r, M.neon, 0.6, 10, 6));
+    textPanel('prop_logo_ctl', '110lymph.nl', 2.0, 0.5, 30.0, 1.62, 6.05, 180, '#bfeaff');
+    const sh = cyl('prop_shield_ctl', 33.6, 2.2, 5.95, 0.55, 0.08, M.amber, 6);
+    sh.rotation.set(Math.PI / 2, 0, Math.PI / 2);
+    torus('prop_shieldring_ctl', 33.6, 2.2, 6.0, 0.62, 0.03, M.amber, 24, 0);
+    box('prop_ctlrack', 36.9, 0.9, 7.0, 0.7, 1.8, 0.8, M.rack);
+    box('prop_ctlrack_led', 36.62, 0.9, 7.0, 0.04, 1.6, 0.06, zoneMats[0]);
+  }
+
+  // ---------------------------------------------------------------- ceo
+  {
+    const p = A('ceo_desk');
+    box('prop_ceo_desk', p.x, 0.73, p.z + 0.5, 2.2, 0.07, 0.9, M.oak);
+    for (const sx of [-1, 1]) box(`prop_ceo_dleg${sx}`, p.x + sx, 0.36, p.z + 0.5, 0.08, 0.72, 0.8, M.oak);
+    chair(1, p.x, p.z, 0, 'ceo', M.leather);
+    box('prop_ceo_sofa', 27.0, 0.25, 16.2, 1.8, 0.5, 0.8, M.leather);
+    box('prop_ceo_sofab', 27.0, 0.6, 16.55, 1.8, 0.5, 0.2, M.leather);
+    box('prop_ceo_side', 28.3, 0.3, 16.2, 0.5, 0.6, 0.5, M.oak);
+    cyl('prop_ceo_pot', 36.8, 0.25, 16.4, 0.25, 0.5, M.prop, 12);
+    for (let j = 0; j < 5; j++)
+      sphere(`prop_ceo_plant_${j}`, 36.8 + Math.cos(j * 2) * 0.2, 0.85 + j * 0.1, 16.4 + Math.sin(j * 2) * 0.2, 0.18, M.leaf[2], 0.6, 7, 5);
+    sphere('prop_cloudglow_ceo', 31.5, 2.25, 14.0, 0.14, M.ringWarm, 1, 10, 6);
+    for (let j = 0; j < 3; j++)
+      sphere(`prop_cloud_ceo_${j}`, 31.5 + (j - 1) * 0.3, 2.4 + (j % 2) * 0.08, 14.0, 0.24, M.cloudFrost, 0.65, 10, 6);
+    box('hot_docs_screen', EX1 - 0.25, 1.6, 14.25, 0.08, 1.1, 2.0, M.screen);
+    textPanel('prop_logo_ceo', '110lymph.nl', 1.6, 0.4, EX1 - 0.32, 2.5, 14.25, -90, '#8a8f98');
+  }
+
+  // ---------------------------------------------------------------- data center
+  {
+    const { x: cx, z: cz, r: R } = DC;
+    const seg = 48, doorBearing = 180;
+    for (let i = 0; i < seg; i++) {
+      const a0 = i / seg * 360;
+      if (Math.abs(((a0 - doorBearing + 180) % 360) - 180) < 12) continue;
+      const rad = (a0 + 180 / seg) * D2R;
+      const w = 2 * R * Math.tan(Math.PI / seg);
+      box(`wall_dcg_${i}`, cx + Math.sin(rad) * R, 1.6, cz + Math.cos(rad) * R,
+          w * 1.02, 3.2, 0.05, M.glassDC, -(a0 + 180 / seg));
+      box(`prop_band_${i}`, cx + Math.sin(rad) * (R + 0.01), 1.45, cz + Math.cos(rad) * (R + 0.01),
+          w * 1.02, 0.5, 0.02, M.frost, -(a0 + 180 / seg));
+    }
+    textPanel('prop_logo_dc', '110lymph.nl', 2.0, 0.45, cx, 1.45, cz - R - 0.08, 180, '#3a3f47');
+    torus('prop_dcrim_t', cx, 3.2, cz, R, 0.06, M.metal, 48, 90);
+    torus('prop_dcrim_b', cx, 0.08, cz, R, 0.05, M.metal, 48, 90);
+    const n = 14;
+    for (let i = 0; i < n; i++) {
+      const ang = doorBearing + 30 + 300 * i / (n - 1);
+      const rad = ang * D2R;
+      const px = cx + Math.sin(rad) * 3.4, pz = cz + Math.cos(rad) * 3.4;
+      const zone = zoneMats[Math.min(5, Math.floor(i / n * 6))];
+      const face = -ang + 180;
+      box(`rack_${i}`, px, 1.05, pz, 0.62, 2.1, 0.85, M.rack, face);
+      const bx = px - Math.sin(rad) * 0.445, bz = pz - Math.cos(rad) * 0.445;
+      box(`prop_rbezel_${i}`, bx, 1.05, bz, 0.56, 2.0, 0.03, M.prop, face);
+      for (let g = 0; g < 5; g++)
+        box(`prop_rvent_${i}_${g}`, bx - Math.sin(rad) * 0.02, 0.45 + g * 0.38, bz - Math.cos(rad) * 0.02,
+            0.46, 0.02, 0.015, M.rack, face);
+      box(`rack_led_${i}`, bx - Math.sin(rad) * 0.025, 1.05, bz - Math.cos(rad) * 0.025, 0.05, 1.9, 0.02, zone, face);
+      for (let d = 0; d < 4; d++)
+        box(`prop_rdot_${i}_${d}`, bx - Math.sin(rad) * 0.025 + Math.cos(rad) * (0.18 - d * 0.1), 1.98,
+            bz - Math.cos(rad) * 0.025 - Math.sin(rad) * (0.18 - d * 0.1), 0.03, 0.03, 0.015, zoneMats[(i + d) % 6], face);
+      box(`prop_rcable_${i}`, px, 2.2, pz, 0.1, 0.1, 0.6, M.prop, face);
+    }
+    const hotDC = cyl('hot_infra_ring', cx, 1.1, cz, 3.9, 2.3, M.glassDC.clone(), 24);
+    hotDC.material.opacity = 0.04; hotDC.material.name = 'dc_hot';
+    // hex floor with glowing seams - single merged geometry
+    {
+      const pos = [], idx = [];
+      const hr = 0.55;
+      for (let q = -8; q <= 8; q++) for (let r = -8; r <= 8; r++) {
+        const hx = q * hr * 1.5, hz = (r + (q % 2 ? 0.5 : 0)) * hr * Math.sqrt(3);
+        if (Math.hypot(hx, hz) > R - 0.4) continue;
+        for (let e = 0; e < 6; e++) {
+          const a1 = Math.PI / 3 * e + Math.PI / 6, a2 = Math.PI / 3 * (e + 1) + Math.PI / 6;
+          const x1 = hx + Math.cos(a1) * hr * 0.96, z1 = hz + Math.sin(a1) * hr * 0.96;
+          const x2 = hx + Math.cos(a2) * hr * 0.96, z2 = hz + Math.sin(a2) * hr * 0.96;
+          let nx = z2 - z1, nz = -(x2 - x1);
+          const L = Math.hypot(nx, nz) || 1;
+          nx = nx / L * 0.015; nz = nz / L * 0.015;
+          const b = pos.length / 3;
+          for (const [vx, vz] of [[x1 - nx, z1 - nz], [x1 + nx, z1 + nz], [x2 + nx, z2 + nz], [x2 - nx, z2 - nz]])
+            pos.push(cx + vx, 0.015, cz + vz);
+          idx.push(b, b + 2, b + 1, b, b + 3, b + 2);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      add(new THREE.Mesh(geo, M.hexf), 'floor_dc_hexgrid');
+    }
+    // domed radial skylight
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(R + 0.4, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.glassDC);
+    dome.position.set(cx, 3.2, cz);
+    add(dome, 'ceiling_dc');
+    for (let i = 0; i < 12; i++) {
+      const ang = i * 30, rad = ang * D2R;
+      const sp = box(`prop_dspoke_${i}`, cx + Math.sin(rad) * R / 2, 4.45, cz + Math.cos(rad) * R / 2,
+                     0.08, 0.1, R, M.metal);
+      sp.rotation.set(-28 * D2R, -ang * D2R, 0, 'YXZ');
+    }
+  }
+
+  // ---------------------------------------------------------------- corridor guides
+  for (const x of [CX0 + 0.12, CX1 - 0.12])
+    box(`prop_guide_${Math.round(x)}`, x, 0.04, (Z0 + ZW1) / 2, 0.04, 0.03, ZW1 - Z0 - 0.6, M.neon);
+  box('prop_guide_dc', 20, 0.04, (ZW1 + 18.8) / 2, 1.4, 0.03, 1.6, M.neon);
+
+  return { group: G, anchors };
+}

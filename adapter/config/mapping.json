@@ -32,6 +32,7 @@
   "sql": {},
 
   "backupsSource": "data/storekeeper-report.json",
+  "dashboardUrl": "",
   "docsUrl": "",
   "docsRoots": {},
 
