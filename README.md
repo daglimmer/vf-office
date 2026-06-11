@@ -98,6 +98,37 @@ diff broadcast), no new deps. `storekeeper` source is plain CJS (`.js`, not
   Backed by the new `GET /api/agents/:id`; closes on Esc or clicking elsewhere.
   sessions24h counts usage pushes in the trailing 24 h.
 
+## Phase 9 — The office IS the data
+
+- **Live screens** (`public/screens.js`): the meeting media wall renders the
+  actual kanban board (columns, counts, card titles, blocked cards in red);
+  control-room monitors show session spend + top-agent cost bars; each DevOps
+  desk monitor shows who is sitting there and their task, with scrolling
+  "code" while they work; the CEO screen shows a calm working/blocked/spend
+  summary; the lounge table draws a live agent network diagram. All canvas
+  emissive textures on staggered redraw cadences - negligible cost.
+- **Event moments** (`public/moments.js`): high/alert announcements pulse the
+  control room amber/red; when a backup starts running StoreKeeper walks to
+  the DC, watches for a bit and walks back; an agent gateway going down makes
+  that room's light flicker with a red glow at the body; blocked cards flash
+  red at the agent.
+- **Performance**: static geometry merged by material+fade-class+shadow-class
+  (~1650 meshes -> ~55 merged draws + the live/clickable few). Roughly 10x
+  fewer draw calls; blinking LEDs survive (material-level animation).
+- **Idle cinematic**: after 3 minutes without input the camera drifts slowly
+  around the campus (wall-display mode); any input restores your exact view.
+
+## Phase 8f — Pin + facing fixes
+
+- **Sidebar pin**: button top-left of the HUD dock cycles auto (events expand
+  it) -> pinned open -> pinned closed; persisted in localStorage.
+- **Avatar facing**: the model's face/chest/shoes now point along its actual
+  walking direction (-z forward, matching the movement quaternion) and leans
+  go INTO the walk - this is what read as "walking backwards with backwards
+  knees". Seated-agent audit found staff/devops/CEO desks were built on the
+  wrong side of their anchors and chairs rotated 180°; all fixed, everyone
+  faces their desk/table now.
+
 ## Phase 8e — "Make it a place" (Ray round 2)
 
 - **Server racks v3**: every rack is now 8 stacked 1U units - faceplate,

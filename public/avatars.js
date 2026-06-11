@@ -58,7 +58,7 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedNam
   const collar = new THREE.Mesh(new THREE.TorusGeometry(0.105 * S, 0.018 * S, 8, 18), tint);
   collar.rotation.x = Math.PI / 2; collar.position.y = 0.585 * S; torsoG.add(collar);
   const badge = new THREE.Mesh(new THREE.SphereGeometry(0.028 * S, 8, 6), accMat);
-  badge.position.set(0.06 * S, 0.46 * S, 0.13 * S); torsoG.add(badge);
+  badge.position.set(0.06 * S, 0.46 * S, -0.13 * S); torsoG.add(badge);
 
   // head + neck (notifications attach to parts.head)
   const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.038 * S, 0.045 * S, 0.07 * S, 8), skinMat);
@@ -69,11 +69,11 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedNam
   for (const sx of [-1, 1]) {                                  // eyes
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.013 * S, 6, 4),
       new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.3 }));
-    eye.position.set(sx * 0.04 * S, 0.012 * S, 0.095 * S); headG.add(eye);
+    eye.position.set(sx * 0.04 * S, 0.012 * S, -0.095 * S); headG.add(eye);   // 8f: forward is -z
   }
   const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.035 * S, 0.008 * S, 0.01 * S),
     new THREE.MeshStandardMaterial({ color: 0x8a5a50, roughness: 0.6 }));
-  mouth.position.set(0, -0.045 * S, 0.102 * S); headG.add(mouth);
+  mouth.position.set(0, -0.045 * S, -0.102 * S); headG.add(mouth);
   const hair = new THREE.Mesh(new THREE.SphereGeometry(0.112 * S, 12, 8,
     0, Math.PI * 2, 0, Math.PI * 0.58), hairMat);
   hair.position.y = 0.015 * S; hair.scale.y = 1.12; headG.add(hair);
@@ -105,7 +105,7 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedNam
     const sh = cyl(0.042 * S, 0.036 * S, 0.40 * S, clothMat); sh.position.y = -0.20 * S; knee.add(sh);
     const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.085 * S, 0.05 * S, 0.17 * S),
       new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.5 }));
-    shoe.position.set(0, -0.43 * S, 0.035 * S); knee.add(shoe);
+    shoe.position.set(0, -0.43 * S, -0.045 * S); knee.add(shoe);
     parts[sx < 0 ? 'legL' : 'legR'] = hip;
     parts[sx < 0 ? 'shinL' : 'shinR'] = knee;
   }
@@ -144,20 +144,20 @@ export function animateHumanoid(agent, aY, dt) {
     case 'walk':
       gait = Math.sin(t * 7.5);
       bob = Math.abs(Math.cos(t * 7.5)) * 0.04;
-      lean = 0.1;
+      lean = -0.1;                                          // 8f: lean INTO the walk
       break;
     case 'sit': case 'type': case 'talk':
       hipsY = 0.46 * S; thigh = -Math.PI / 2 + 0.12; shin = Math.PI / 2 - 0.1;
       armX = -0.5; foreX = -0.5;
-      if (agent.pose === 'type') { lean = 0.14; foreX = -0.85; gesture = Math.sin(t * 12) * 0.05; }
+      if (agent.pose === 'type') { lean = -0.14; foreX = -0.85; gesture = Math.sin(t * 12) * 0.05; }
       if (agent.pose === 'talk') { headX = Math.sin(t * 3.5) * 0.08; gesture = Math.sin(t * 2.2) * 0.35; }
       break;
     case 'glance':
-      headX = -0.4;
+      headX = 0.4;                                          // 8f: tilt face up
       if (agent.seated) { hipsY = 0.46 * S; thigh = -Math.PI / 2 + 0.12; shin = Math.PI / 2 - 0.1; armX = -0.5; foreX = -0.5; }
       break;
     case 'headdown':
-      headX = 0.5; lean = 0.18;
+      headX = -0.5; lean = -0.18;                           // 8f: slump forward
       if (agent.seated) { hipsY = 0.46 * S; thigh = -Math.PI / 2 + 0.12; shin = Math.PI / 2 - 0.1; armX = -0.5; foreX = -0.6; }
       break;
     case 'collapsed': {

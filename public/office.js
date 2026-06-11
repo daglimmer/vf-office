@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
+import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
 const SPECTRUM = ['#2E5BFF', '#9B30FF', '#FF3DBE', '#FF9E2C', '#FFE32C', '#3DFF7A'];
 const ZONES = ['#2E5BFF', '#2E9BFF', '#3DFF7A', '#FFE32C', '#FF9E2C', '#FF4D4D'];
@@ -461,18 +462,18 @@ export function buildOffice(report) {
   }
 
   // ---------------------------------------------------------------- staff
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= 4; i++) {                          // 8f: anchors face +z
     const p = A(`doc_desk_${String(i).padStart(2, '0')}`);
-    desk(i, p.x, p.z - 0.55, 180, 1.5, 1, 'st');
-    chair(i, p.x, p.z, 180, 'st');
-    ringPendant(`prop_ringp_st${i}`, p.x, 2.45, p.z - 0.4);
+    desk(i, p.x, p.z + 0.55, 0, 1.5, 1, 'st');
+    chair(i, p.x, p.z, 0, 'st');
+    ringPendant(`prop_ringp_st${i}`, p.x, 2.45, p.z + 0.4);
   }
-  cableBundle('prop_cable_staff', A('doc_desk_02').x, A('doc_desk_02').z - 0.55, 180);
+  cableBundle('prop_cable_staff', A('doc_desk_02').x, A('doc_desk_02').z + 0.55, 0);
 
   // ---------------------------------------------------------------- devops
   for (let i = 1; i <= 8; i++) {
     const p = A(`work_desk_${String(i).padStart(2, '0')}`);
-    const face = i <= 4 ? 0 : 180, dz = i <= 4 ? 0.55 : -0.55;
+    const face = i <= 4 ? 180 : 0, dz = i <= 4 ? -0.55 : 0.55;   // 8f: face the desks
     desk(i, p.x, p.z + dz, face, 1.8, 3, 'dv');
     chair(i, p.x, p.z, face, 'dv');
     cableBundle(`prop_cable_dv${i}`, p.x, p.z + dz, face);
@@ -503,7 +504,7 @@ export function buildOffice(report) {
     cyl('prop_meet_leg', 31.5, 0.36, 3.0, 0.3, 0.72, M.prop, 16);
     for (let i = 1; i <= 7; i++) {
       const a = anchors.get(`meet_seat_${String(i).padStart(2, '0')}`);
-      const ang = 2 * Math.atan2(a.quat.y, a.quat.w) / D2R;
+      const ang = 2 * Math.atan2(a.quat.y, a.quat.w) / D2R + 180;   // 8f
       chair(i, a.pos.x, a.pos.z, ang, 'mt');
     }
     const ao = anchors.get('meet_seat_ollie');
@@ -540,10 +541,10 @@ export function buildOffice(report) {
 
   // ---------------------------------------------------------------- ceo
   {
-    const p = A('ceo_desk');
-    rbox('prop_ceo_desk', p.x, 0.73, p.z + 0.5, 2.2, 0.08, 0.9, M.oak, 0, 0.035);
-    for (const sx of [-1, 1]) box(`prop_ceo_dleg${sx}`, p.x + sx, 0.36, p.z + 0.5, 0.08, 0.72, 0.8, M.oak);
-    chair(1, p.x, p.z, 0, 'ceo', M.leather);
+    const p = A('ceo_desk');                              // 8f: anchor faces -z
+    rbox('prop_ceo_desk', p.x, 0.73, p.z - 0.5, 2.2, 0.08, 0.9, M.oak, 0, 0.035);
+    for (const sx of [-1, 1]) box(`prop_ceo_dleg${sx}`, p.x + sx, 0.36, p.z - 0.5, 0.08, 0.72, 0.8, M.oak);
+    chair(1, p.x, p.z, 180, 'ceo', M.leather);
     rbox('prop_ceo_sofa', 27.0, 0.22, 16.2, 1.8, 0.44, 0.8, M.leather, 0, 0.08);
     rbox('prop_ceo_cush', 27.0, 0.48, 16.12, 1.68, 0.16, 0.7, M.leather, 0, 0.07);
     rbox('prop_ceo_sofab', 27.0, 0.6, 16.55, 1.8, 0.52, 0.24, M.leather, 0, 0.09);
@@ -663,8 +664,8 @@ export function buildOffice(report) {
   rug('prop_rug_ceo', 31.5, 14.5, 4.4, 3.2, 0x33291e);
   for (let i = 1; i <= 4; i++) {                          // staff desk lamps
     const p = A(`doc_desk_${String(i).padStart(2, '0')}`);
-    box(`prop_lamparm_${i}`, p.x - 0.6, 0.88, p.z - 0.7, 0.03, 0.32, 0.03, M.metal);
-    const head = sphere(`prop_lamphead_${i}`, p.x - 0.55, 1.05, p.z - 0.62, 0.06, M.ringWarm, 0.7, 8, 6);
+    box(`prop_lamparm_${i}`, p.x - 0.6, 0.88, p.z + 0.7, 0.03, 0.32, 0.03, M.metal);
+    const head = sphere(`prop_lamphead_${i}`, p.x - 0.55, 1.05, p.z + 0.62, 0.06, M.ringWarm, 0.7, 8, 6);
     head.material = M.ringWarm.clone(); head.material.emissiveIntensity = 1.2;
   }
   // door frames at every opening (verticals + lintel)
@@ -817,6 +818,43 @@ export function buildOffice(report) {
   for (const x of [CX0 + 0.12, CX1 - 0.12])
     box(`prop_guide_${Math.round(x)}`, x, 0.04, (Z0 + ZW1) / 2, 0.04, 0.03, ZW1 - Z0 - 0.6, M.neon);
   box('prop_guide_dc', 20, 0.04, (ZW1 + 18.8) / 2, 1.4, 0.03, 1.6, M.neon);
+
+  // ---------------------------------------------------------------- Phase 9: static merge
+  // ~1500 meshes -> ~1 draw call per (material x fade-class x shadow-class).
+  // Excluded: clickables (raycast targets), screens (live canvas materials),
+  // the mirror, and anything transparent that must depth-sort on its own.
+  {
+    const KEEP = /^(hot_|floor_dc_mirror|prop_mon_|prop_cmdmon_|backdrop)/;
+    const fadeClass = n => /^(wall_|mullion|green_wall)/.test(n) ? 'wall'
+                         : /^ceiling_/.test(n) ? 'ceiling' : 'none';
+    const buckets = new Map();
+    for (const o of [...G.children]) {
+      if (!o.isMesh || KEEP.test(o.name)) continue;
+      const key = (o.material?.uuid ?? 'x') + ':' + fadeClass(o.name) + ':' + (o.castShadow ? 1 : 0) + (o.receiveShadow ? 1 : 0);
+      (buckets.get(key) ?? buckets.set(key, []).get(key)).push(o);
+    }
+    let merged = 0, removed = 0;
+    for (const list of buckets.values()) {
+      if (list.length < 2) continue;
+      try {
+        const geos = list.map(o => {
+          o.updateMatrix();
+          return o.geometry.clone().applyMatrix4(o.matrix);
+        });
+        const big = BufferGeometryUtils.mergeGeometries(geos, false);
+        if (!big) continue;
+        const proto = list[0];
+        const m = new THREE.Mesh(big, proto.material);
+        const fc = fadeClass(proto.name);
+        m.name = fc === 'wall' ? `wall_merged_${merged}` : fc === 'ceiling' ? `ceiling_${proto.name.split('_')[1] ?? 'merged'}_m${merged}` : `prop_merged_${merged}`;
+        m.castShadow = proto.castShadow; m.receiveShadow = proto.receiveShadow;
+        G.add(m);
+        for (const o of list) { G.remove(o); removed++; }
+        merged++;
+      } catch (e) { console.warn('[office] merge bucket failed:', e); }
+    }
+    console.log(`[office] static merge: ${removed} meshes -> ${merged} merged`);
+  }
 
   // 8d: runtime animation hook - rack data LEDs blink in pseudo-random bursts
   function tick(t) {

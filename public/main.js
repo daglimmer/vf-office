@@ -20,6 +20,8 @@ import { showAgentCard, hideAgentCard } from './agentcard.js';
 import { buildHumanoid, animateHumanoid } from './avatars.js';
 import { buildOffice } from './office.js';
 import { initInteractive, updateInteractive, clickInteractive } from './interactive.js';
+import { initScreens, updateScreens } from './screens.js';
+import { initMoments, updateMoments } from './moments.js';
 import { initNotifications } from './notifications.js';
 import { initTimeline } from './timeline.js';
 
@@ -864,17 +866,48 @@ if (EMBED) {
 
 // ----------------------------------------------------------------- modules
 initHud({ bus, sim, demo: () => demoMode });
+initScreens({ officeGroup: office.group, bus, sim });      // Phase 9: live data screens
 initInteractive({ scene, gltfScene: office.group, camera, renderer, sim, isEmbed: () => EMBED, post });   // Phase 8 (5)
+initMoments({ bus, sim });                                 // Phase 9: event moments
 initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents });
 initTimeline({ sim, demo: () => demoMode });
 
 // ----------------------------------------------------------------- loop
 const clock = new THREE.Clock();
+// ---- Phase 9: idle cinematic - after 3 min without input the camera drifts
+// slowly around the campus; any input instantly restores where you were.
+let lastInput = performance.now(), tour = null;
+const pokeIdle = () => {
+  lastInput = performance.now();
+  if (tour) {
+    camera.position.copy(tour.pos); controls.target.copy(tour.target);
+    tour = null;
+  }
+};
+for (const evn of ['pointerdown', 'pointermove', 'wheel', 'keydown'])
+  addEventListener(evn, pokeIdle, { passive: true });
+
 let simT = 0;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   simT += dt;
   office.tick?.(simT);                                     // 8d: rack data LEDs
+  updateScreens(dt, simT);                                 // Phase 9: live displays
+  updateMoments(dt);                                       // Phase 9: event fx
+  if (!tour && camMode === 'preset' && !flight && !sim.followed &&
+      performance.now() - lastInput > 180000) {
+    tour = { pos: camera.position.clone(), target: controls.target.clone(),
+             t: Math.atan2(camera.position.z - 13, camera.position.x - 20) };
+  }
+  if (tour) {
+    tour.t += dt * 0.045;
+    const R = 27 + Math.sin(tour.t * 0.6) * 5;
+    camera.position.lerp(new THREE.Vector3(
+      20 + Math.cos(tour.t) * R,
+      9 + Math.sin(tour.t * 0.43) * 4.5,
+      13 + Math.sin(tour.t) * R), Math.min(dt * 0.8, 1));
+    controls.target.lerp(new THREE.Vector3(20, 1.2, 13), Math.min(dt * 0.8, 1));
+  }
   for (const a of [...agents]) a.update(dt);
   holo.rotation.y += dt * 0.8;
   const op = holo.children[0].material.opacity;

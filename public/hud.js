@@ -59,15 +59,38 @@ export function initHud({ bus, sim, demo }) {
   const log5 = [], hist = [];
   let histFilter = 'all';
 
-  // ---------------- collapse behavior (§9.6)
+  // ---------------- collapse behavior (§9.6) + Phase 8f pin (Ray)
+  // States: auto (events expand it, collapses when idle) -> pinned open ->
+  // pinned closed. Persisted across reloads.
+  let pinState = localStorage.getItem('hudPin') ?? 'auto';
+  const pin = document.createElement('button');
+  pin.className = 'hud-pin';
+  function applyPin() {
+    root.classList.toggle('pin-closed', pinState === 'closed');
+    if (pinState === 'open') root.classList.add('open');
+    if (pinState === 'closed') root.classList.remove('open');
+    pin.textContent = pinState === 'open' ? '\u{1F4CC}' : pinState === 'closed' ? '\u2715' : '\u25CC';
+    pin.title = `sidebar: ${pinState} — click to cycle (auto \u2192 pinned open \u2192 pinned closed)`;
+    pin.classList.toggle('on', pinState !== 'auto');
+  }
+  pin.onclick = e => {
+    e.stopPropagation();
+    pinState = pinState === 'auto' ? 'open' : pinState === 'open' ? 'closed' : 'auto';
+    try { localStorage.setItem('hudPin', pinState); } catch {}
+    applyPin();
+  };
+  root.appendChild(pin);
+  applyPin();
+
   let expandTimer = null;
   function expandPulse() {
+    if (pinState !== 'auto') return;
     root.classList.add('open');
     clearTimeout(expandTimer);
     expandTimer = setTimeout(() => { if (!root.matches(':hover')) root.classList.remove('open'); }, 6000);
   }
-  root.addEventListener('mouseenter', () => root.classList.add('open'));
-  root.addEventListener('mouseleave', () => root.classList.remove('open'));
+  root.addEventListener('mouseenter', () => { if (pinState !== 'closed') root.classList.add('open'); });
+  root.addEventListener('mouseleave', () => { if (pinState === 'auto') root.classList.remove('open'); });
 
   root.querySelector('.hist-toggle').onclick = () => {
     const h = root.querySelector('.hud-history');
