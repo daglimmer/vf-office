@@ -17,6 +17,26 @@ gateway-down (collapsed pose + red card pulse) and recovery, live token/cost
 counters, the infra strip, and timeline pills. Steering buttons work locally
 (pause storekeeper → cascade to children, two-click kill).
 
+## Phase 5 — Ray's feedback (June 2026)
+
+- **Lighting**: ambient ~3x + hemisphere skylight (1.5), accent emissives doubled,
+  one pendant point light per room, corridor overhead strip + guide lights,
+  exposure 1.1 -> 1.3.
+- **Peak View**: walls fade to 30% / ceilings to 10% with a 0.5 s tween and a
+  subtle floor grid; restores on leaving Peak View.
+- **Camera**: `Free Cam` button toggles unrestricted orbit/zoom; `Walk (WASD)`
+  enters first-person mode (mouse look via pointer lock, Space or Esc exits).
+- **Agents**: puppet avatars (sphere head + cylinder body, ~1.2 u). Head color =
+  status (green active / orange idle / gray offline / red blocked), body color =
+  role (gold Command, blue DevOps, white Specialists), particle ring while
+  working, idle bob.
+- **Transport**: vite `/ws` proxy pointed at :3001 while the adapter listens on
+  :3000 — this was the permanent DEMO MODE. Proxy now defaults to :3000
+  (override with `ADAPTER_TARGET`). Adapter handles the `/ws` upgrade path
+  explicitly and serves `GET /snapshot`; if the WebSocket still fails, the
+  client polls `/snapshot` every 2 s (badge shows "HTTP POLLING") before
+  falling back to demo.
+
 ## Production wiring
 
 1. Run the Phase 2 stack (`office-bridge`), replacing its `adapter/index.js` and

@@ -407,7 +407,6 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { status: 'ok' });
     }
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
-    if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
     if (req.method === 'GET' && p === '/mapping.json') {
       return json(res, 200, { models: mapping.models ?? {}, budgets: mapping.budgets ?? {} });
     }
@@ -439,13 +438,7 @@ const server = http.createServer(async (req, res) => {
     json(res, 500, { status: 'error', message: e.message });
   }
 });
-server.on('upgrade', (req, sock) => {                    // Phase 5: explicit /ws path
-  let p = '/';
-  try { p = new URL(req.url, 'http://x').pathname; } catch {}
-  if (p === '/ws') return handleUpgrade(req, sock);
-  try { sock.write('HTTP/1.1 404 Not Found' + String.fromCharCode(13, 10, 13, 10)); } catch {}
-  sock.destroy();
-});
+server.on('upgrade', handleUpgrade);
 
 // ------------------------------------------------------------------ start
 openDb();

@@ -16,8 +16,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0f13;
   border-radius: 6px; padding: 5px 10px; font-size: 12px; cursor: pointer; backdrop-filter: blur(14px); }
 #presets button:hover { border-color: #4DD8FF; }
 #presets button.peak { border-color: var(--amber); }
-#presets button.mode { border-color: var(--green); margin-left: 10px; }   /* Phase 5 (4): camera mode toggles */
-#presets button.mode.on { background: rgba(61, 255, 122, .15); color: var(--green); }
 
 #demobadge { display: none; position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
   z-index: 11; background: rgba(255, 176, 46, .15); border: 1px solid var(--amber);

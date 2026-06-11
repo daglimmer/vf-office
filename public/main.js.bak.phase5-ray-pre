@@ -29,7 +29,7 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.3;                       // Phase 5 (1): brighter overall
+renderer.toneMappingExposure = 1.1;
 document.getElementById('view').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -54,10 +54,8 @@ controls.minPolarAngle = 0.1; controls.maxPolarAngle = 1.45;
 controls.minDistance = 5; controls.maxDistance = 80;
 controls.enableDamping = true;
 
-// Phase 5 (1) Ray: much brighter scene. Ambient ~3x, plus a soft blue-white skylight.
-scene.add(new THREE.AmbientLight(0x39404f, 1.0));
-scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x232730, 1.5));   // skylight
-const key = new THREE.DirectionalLight(0xcfd8ff, 0.8);
+scene.add(new THREE.HemisphereLight(0x8fa8d8, 0x16181e, 0.55));
+const key = new THREE.DirectionalLight(0xcfd8ff, 0.5);
 key.position.set(30, 40, 10); scene.add(key);
 
 addEventListener('resize', () => {
@@ -89,76 +87,10 @@ gltf.scene.traverse(o => {
   }
 });
 rooms = wp.rooms;
-
-// ---- Phase 5 (1) Ray: boost emissive accents 2x (spectrum LEDs, cloud lamps,
-// floor traces, ring lights, guide neon). Screens/skyline left as-is.
-{
-  const boosted = new Set();
-  gltf.scene.traverse(o => {
-    if (!o.isMesh || !o.material) return;
-    const m = o.material;
-    if (boosted.has(m.uuid)) return;
-    if (/^(spectrum_|cloud_cool|ring_warm|neon_cyan|hex_floor)/.test(m.name ?? '')) {
-      m.emissiveIntensity *= 2;
-      boosted.add(m.uuid);
-    }
-  });
-}
-
-// ---- Phase 5 (2) Ray: walls/ceilings fade in Peak View. Materials are shared
-// across meshes in the GLB, so clone per-mesh before we animate opacity.
-const peakFade = [];                       // { mat, base, peak }
-gltf.scene.traverse(o => {
-  if (!o.isMesh) return;
-  const peak = /^(wall_|mullion|green_wall)/.test(o.name) ? 0.3
-             : /^ceiling_/.test(o.name) ? 0.1 : null;
-  if (peak == null) return;
-  o.material = o.material.clone();
-  peakFade.push({ mat: o.material, base: o.material.opacity ?? 1, peak });
-});
-let peakOn = false, peakK = 0;
-const grid = new THREE.GridHelper(64, 64, 0x4dd8ff, 0x2a2e3a);   // subtle floor grid for Peak View
-grid.position.set(20, 0.03, 12);
-grid.material.transparent = true; grid.material.opacity = 0;
-grid.visible = false;
-scene.add(grid);
-
 for (const [a, b] of wp.edges) {
   const cost = anchors.get(a).pos.distanceTo(anchors.get(b).pos);
   (graph.get(a) ?? graph.set(a, []).get(a)).push({ to: b, cost });
   (graph.get(b) ?? graph.set(b, []).get(b)).push({ to: a, cost });
-}
-
-// ---- Phase 5 (1) Ray: ceiling pendants cast real point lights (1 per room,
-// well under the 3/room perf cap) + corridor overhead strip & guide lights.
-{
-  for (const [r, info] of Object.entries(rooms)) {
-    if (r === 'corridor') continue;
-    const l = new THREE.PointLight(0xfff1d6, 0.7, 10, 1.6);
-    l.position.set(info.center[0], 2.25, info.center[2]);
-    scene.add(l);
-  }
-  const cs = [];
-  for (let i = 1; i <= 6; i++) {
-    const a = anchors.get(`nav_corridor_${String(i).padStart(2, '0')}`);
-    if (a) cs.push(a.pos);
-  }
-  if (cs.length >= 2) {
-    const a0 = cs[0], a1 = cs[cs.length - 1];
-    const mid = a0.clone().add(a1).multiplyScalar(0.5);
-    const strip = new THREE.Mesh(
-      new THREE.BoxGeometry(a0.distanceTo(a1) + 2, 0.05, 0.2),
-      new THREE.MeshStandardMaterial({ color: 0x0b0d12, emissive: 0x4dd8ff, emissiveIntensity: 1.8 }));
-    strip.position.set(mid.x, 2.42, mid.z);
-    strip.rotation.y = -Math.atan2(a1.z - a0.z, a1.x - a0.x);
-    scene.add(strip);
-    for (const i of [1, 3, 5]) {
-      if (!cs[i]) continue;
-      const l = new THREE.PointLight(0xbfd9ff, 0.55, 7, 1.6);
-      l.position.copy(cs[i]).setY(2.2);
-      scene.add(l);
-    }
-  }
 }
 
 // hologram at meet_holo (§12): layered planes + sprites + point light
@@ -235,44 +167,31 @@ function queueSpot(door, i) {
 }
 
 // ----------------------------------------------------------------- avatar
-// Phase 5 (3) Ray: puppet avatars - sphere head + tapered cylinder body, ~1.2u.
-// Head color = live status, body color = role group, accent collar keeps the
-// per-agent spectrum color (also drives spawn/kill/fallback glow fx).
-const ROLE_COLOR = { command: '#FFD24D', devops: '#2E5BFF', specialist: '#E8EAEE' };
-const STATUS_COLOR = { active: '#3DFF7A', idle: '#FF9E2C', offline: '#8A8F98', blocked: '#FF4D4D' };
-function makeAvatar(colorHex, scale = 1, role = 'specialist') {
-  const accent = new THREE.Color(colorHex);
-  const roleC = new THREE.Color(ROLE_COLOR[role] ?? ROLE_COLOR.specialist);
-  const bodyMat = new THREE.MeshStandardMaterial({ color: roleC, emissive: roleC, emissiveIntensity: 0.18, roughness: 0.55, metalness: 0.1 });
-  const idleC = new THREE.Color(STATUS_COLOR.idle);
-  const headMat = new THREE.MeshStandardMaterial({ color: idleC, emissive: idleC, emissiveIntensity: 0.6, roughness: 0.4 });
-  const tint = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.55 });
+function makeAvatar(colorHex, scale = 1) {
+  const c = new THREE.Color(colorHex);
+  const mat = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: 0.7 });
+  const tint = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.55 });
   const root = new THREE.Group(), parts = {};
-  parts.body = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.24, 0.72, 20), bodyMat);
-  parts.body.position.y = 0.4;
-  parts.collar = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.028, 10, 24), tint);
-  parts.collar.rotation.x = Math.PI / 2; parts.collar.position.y = 0.79;
-  parts.head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 20, 16), headMat);
-  parts.head.position.y = 1.0;
-  // particle ring at the feet - shown while the agent is actively working
-  const ring = new THREE.Group();
-  const rm = new THREE.SpriteMaterial({ color: 0x3dff7a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
-  for (let i = 0; i < 10; i++) {
-    const sp = new THREE.Sprite(rm);
-    const a = i / 10 * Math.PI * 2;
-    sp.position.set(Math.cos(a) * 0.32, 0.06, Math.sin(a) * 0.32);
-    sp.scale.setScalar(0.06);
-    ring.add(sp);
+  const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  parts.body = box(0.42, 0.5, 0.24, mat); parts.body.position.y = 0.85;
+  parts.chest = box(0.44, 0.1, 0.26, tint); parts.chest.position.y = 1.0;
+  parts.head = box(0.26, 0.26, 0.26, mat); parts.head.position.y = 1.28;
+  const eyes = box(0.2, 0.05, 0.02, tint); eyes.position.set(0, 0.02, -0.14); parts.head.add(eyes);
+  for (const s of [-1, 1]) {
+    const arm = new THREE.Group(); arm.position.set(s * 0.28, 1.05, 0);
+    const a = box(0.1, 0.44, 0.1, mat); a.position.y = -0.22; arm.add(a);
+    const leg = new THREE.Group(); leg.position.set(s * 0.12, 0.6, 0);
+    const l = box(0.13, 0.55, 0.13, mat); l.position.y = -0.28; leg.add(l);
+    parts[s < 0 ? 'armL' : 'armR'] = arm; parts[s < 0 ? 'legL' : 'legR'] = leg;
   }
-  ring.visible = false;
-  root.add(parts.body, parts.collar, parts.head, ring);
+  for (const k in parts) root.add(parts[k]);
   root.scale.setScalar(scale);
-  return { root, parts, materials: [bodyMat, headMat, tint], tint, headMat, ring };
+  return { root, parts, materials: [mat, tint], tint };
 }
 function makeLabel(name, sub) {
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 72;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
-  sprite.scale.set(1.9, 0.55, 1); sprite.position.y = 1.55;   // above the puppet head
+  sprite.scale.set(1.9, 0.55, 1); sprite.position.y = 1.95;
   sprite.userData.draw = (color, text) => {
     const x = cv.getContext('2d');
     x.clearRect(0, 0, 256, 72); x.fillStyle = 'rgba(20,22,26,.8)'; x.fillRect(0, 0, 256, 72);
@@ -293,11 +212,10 @@ export const byId = new Map();          // persistent agentId -> Agent (incl car
 let briefingCount = 0;
 
 export class Agent {
-  constructor({ name, sub, color, scale = 1, startAnchor = 'spawn_dc', agentId = null, cardId = null, role = null }) {
+  constructor({ name, sub, color, scale = 1, startAnchor = 'spawn_dc', agentId = null, cardId = null }) {
     this.name = name; this.agentId = agentId; this.cardId = cardId;
-    this.role = role ?? (cardId ? 'devops' : 'specialist');
-    const av = makeAvatar(color ?? SPECTRUM[agents.length % 6], scale, this.role);
-    Object.assign(this, { group: av.root, parts: av.parts, materials: av.materials, tintMat: av.tint, headMat: av.headMat, ring: av.ring });
+    const av = makeAvatar(color ?? SPECTRUM[agents.length % 6], scale);
+    Object.assign(this, { group: av.root, parts: av.parts, materials: av.materials, tintMat: av.tint });
     this.label = makeLabel(name, sub); this.group.add(this.label);
     this.lastNode = startAnchor;
     this.group.position.copy(anchors.get(startAnchor).pos);
@@ -309,16 +227,6 @@ export class Agent {
     scene.add(this.group); agents.push(this);
     if (agentId) byId.set(agentId, this);
     if (cardId) byCard.set(cardId, this);
-    this.refreshStatus();
-  }
-  refreshStatus() {                       // Phase 5 (3): head color = live status
-    let st = 'idle';
-    if (this.blocked) st = 'blocked';
-    else if (this.overlay === 'down' || this.overlay === 'killed') st = 'offline';
-    else if (['working', 'briefing', 'debrief', 'documentation'].includes(this.state)) st = 'active';
-    const c = new THREE.Color(STATUS_COLOR[st]);
-    this.headMat.color.copy(c); this.headMat.emissive.copy(c);
-    this.ring.visible = this.state === 'working' && st === 'active';
   }
   room() {
     const p = this.group.position;
@@ -370,7 +278,6 @@ export class Agent {
       case 'lunch': this.acquire('lounge', s => { this.hold('lounge', s); this.goto(s, () => { this.sitAt(s, 'sit'); this.timer = TIMINGS.lunch; }); }); break;
       case 'despawning': this.goto('despawn_dc', () => { this.fx = { kind: 'despawn', t: 0 }; }); break;
     }
-    this.refreshStatus();
   }
   enterBriefing() { this.inMeeting = true; briefingCount++; syncOllie(); }
   leaveBriefing() { if (this.inMeeting) { this.inMeeting = false; briefingCount--; syncOllie(); } }
@@ -378,11 +285,9 @@ export class Agent {
     if (on && !this.blocked) {
       this.blocked = true; this.savedPath = this.path; this.path = []; this.pose = 'headdown';
       this.label.userData.draw('#FF4D4D', 'BLOCKED');
-      this.refreshStatus();
     } else if (!on && this.blocked) {
       this.blocked = false; this.label.userData.draw(null);
       this.setLifecycle(this.lifecycle ?? 'idle');
-      this.refreshStatus();
     }
   }
   setOverlay(kind) {                      // §7.2 precedence handled by caller order
@@ -391,7 +296,6 @@ export class Agent {
     if (kind === 'down') { this.path = []; this.pose = 'collapsed'; this.label.userData.draw('#FF4D4D', 'DOWN'); }
     if (kind === 'killed') { this.tintMat.emissive = new THREE.Color('#FF4D4D'); this.fx = { kind: 'despawn', t: 0 }; }
     if (kind === 'ok') { this.label.userData.draw(null); this.setLifecycle(this.lifecycle ?? 'idle'); }
-    this.refreshStatus();
   }
   fallbackFlash() { this.glowT = 3.0; }   // §11.2 emissiveIntensity 1->3->1 over 3s
   remove() {
@@ -446,33 +350,37 @@ export class Agent {
     }
     this.animate(dt);
   }
-  animate() {                              // Phase 5 (3): puppet poses + idle bob
+  animate() {
     const p = this.parts, t = this.t;
-    this.group.rotation.x = 0;
-    p.head.position.y = 1.0;
-    let baseY = Math.sin(t * 2.2) * 0.05;            // idle float, +/-0.05
+    const set = (o, x) => { o.rotation.x = x; };
+    set(p.armL, 0); set(p.armR, 0); set(p.legL, 0); set(p.legR, 0);
+    p.head.rotation.x = 0; this.group.rotation.x = 0;
+    let baseY = 0;
     switch (this.pose) {
-      case 'walk': baseY = Math.abs(Math.sin(t * 8)) * 0.06; this.group.rotation.x = 0.06; break;
+      case 'walk': { const s = Math.sin(t * 7);
+        set(p.legL, s * 0.6); set(p.legR, -s * 0.6); set(p.armL, -s * 0.5); set(p.armR, s * 0.5);
+        baseY = Math.abs(Math.sin(t * 7)) * 0.04; break; }
       case 'sit': case 'type': case 'talk':
-        baseY = -0.18 + Math.sin(t * 2.2) * 0.02;
-        if (this.pose === 'type') p.head.position.y = 1.0 + Math.sin(t * 12) * 0.015;
-        if (this.pose === 'talk') p.head.position.y = 1.0 + Math.sin(t * 4) * 0.03;
+        baseY = -0.22; set(p.legL, -1.35); set(p.legR, -1.35);
+        if (this.pose === 'type') { set(p.armL, -0.95 + Math.sin(t * 13) * 0.07); set(p.armR, -0.95 + Math.cos(t * 11) * 0.07); }
+        if (this.pose === 'talk') p.head.rotation.x = Math.sin(t * 4) * 0.12;
         break;
-      case 'glance': p.head.position.y = 1.07; baseY = this.seated ? -0.18 : baseY; break;
-      case 'headdown': p.head.position.y = 0.9; baseY = 0; break;
-      case 'collapsed': this.group.rotation.x = -Math.PI / 2; baseY = 0.25; break;   // lying
+      case 'glance': p.head.rotation.x = -0.45; baseY = this.seated ? -0.22 : 0;
+        if (this.seated) { set(p.legL, -1.35); set(p.legR, -1.35); } break;
+      case 'headdown': p.head.rotation.x = 0.55; break;
+      case 'collapsed': this.group.rotation.x = -Math.PI / 2; baseY = 0.3; break;   // lying
+      default: set(p.armL, Math.sin(t * 1.5) * 0.05); set(p.armR, -Math.sin(t * 1.5) * 0.05);
+        baseY = Math.sin(t * 1.5) * 0.01;
     }
-    if (this.ring.visible) this.ring.rotation.y = t * 1.5;
     const aY = this.seated ? anchors.get(this.seated).pos.y : 0;
     this.group.position.y = aY + baseY;
   }
 }
 
 // ----------------------------------------------------------------- ollie & ceo
-const ollie = new Agent({ name: 'Ollie', sub: 'orchestrator', color: '#4DD8FF', scale: 1.18, startAnchor: 'ollie_station', agentId: 'ollie', role: 'command' });
+const ollie = new Agent({ name: 'Ollie', sub: 'orchestrator', color: '#4DD8FF', scale: 1.18, startAnchor: 'ollie_station', agentId: 'ollie' });
 ollie.sitAt('ollie_station', 'type');
-ollie.state = 'working'; ollie.refreshStatus();
-const ceoAv = new Agent({ name: 'CEO', sub: 'executive', color: '#FFD24D', scale: 1.1, startAnchor: 'ceo_desk', agentId: 'ceo', role: 'command' });
+const ceoAv = new Agent({ name: 'CEO', sub: 'executive', color: '#FFD24D', scale: 1.1, startAnchor: 'ceo_desk', agentId: 'ceo' });
 ceoAv.sitAt('ceo_desk', 'idle');
 function syncOllie() {
   holoTarget = briefingCount > 0 ? 1.0 : 0.25;
@@ -496,7 +404,7 @@ export const sim = {
     sim.followed = id == null ? null : (typeof id === 'string' ? (byId.get(id) ?? byCard.get(id) ?? null) : id);
     bus.dispatchEvent(new CustomEvent('follow', { detail: sim.followed?.agentId ?? sim.followed?.cardId ?? null }));
   },
-  flyToRoom(room) { if (presets[room]) { peakOn = room === 'peak'; flyTo(presets[room]); } },   // Phase 5 (2)
+  flyToRoom(room) { if (presets[room]) flyTo(presets[room]); },
   flyToAgent(id) { const a = byId.get(id) ?? byCard.get(id); if (a) sim.flyToRoom(a.room()); },
   getAgents: () => agents,
   rooms, anchors, scene, byId, byCard,
@@ -511,79 +419,6 @@ for (const r of [...Object.keys(rooms), 'peak']) {
   if (r === 'peak') b.classList.add('peak');
   b.onclick = () => sim.flyToRoom(r);
   bar.appendChild(b);
-}
-
-// ----------------------------------------------------------------- camera modes (Phase 5 (4), Ray)
-// preset (default, unchanged) | free (full orbit + zoom) | walk (WASD first-person)
-const PRESET_LIMITS = { minPolar: 0.1, maxPolar: 1.45, minDist: 5, maxDist: 80 };
-let camMode = 'preset';
-const keys = new Set();
-let walkYaw = 0, walkPitch = 0;
-const modeBtn = document.createElement('button');
-modeBtn.className = 'mode';
-const walkBtn = document.createElement('button');
-walkBtn.className = 'mode';
-walkBtn.textContent = 'Walk (WASD)';
-bar.append(modeBtn, walkBtn);
-
-function setCamMode(m) {
-  const prev = camMode;
-  if (prev === 'walk' && m !== 'walk' && document.pointerLockElement) document.exitPointerLock();
-  camMode = m;
-  controls.enabled = m !== 'walk';
-  if (m === 'free') {
-    sim.followAgent(null); flight = null;
-    controls.minPolarAngle = 0.02; controls.maxPolarAngle = Math.PI / 2 - 0.02;
-    controls.minDistance = 1.5; controls.maxDistance = 130;
-  } else {
-    controls.minPolarAngle = PRESET_LIMITS.minPolar; controls.maxPolarAngle = PRESET_LIMITS.maxPolar;
-    controls.minDistance = PRESET_LIMITS.minDist; controls.maxDistance = PRESET_LIMITS.maxDist;
-  }
-  if (m === 'walk') {
-    sim.followAgent(null); flight = null;
-    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
-    walkYaw = Math.atan2(-dir.x, -dir.z); walkPitch = 0;
-    camera.position.y = 1.6;                                  // eye height
-    renderer.domElement.requestPointerLock?.();
-  } else if (prev === 'walk') {
-    // re-aim orbit target ahead of the camera so there is no jump leaving walk mode
-    const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
-    controls.target.copy(camera.position).addScaledVector(dir, 6);
-  }
-  modeBtn.textContent = m === 'free' ? 'Presets' : 'Free Cam';
-  modeBtn.classList.toggle('on', m === 'free');
-  walkBtn.classList.toggle('on', m === 'walk');
-}
-modeBtn.onclick = () => setCamMode(camMode === 'free' ? 'preset' : 'free');
-walkBtn.onclick = () => setCamMode(camMode === 'walk' ? 'preset' : 'walk');
-setCamMode('preset');
-
-addEventListener('keydown', e => {
-  if (e.code === 'Space' && camMode === 'walk') { e.preventDefault(); setCamMode('preset'); return; }
-  keys.add(e.code);
-});
-addEventListener('keyup', e => keys.delete(e.code));
-addEventListener('mousemove', e => {
-  if (camMode !== 'walk' || !document.pointerLockElement) return;
-  walkYaw -= e.movementX * 0.0024;
-  walkPitch = Math.max(-1.4, Math.min(1.4, walkPitch - e.movementY * 0.0024));
-});
-document.addEventListener('pointerlockchange', () => {
-  if (camMode === 'walk' && !document.pointerLockElement) setCamMode('preset');   // Esc also exits walk
-});
-function walkUpdate(dt) {
-  camera.quaternion.setFromEuler(new THREE.Euler(walkPitch, walkYaw, 0, 'YXZ'));
-  const fwd = new THREE.Vector3(-Math.sin(walkYaw), 0, -Math.cos(walkYaw));
-  const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
-  const v = new THREE.Vector3();
-  if (keys.has('KeyW')) v.add(fwd);
-  if (keys.has('KeyS')) v.sub(fwd);
-  if (keys.has('KeyD')) v.add(right);
-  if (keys.has('KeyA')) v.sub(right);
-  if (v.lengthSq()) camera.position.addScaledVector(v.normalize(), 3.2 * dt);
-  camera.position.y = 1.6;
-  camera.position.x = Math.max(-2, Math.min(42, camera.position.x));
-  camera.position.z = Math.max(-4, Math.min(28, camera.position.z));
 }
 
 // ----------------------------------------------------------------- bridge events
@@ -629,49 +464,15 @@ function pAgent(id) {
 }
 window.__inject = handleEvent;
 
-// ----------------------------------------------------------------- transport: WS -> HTTP polling -> demo
-// Phase 5 (5) Ray: if the WebSocket cannot connect, poll the adapter's /snapshot
-// endpoint before giving up and going full demo. Polling diffs card columns and
-// synthesizes card.moved / card.deleted events.
+// ----------------------------------------------------------------- transport: WS or demo
 export let demoMode = false;
-let polling = false;
 function connect() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/ws`);   // proxied by vite in dev; direct on adapter
-  const giveUp = setTimeout(() => { ws.close(); httpFallback(); }, 2000);
+  const ws = new WebSocket(`ws://${location.host}/ws`);   // proxied by vite in dev; direct on adapter
+  const giveUp = setTimeout(() => { ws.close(); startDemo(); }, 2000);
   ws.onopen = () => clearTimeout(giveUp);
   ws.onmessage = m => handleEvent(JSON.parse(m.data));
-  ws.onclose = () => { if (!demoMode && !polling) setTimeout(connect, 2000); };
+  ws.onclose = () => { if (!demoMode) setTimeout(connect, 2000); };
   ws.onerror = () => {};
-}
-const polledCols = new Map();             // cardId -> last seen column
-function applySnapshot(snap) {
-  const seen = new Set();
-  for (const c of snap.cards ?? []) {
-    seen.add(c.cardId);
-    const prev = polledCols.get(c.cardId);
-    polledCols.set(c.cardId, c.column);
-    if (prev != null && prev !== c.column)
-      handleEvent({ event: 'card.moved', cardId: c.cardId, from: prev, to: c.column, assignee: c.assignee, ts: Math.floor(Date.now() / 1000) });
-  }
-  for (const id of [...polledCols.keys()]) {
-    if (!seen.has(id)) { polledCols.delete(id); handleEvent({ event: 'card.deleted', cardId: id, ts: Math.floor(Date.now() / 1000) }); }
-  }
-  handleEvent(snap);                       // snapshot handler spawns any new cards
-}
-async function httpFallback() {
-  try {
-    const snap = await fetch('/snapshot').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-    if (polling || demoMode) return;
-    polling = true;
-    const badge = document.getElementById('demobadge');
-    badge.textContent = 'HTTP POLLING - WebSocket unavailable';
-    badge.style.display = 'block';
-    applySnapshot(snap);
-    setInterval(async () => {
-      try { applySnapshot(await fetch('/snapshot').then(r => r.json())); } catch { /* adapter blip */ }
-    }, 2000);
-  } catch { startDemo(); }
 }
 function startDemo() {
   if (demoMode) return;
@@ -695,34 +496,20 @@ renderer.setAnimationLoop(() => {
   const op = holo.children[0].material.opacity;
   holo.children[0].material.opacity = op + (holoTarget * 0.16 - op) * Math.min(dt * 4, 1);
   holo.userData.light.intensity += (holoTarget * 0.5 - holo.userData.light.intensity) * Math.min(dt * 4, 1);
-  // Phase 5 (2): tween walls/ceilings + grid when entering/leaving Peak View (0.5s)
-  const pkTarget = peakOn ? 1 : 0;
-  if (peakK !== pkTarget) {
-    peakK = THREE.MathUtils.clamp(peakK + Math.sign(pkTarget - peakK) * dt / 0.5, 0, 1);
-    for (const f of peakFade) {
-      f.mat.opacity = f.base * (1 - peakK) + f.peak * peakK;
-      const tr = peakK > 0.001;
-      if (f.mat.transparent !== tr) { f.mat.transparent = tr; f.mat.needsUpdate = true; }
-      f.mat.depthWrite = !tr;
-    }
-    grid.visible = peakK > 0.001;
-    grid.material.opacity = 0.35 * peakK;
-  }
-  if (camMode === 'walk') walkUpdate(dt);
-  if (flight && camMode !== 'walk') {
+  if (flight) {
     flight.k = Math.min(flight.k + dt * 1.3, 1);
     const e = flight.k * flight.k * (3 - 2 * flight.k);
     camera.position.lerpVectors(flight.from, flight.to, e);
     controls.target.lerpVectors(flight.t0, flight.t1, e);
     if (flight.k >= 1) flight = null;
   }
-  if (sim.followed && camMode !== 'walk') {
+  if (sim.followed) {
     const p = sim.followed.group.position;
     controls.target.lerp(new THREE.Vector3(p.x, 1.2, p.z), Math.min(dt * 5, 1));
     const want = new THREE.Vector3(p.x + 4, 4.5, p.z + 4);
     camera.position.lerp(want, Math.min(dt * 2.2, 1));
   }
-  if (camMode !== 'walk') controls.update();
+  controls.update();
   composer.render();
   css2d.render(scene, camera);
 });
