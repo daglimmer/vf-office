@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { SSAOPass } from 'three/addons/postprocessing/SSAOPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
@@ -70,21 +71,21 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 30
 camera.position.set(20, 28, 44);
 
 // Phase 8b: image-based ambience - every material picks up soft reflections.
-{
+try {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
   scene.environmentIntensity = 0.4;                       // keep the dark mood
-}
+} catch (e) { console.warn('[office] environment setup failed:', e); }
 
-const composer = new EffectComposer(renderer);
-const ssao = new SSAOPass(scene, camera, innerWidth, innerHeight);   // Phase 8b: contact AO
-ssao.kernelRadius = 0.5; ssao.minDistance = 0.0008; ssao.maxDistance = 0.12;
-composer.addPass(ssao);
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.5, 0.85);
-composer.addPass(bloom);
-// Phase 8c: crisp edges + filmic grade (gentle S-curve, teal shadows / warm
-// highlights, vignette) - the "expensive render" finish.
-composer.addPass(new SMAAPass(innerWidth, innerHeight));
+// ---- Phase 8c fix: selectable pipeline. SSAO black-screens on some GPU/
+// driver combos, so the default chain skips it. Override via URL:
+//   ?fx=full  render+AO+bloom+SMAA+grade   (the whole thing)
+//   ?fx=noao  render+bloom+SMAA+grade      (DEFAULT)
+//   ?fx=basic render+bloom                 (pre-8c look)
+//   ?fx=off   no post-processing at all    (diagnosis)
+const FX = new URLSearchParams(location.search).get('fx') ?? 'noao';
+console.log('[office] fx pipeline:', FX);
+
 const GradeShader = {
   uniforms: { tDiffuse: { value: null } },
   vertexShader: /* glsl */`
@@ -104,7 +105,21 @@ const GradeShader = {
       gl_FragColor = vec4(x, c.a);
     }`,
 };
-composer.addPass(new ShaderPass(GradeShader));
+
+const composer = new EffectComposer(renderer);
+if (FX === 'full') {
+  const ssao = new SSAOPass(scene, camera, innerWidth, innerHeight);
+  ssao.kernelRadius = 0.5; ssao.minDistance = 0.0008; ssao.maxDistance = 0.12;
+  composer.addPass(ssao);
+} else {
+  composer.addPass(new RenderPass(scene, camera));
+}
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.5, 0.85);
+composer.addPass(bloom);
+if (FX === 'full' || FX === 'noao') {
+  composer.addPass(new SMAAPass(innerWidth, innerHeight));
+  composer.addPass(new ShaderPass(GradeShader));
+}
 composer.addPass(new OutputPass());
 
 const css2d = new CSS2DRenderer();
@@ -889,6 +904,6 @@ renderer.setAnimationLoop(() => {
     camera.position.lerp(want, Math.min(dt * 2.2, 1));
   }
   if (camMode !== 'walk') controls.update();
-  composer.render();
+  if (FX === 'off') renderer.render(scene, camera); else composer.render();
   css2d.render(scene, camera);
 });

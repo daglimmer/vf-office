@@ -602,15 +602,18 @@ export function buildOffice(report) {
   // skirting along the corridor walls
   for (const x of [CX0 + 0.1, CX1 - 0.1])
     box(`prop_skirt_${Math.round(x * 10)}`, x, 0.07, (Z0 + ZW1) / 2, 0.05, 0.14, ZW1 - Z0 - 0.5, M.prop);
-  // Phase 8c hero reflection: subtle dark mirror under the DC hex floor
-  {
-    const mirror = new Reflector(new THREE.CircleGeometry(DC.r - 0.35, 48), {
-      textureWidth: 1024, textureHeight: 1024, color: 0x1d2126,
-    });
-    mirror.rotation.x = -Math.PI / 2;
-    mirror.position.set(DC.x, 0.006, DC.z);
-    add(mirror, 'floor_dc_mirror');
-  }
+  // Phase 8c hero reflection: subtle dark mirror under the DC hex floor.
+  // Disable with ?mirror=0 if a driver misbehaves; failures are non-fatal.
+  try {
+    if (new URLSearchParams(location.search).get('mirror') !== '0') {
+      const mirror = new Reflector(new THREE.CircleGeometry(DC.r - 0.35, 48), {
+        textureWidth: 1024, textureHeight: 1024, color: 0x1d2126,
+      });
+      mirror.rotation.x = -Math.PI / 2;
+      mirror.position.set(DC.x, 0.006, DC.z);
+      add(mirror, 'floor_dc_mirror');
+    }
+  } catch (e) { console.warn('[office] DC mirror disabled:', e); }
 
   // ---------------------------------------------------------------- corridor guides
   for (const x of [CX0 + 0.12, CX1 - 0.12])
