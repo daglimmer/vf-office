@@ -24,6 +24,24 @@ const WALK_SPEED = 1.4, TURN_SPEED = 8.0;
 const SPECTRUM = ['#2E5BFF', '#9B30FF', '#FF3DBE', '#FF9E2C', '#FFE32C', '#3DFF7A'];
 const TIMINGS = { debrief: 20, documentation: 30, lunch: 45, fx: 1.5 };
 
+// ----------------------------------------------------------------- embed mode (Phase 7)
+// ?embed=1 -> running inside the VF Dashboard iframe: tag the body (CSS hooks),
+// add a "<- Dashboard" link. Standalone behavior is untouched without the flag.
+export const EMBED = new URLSearchParams(location.search).get('embed') === '1';
+if (EMBED) {
+  document.body.classList.add('embed');
+  const back = document.createElement('a');
+  back.id = 'backdash';
+  back.href = '#';
+  back.textContent = '← Dashboard';
+  back.title = 'back to dashboard';
+  back.onclick = e => {
+    e.preventDefault();
+    try { window.top.location.href = '/'; } catch { /* cross-origin host */ }
+  };
+  document.body.appendChild(back);
+}
+
 // ----------------------------------------------------------------- renderer + bloom (§12)
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);

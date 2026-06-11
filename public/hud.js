@@ -18,7 +18,7 @@ export function initHud({ bus, sim, demo }) {
     <div class="hud-tabs">
       <button data-tab="office" class="on">3D Office</button>
       <button data-tab="backups">Backups</button>
-      <button data-tab="docs">Docs</button>
+      <button data-tab="docs">&#128196; Docs</button>
     </div>
     <div class="hud-stats">
       <div><b data-b="active">0</b><span>active</span></div>

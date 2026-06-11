@@ -196,3 +196,35 @@ tr.bk-fail-row { background: rgba(255,77,77,.05); }
 .md blockquote { border-left: 3px solid #4DD8FF; margin: 8px 0; padding: 2px 12px; color: var(--mut); }
 .md hr { border: 0; border-top: 1px solid rgba(255,255,255,.1); margin: 14px 0; }
 .md-pre { font-size: 12px; white-space: pre-wrap; }
+
+/* ---------------- Phase 7: docs drawer + embed mode ---------------- */
+.side-panel { position: fixed; top: 0; right: 36px; bottom: 46px; width: 380px; z-index: 19;
+  background: var(--glass); backdrop-filter: blur(14px); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column; transform: translateX(120%); transition: transform .25s ease; }
+.side-panel.open { transform: none; }
+.sp-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08); flex: none; }
+.sp-head b { font-size: 13px; }
+.sp-src { color: var(--mut); font-size: 10px; flex: 1; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.sp-back { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.15);
+  color: var(--fg); border-radius: 5px; cursor: pointer; font-size: 11px; padding: 2px 9px; }
+.sp-back:hover { border-color: #4DD8FF; }
+.sp-body { flex: 1; overflow: auto; padding: 10px 12px; font-size: 12px; }
+.docs-tree-v2 .dt-root { margin: 12px 0 4px; }
+.docs-tree-v2 .dt-root:first-child { margin-top: 2px; }
+.dt-empty { color: var(--mut); font-size: 11px; font-style: italic; padding: 2px 8px; }
+
+/* skeleton shimmer (loading state) */
+.skel-wrap { padding: 6px 2px; }
+.skel { height: 12px; border-radius: 4px; margin: 10px 0;
+  background: linear-gradient(90deg, rgba(255,255,255,.05) 25%, rgba(255,255,255,.13) 50%, rgba(255,255,255,.05) 75%);
+  background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* embed mode (?embed=1) */
+#backdash { position: fixed; top: 10px; left: 10px; z-index: 12; background: var(--glass);
+  color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 12px;
+  font-size: 12px; text-decoration: none; backdrop-filter: blur(14px); }
+#backdash:hover { border-color: #4DD8FF; color: #4DD8FF; }
+body.embed #presets { left: 118px; max-width: 50vw; }

@@ -64,6 +64,20 @@ than the `ws` npm package — same behavior (push snapshot on connect, 2 s kanba
 diff broadcast), no new deps. `storekeeper` source is plain CJS (`.js`, not
 `.ts`) to match the adapter.
 
+## Phase 7 — Docs drawer + dashboard embed
+
+- **Docs Portal v2**: the Docs tab now opens a 380px frosted-glass drawer that
+  slides in from the right. Tree view of skills/, souls/, memory/, docs/;
+  clicking a file renders markdown inline (built-in renderer, no deps) with a
+  back button to return to the tree. States: skeleton shimmer while loading,
+  "Docs unavailable — adapter offline", "No files in this folder". Adapter
+  endpoints unchanged.
+- **Embed mode**: load with `?embed=1` (the VF Dashboard iframe at /office).
+  Adds `body.embed` + a "← Dashboard" link (top-left, `window.top` redirect,
+  cross-origin safe). Preset buttons and camera controls untouched; the
+  existing resize handler already fits the canvas to the iframe viewport.
+  Without the flag, standalone behavior is identical to Phase 6.
+
 ## Production wiring
 
 1. Run the Phase 2 stack (`office-bridge`), replacing its `adapter/index.js` and
