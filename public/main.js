@@ -43,6 +43,28 @@ addEventListener('unhandledrejection', e => bootFail(String(e.reason?.message ??
 const SAFE = new URLSearchParams(location.search).get('safe') === '1';
 if (SAFE) console.warn('[office] SAFE MODE: screens/moments disabled');
 
+// ---- Phase 9.2: quality tier. 'high' (default) or 'low'. Auto-degrades once
+// if measured fps stays poor, and remembers the decision.
+const QPARAM = new URLSearchParams(location.search).get('q');
+let Q = QPARAM ?? (() => { try { return localStorage.getItem('officeQ'); } catch { return null; } })() ?? 'high';
+if (Q !== 'low' && Q !== 'high') Q = 'high';
+console.log('[office] quality:', Q);
+
+// ---- Phase 9.2: boot splash with live stage text + timing log
+const bootT0 = performance.now();
+const bootStages = [];
+const splash = document.createElement('div');
+splash.id = 'bootsplash';
+splash.innerHTML = '<b>110lymph.nl</b><span>starting\u2026</span>';
+document.body.appendChild(splash);
+function bootStage(name) {
+  const t = Math.round(performance.now() - bootT0);
+  bootStages.push(`${name} @${t}ms`);
+  console.log(`[boot] ${name} @${t}ms`);
+  const sp = splash.querySelector('span');
+  if (sp) sp.textContent = name + '\u2026';
+}
+
 export const bus = new EventTarget();
 const emit = ev => bus.dispatchEvent(new CustomEvent('bridge', { detail: ev }));
 
@@ -78,7 +100,7 @@ if (EMBED) {
 // ----------------------------------------------------------------- renderer + bloom (§12)
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Q === 'low' ? 1 : Math.min(devicePixelRatio, 1.75));   // 9.2: fill-rate cap
 renderer.shadowMap.enabled = true;                        // Phase 8b: soft shadows
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -91,6 +113,7 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 30
 camera.position.set(20, 28, 44);
 
 // Phase 8b: image-based ambience - every material picks up soft reflections.
+bootStage('environment');
 try {
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -187,12 +210,15 @@ let holo = null, holoTarget = 0.25;
 // ---- Phase 8 (procedural): the office is generated in code by office.js.
 // No GLB, no Blender - anchors come from /anchors.json (extracted from the
 // original Phase 3 build, positions unchanged).
+bootStage('fetching layout');
 const [officeReport, wp] = await Promise.all([
   fetch('/anchors.json').then(r => r.json()),
   fetch('/waypoints.json').then(r => r.json()),
 ]);
+bootStage('building office');
 const office = buildOffice(officeReport);
 scene.add(office.group);
+bootStage('office built');
 for (const [k, v] of office.anchors) anchors.set(k, v);
 rooms = wp.rooms;
 
@@ -278,6 +304,8 @@ for (const [a, b] of wp.edges) {
 }
 
 // ---- Phase 8c: area lights (soft real illumination from glowing surfaces)
+// 9.2: RectArea lights are the priciest per-pixel cost - high quality only.
+if (Q !== 'low') {
 RectAreaLightUniformsLib.init();
 {
   const rect = (color, intensity, w, h, x, y, z, lookX, lookY, lookZ) => {
@@ -295,6 +323,12 @@ RectAreaLightUniformsLib.init();
     sp.target.position.set(20, 0, z);
     scene.add(sp, sp.target);
   }
+}
+}
+if (Q === 'low') {                                         // 9.2: cheap stand-in fill
+  const fill = new THREE.PointLight(0xcfe0ff, 0.5, 18, 1.4);
+  fill.position.set(20, 2.5, 9);
+  scene.add(fill);
 }
 
 // hologram at meet_holo (§12): layered planes + sprites + point light
@@ -911,10 +945,43 @@ const pokeIdle = () => {
 for (const evn of ['pointerdown', 'pointermove', 'wheel', 'keydown'])
   addEventListener(evn, pokeIdle, { passive: true });
 
+// ---- Phase 9.2: compile every shader up-front (THE hidden multi-second stall
+// on first frame), then drop the splash once the first real frame is out.
+bootStage('compiling shaders');
+try { renderer.compile(scene, camera); } catch (e) { console.warn('[boot] compile:', e); }
+bootStage('first frame');
+let firstFrame = true;
+// fps watchdog: if high quality cannot hold a usable framerate, drop to low
+// once, remember it, and tell the user how to override (?q=high).
+let fpsFrames = 0, fpsT = 0, fpsChecked = Q === 'low';
+function degradeLive() {
+  Q = 'low';
+  try { localStorage.setItem('officeQ', 'low'); } catch {}
+  renderer.setPixelRatio(1);
+  scene.getObjectByName('office_v8')?.getObjectByName?.('floor_dc_mirror')?.removeFromParent?.();
+  for (const o of [...scene.children]) if (o.isRectAreaLight || o.isSpotLight) scene.remove(o);
+  console.warn('[office] fps low -> degraded to quality=low (override with ?q=high)');
+}
+
 let simT = 0, loopWarned = false;
 renderer.setAnimationLoop(() => {
+  if (firstFrame) {
+    firstFrame = false;
+    splash.remove();
+    console.log('[boot] timeline:', bootStages.join(' | '));
+  }
+
   const dt = Math.min(clock.getDelta(), 0.05);
   simT += dt;
+  if (!fpsChecked) {
+    fpsFrames++; fpsT += dt;
+    if (fpsT > 6) {                                        // measure ~6s after boot
+      fpsChecked = true;
+      const fps = fpsFrames / fpsT;
+      console.log('[office] measured fps:', fps.toFixed(1));
+      if (fps < 26) degradeLive();
+    }
+  }
   try {
     office.tick?.(simT);                                   // 8d: rack data LEDs
     if (!SAFE) { updateScreens(dt, simT); updateMoments(dt); }   // Phase 9

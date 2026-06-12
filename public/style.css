@@ -288,3 +288,10 @@ body.embed #presets { left: 118px; max-width: 50vw; }
 .hud-pin.on { color: #4DD8FF; border-color: #4DD8FF; }
 .hud.pin-closed .hud-pin { color: var(--amber); border-color: var(--amber); }
 .hud .hud-stats { margin-top: 26px; }
+
+/* ---------------- Phase 9.2: boot splash ---------------- */
+#bootsplash { position: fixed; inset: 0; z-index: 100; background: #0d0f13;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+#bootsplash b { color: #4DD8FF; font-size: 18px; letter-spacing: .12em; animation: splash-pulse 1.6s infinite; }
+#bootsplash span { color: var(--mut); font-size: 12px; }
+@keyframes splash-pulse { 50% { opacity: .45; } }

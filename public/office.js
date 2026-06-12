@@ -693,9 +693,11 @@ export function buildOffice(report) {
   // Phase 8c hero reflection: subtle dark mirror under the DC hex floor.
   // Disable with ?mirror=0 if a driver misbehaves; failures are non-fatal.
   try {
-    if (new URLSearchParams(location.search).get('mirror') !== '0') {
+    const _p = new URLSearchParams(location.search);
+    const _q = _p.get('q') ?? (() => { try { return localStorage.getItem('officeQ'); } catch { return null; } })();
+    if (_p.get('mirror') !== '0' && _q !== 'low') {        // 9.2: mirror is high-quality only
       const mirror = new Reflector(new THREE.CircleGeometry(DC.r - 0.35, 48), {
-        textureWidth: 1024, textureHeight: 1024, color: 0x1d2126,
+        textureWidth: 512, textureHeight: 512, color: 0x1d2126,
       });
       mirror.rotation.x = -Math.PI / 2;
       mirror.position.set(DC.x, 0.006, DC.z);
