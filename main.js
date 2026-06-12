@@ -40,7 +40,7 @@ camera.position.set(20, 28, 44);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.4, 0.4, 0.85);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.15, 0.4, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
