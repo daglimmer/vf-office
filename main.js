@@ -82,14 +82,14 @@ function toggleWalk() {
   if (!walkMode) controls.update();
 }
 
-// Phase 5: boosted 3-4× brightness for Ray (2026-06-18) — hemi 3.0, ambient 3.0, key 2.8, fill 2.0
-const hemi = new THREE.HemisphereLight(0x8888cc, 0x443322, 2.8);
+// Balanced lighting for Phase 9 — comfortable indoor office feel
+const hemi = new THREE.HemisphereLight(0x8888cc, 0x443322, 1.2);
 scene.add(hemi);
-const ambient = new THREE.AmbientLight(0x404060, 2.8);
+const ambient = new THREE.AmbientLight(0x404060, 1.0);
 scene.add(ambient);
-const key = new THREE.DirectionalLight(0xe0e8ff, 3.0);
+const key = new THREE.DirectionalLight(0xe0e8ff, 1.5);
 key.position.set(30, 40, 10); scene.add(key);
-const fill = new THREE.DirectionalLight(0xffd080, 2.4);
+const fill = new THREE.DirectionalLight(0xffd080, 1.0);
 fill.position.set(-20, 10, -20); scene.add(fill);
 
 addEventListener('resize', () => {
