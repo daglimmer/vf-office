@@ -133,19 +133,8 @@ gltf.scene.traverse(o => {
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     for (const m of mats) {
       if (m.emissive && (m.emissive.r > 0 || m.emissive.g > 0 || m.emissive.b > 0)) {
-        const name = (o.name || '').toLowerCase();
-        // orange emissive blocks — kill entirely
-        if (m.emissive.r > 0.7 && m.emissive.g > 0.3 && m.emissive.g < 0.7 && m.emissive.b < 0.3) {
-          m.emissiveIntensity = 0;
-        }
-        // ceiling light panels — dim to 60% of artist intent
-        else if (name.includes('light')) {
-          m.emissiveIntensity = (m.emissiveIntensity ?? 0.5) * 0.6;
-        }
-        // everything else — gentle boost, don't override artist
-        else {
-          m.emissiveIntensity = Math.min((m.emissiveIntensity ?? 0.3) * 1.2, 0.8);
-        }
+        // conservative baseline — no boosting, let the scene breathe
+        m.emissiveIntensity = 0.3;
       }
     }
   }
@@ -487,7 +476,7 @@ export class Agent {
     let baseY = 0;
     switch (this.pose) {
       case 'walk': { const s = Math.sin(t * 7);
-        set(p.legL, s * 0.6); set(p.legR, -s * 0.6); set(p.armL, -s * 0.5); set(p.armR, s * 0.5);
+        set(p.legL, -s * 0.6); set(p.legR, s * 0.6); set(p.armL, s * 0.5); set(p.armR, -s * 0.5);
         baseY = Math.abs(Math.sin(t * 7)) * 0.04; break; }
       case 'sit': case 'type': case 'talk':
         baseY = -0.22; set(p.legL, -1.35); set(p.legR, -1.35);
