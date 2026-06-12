@@ -25,6 +25,24 @@ import { initMoments, updateMoments } from './moments.js';
 import { initNotifications } from './notifications.js';
 import { initTimeline } from './timeline.js';
 
+// ---- Phase 9.1: crash visibility. A silent runtime error = "all black", so
+// surface any boot/runtime error in the badge where Ray can read it.
+function bootFail(msg) {
+  try {
+    const b = document.getElementById('demobadge');
+    b.textContent = '\u26A0 ' + msg;
+    b.style.display = 'block';
+    b.style.borderColor = '#FF4D4D';
+    b.style.color = '#FF4D4D';
+    b.style.background = 'rgba(255,77,77,.12)';
+  } catch {}
+}
+addEventListener('error', e => bootFail(e.message ?? 'script error'));
+addEventListener('unhandledrejection', e => bootFail(String(e.reason?.message ?? e.reason ?? 'async error')));
+// ?safe=1 -> skip the phase 9 extras (screens, moments) for diagnosis
+const SAFE = new URLSearchParams(location.search).get('safe') === '1';
+if (SAFE) console.warn('[office] SAFE MODE: screens/moments disabled');
+
 export const bus = new EventTarget();
 const emit = ev => bus.dispatchEvent(new CustomEvent('bridge', { detail: ev }));
 
@@ -868,9 +886,13 @@ if (EMBED) {
 
 // ----------------------------------------------------------------- modules
 initHud({ bus, sim, demo: () => demoMode });
-initScreens({ officeGroup: office.group, bus, sim });      // Phase 9: live data screens
-initInteractive({ scene, gltfScene: office.group, camera, renderer, sim, isEmbed: () => EMBED, post });   // Phase 8 (5)
-initMoments({ bus, sim });                                 // Phase 9: event moments
+// Phase 9.1: extras are non-fatal - a failure here must never black the scene
+try { if (!SAFE) initScreens({ officeGroup: office.group, bus, sim }); }
+catch (e) { console.error('[screens] init failed:', e); }
+try { initInteractive({ scene, gltfScene: office.group, camera, renderer, sim, isEmbed: () => EMBED, post }); }
+catch (e) { console.error('[interactive] init failed:', e); }
+try { if (!SAFE) initMoments({ bus, sim }); }
+catch (e) { console.error('[moments] init failed:', e); }
 initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents });
 initTimeline({ sim, demo: () => demoMode });
 
@@ -889,13 +911,14 @@ const pokeIdle = () => {
 for (const evn of ['pointerdown', 'pointermove', 'wheel', 'keydown'])
   addEventListener(evn, pokeIdle, { passive: true });
 
-let simT = 0;
+let simT = 0, loopWarned = false;
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05);
   simT += dt;
-  office.tick?.(simT);                                     // 8d: rack data LEDs
-  updateScreens(dt, simT);                                 // Phase 9: live displays
-  updateMoments(dt);                                       // Phase 9: event fx
+  try {
+    office.tick?.(simT);                                   // 8d: rack data LEDs
+    if (!SAFE) { updateScreens(dt, simT); updateMoments(dt); }   // Phase 9
+  } catch (e) { if (!loopWarned) { loopWarned = true; console.error('[loop] extras failed:', e); } }
   if (!tour && camMode === 'preset' && !flight && !sim.followed &&
       performance.now() - lastInput > 180000) {
     tour = { pos: camera.position.clone(), target: controls.target.clone(),

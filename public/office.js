@@ -822,7 +822,8 @@ export function buildOffice(report) {
   // ~1500 meshes -> ~1 draw call per (material x fade-class x shadow-class).
   // Excluded: clickables (raycast targets), screens (live canvas materials),
   // the mirror, and anything transparent that must depth-sort on its own.
-  {
+  try {
+    if (new URLSearchParams(location.search).get('merge') === '0') throw new Error('merge disabled via ?merge=0');
     const KEEP = /^(hot_|floor_dc_mirror|prop_mon_|prop_cmdmon_|backdrop)/;
     const fadeClass = n => /^(wall_|mullion|green_wall)/.test(n) ? 'wall'
                          : /^(ceiling_|prop_ceillight)/.test(n) ? 'ceiling' : 'none';   // ceillights fade top-down too
@@ -853,7 +854,7 @@ export function buildOffice(report) {
       } catch (e) { console.warn('[office] merge bucket failed:', e); }
     }
     console.log(`[office] static merge: ${removed} meshes -> ${merged} merged`);
-  }
+  } catch (e) { console.warn('[office] static merge skipped:', e.message); }
 
   // 8d: runtime animation hook - rack data LEDs blink in pseudo-random bursts
   function tick(t) {
