@@ -14,7 +14,7 @@
  *   SIGNALD_SOCK=/run/hermes-office/signald.sock
  *
  * Assumed Hermes schema (override SQL in mapping.json "sql" key if different):
- *   task_events(id, task_id, event_type, payload, created_at)  payload = JSON
+ *   task_events(id, task_id, kind, payload, created_at)  payload = JSON
  *   task_comments(id, task_id, author, body, created_at)
  *   tasks(id, title, status, assignee, priority)
  */
@@ -58,7 +58,7 @@ const DOCS_ROOTS = {};
 }
 
 const SQL = Object.assign({
-  events:   "SELECT id, task_id, event_type, payload, created_at FROM task_events WHERE id > ? ORDER BY id LIMIT 500",
+  events:   "SELECT id, task_id, kind, payload, created_at FROM task_events WHERE id > ? ORDER BY id LIMIT 500",
   comments: "SELECT id, task_id, author, body, created_at FROM task_comments WHERE id > ? ORDER BY id LIMIT 200",
   tasks:    "SELECT id, title, status, assignee, priority FROM tasks WHERE status != 'Archive'",
 }, mapping.sql || {});
@@ -185,7 +185,7 @@ function pollKanban() {
       st.lastEventId = r.id;
       let p = {};
       try { p = JSON.parse(r.payload || '{}'); } catch {}
-      const type = EVENT_TYPES[r.event_type];
+      const type = EVENT_TYPES[r.kind];
       if (!type) continue;
       const ev = { event: type, cardId: String(r.task_id), ts: r.created_at ?? now() };
       if (type === 'card.created') Object.assign(ev, { title: p.title, column: colKey(p.status ?? 'Backlog'), assignee: p.assignee });
