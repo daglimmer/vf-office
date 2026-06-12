@@ -967,16 +967,38 @@ function degradeLive() {
   console.warn('[office] fps low -> degraded to quality=low (override with ?q=high)');
 }
 
+// ---- Phase 9.4: on-screen perf readout (Ray can read it without devtools).
+// Auto-visible for 15 s after boot; press P to toggle any time.
+const perfEl = document.createElement('div');
+perfEl.id = 'perfbadge';
+document.body.appendChild(perfEl);
+let perfHideAt = performance.now() + 15000;
+let perfFrames = 0, perfAccum = 0, perfFps = 0;
+addEventListener('keydown', e => {
+  if (e.code === 'KeyP') perfHideAt = perfEl.style.display === 'none' ? Infinity : 0;
+});
+function perfTick(dt) {
+  perfFrames++; perfAccum += dt;
+  if (perfAccum >= 0.5) { perfFps = perfFrames / perfAccum; perfFrames = 0; perfAccum = 0; }
+  const show = performance.now() < perfHideAt;
+  perfEl.style.display = show ? 'block' : 'none';
+  if (show) perfEl.textContent =
+    `${perfFps.toFixed(0)} fps | boot ${Math.round(bootDone)}ms | q=${Q} fx=${FX}${SAFE ? ' SAFE' : ''} | P to toggle`;
+}
+let bootDone = 0;
+
 let simT = 0, loopWarned = false;
 renderer.setAnimationLoop(() => {
   if (firstFrame) {
     firstFrame = false;
     splash.remove();
+    bootDone = performance.now() - bootT0;
     console.log('[boot] timeline:', bootStages.join(' | '));
   }
 
   const dt = Math.min(clock.getDelta(), 0.05);
   simT += dt;
+  perfTick(dt);
   if (!fpsChecked) {
     fpsFrames++; fpsT += dt;
     if (fpsT > 6) {                                        // measure ~6s after boot
