@@ -40,7 +40,7 @@ camera.position.set(20, 28, 44);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.15, 0.4, 0.9);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.10, 0.4, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -139,6 +139,11 @@ gltf.scene.traverse(o => {
   }
   if (!o.isMesh && o.name && !/^(floor_|wall_|prop_|mullion|ceiling_|backdrop|office$)/.test(o.name)) {
     anchors.set(o.name, { pos: o.getWorldPosition(new THREE.Vector3()), quat: o.getWorldQuaternion(new THREE.Quaternion()) });
+  }
+  // kill orange/amber lights baked into GLB (annoying glow between DevOps & DC)
+  if ((o.isPointLight || o.isSpotLight) && o.color) {
+    const hsl = {}; o.color.getHSL(hsl);
+    if (hsl.h > 0.07 && hsl.h < 0.15 && hsl.l > 0.3) o.intensity = 0;
   }
 });
 rooms = wp.rooms;
@@ -354,6 +359,7 @@ export class Agent {
   sitAt(name, pose) {
     const a = anchors.get(name);
     this.group.position.copy(a.pos); this.group.quaternion.copy(a.quat);
+    this.group.rotateY(Math.PI); // flip 180° — avatar forward matches seat direction
     this.seated = name; this.pose = pose; this.path = [];
   }
   acquire(poolKey, onGranted) {
@@ -447,7 +453,7 @@ export class Agent {
         if (!this.path.length) { this.pose = 'idle'; if (this.onArrive) { const f = this.onArrive; this.onArrive = null; f(); } }
       } else {
         this.group.position.addScaledVector(d.normalize(), Math.min(WALK_SPEED * dt, dist));
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(-d.x, -d.z));
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(d.x, d.z));
         this.group.quaternion.slerp(q, Math.min(TURN_SPEED * dt, 1));
       }
     }
