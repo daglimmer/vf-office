@@ -48,6 +48,7 @@ if (SAFE) console.warn('[office] SAFE MODE: screens/moments disabled');
 const QPARAM = new URLSearchParams(location.search).get('q');
 let Q = QPARAM ?? (() => { try { return localStorage.getItem('officeQ'); } catch { return null; } })() ?? 'high';
 if (Q !== 'low' && Q !== 'high') Q = 'high';
+const LOWQ = Q === 'low';
 console.log('[office] quality:', Q);
 
 // ---- Phase 9.2: boot splash with live stage text + timing log
@@ -101,7 +102,7 @@ if (EMBED) {
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Q === 'low' ? 1 : Math.min(devicePixelRatio, 1.75));   // 9.2: fill-rate cap
-renderer.shadowMap.enabled = true;                        // Phase 8b: soft shadows
+renderer.shadowMap.enabled = !LOWQ;                       // 9.5: shadows are high-only
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.3;                       // Phase 5 (1): brighter overall
@@ -128,7 +129,8 @@ try {
 //   ?fx=off   no post-processing at all    (diagnosis)
 export const VERSION = '2.0.0';                            // "the procedural era"
 console.log(`%c110lymph.nl 3D Office v${VERSION}`, 'color:#4dd8ff;font-weight:bold');
-const FX = new URLSearchParams(location.search).get('fx') ?? 'noao';
+// 9.5: on low quality the default post stack is just bloom (no SMAA/grade)
+const FX = new URLSearchParams(location.search).get('fx') ?? (LOWQ ? 'basic' : 'noao');
 console.log('[office] fx pipeline:', FX);
 
 const GradeShader = {
@@ -159,7 +161,7 @@ if (FX === 'full') {
 } else {
   composer.addPass(new RenderPass(scene, camera));
 }
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.5, 0.85);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.6, 0.5, 0.85);   // 9.5: half-res
 composer.addPass(bloom);
 if (FX === 'full' || FX === 'noao') {
   composer.addPass(new SMAAPass(innerWidth, innerHeight));
@@ -185,7 +187,7 @@ const hemiLight = new THREE.HemisphereLight(0xbfd4ff, 0x232730, 1.5);
 scene.add(ambLight, hemiLight);
 const key = new THREE.DirectionalLight(0xcfd8ff, 0.8);
 key.position.set(30, 40, 10);
-key.castShadow = true;                                    // Phase 8b: one shadow caster
+key.castShadow = !LOWQ;                                   // Phase 8b/9.5
 key.shadow.mapSize.set(2048, 2048);
 key.shadow.camera.left = -26; key.shadow.camera.right = 26;
 key.shadow.camera.top = 26; key.shadow.camera.bottom = -26;
@@ -277,7 +279,12 @@ for (const [a, b] of wp.edges) {
 
 // ---- Phase 5 (1) Ray: ceiling pendants cast real point lights (1 per room,
 // well under the 3/room perf cap) + corridor overhead strip & guide lights.
-{
+if (LOWQ) {
+  // 9.5: per-pixel cost of ~10 point lights on physical materials is the
+  // single biggest scene cost - low tier fakes it with brighter ambience.
+  ambLight.intensity += 0.3;
+  hemiLight.intensity += 0.25;
+} else {
   for (const [r, info] of Object.entries(rooms)) {
     if (r === 'corridor') continue;
     const l = new THREE.PointLight(0xfff1d6, 0.7, 10, 1.6);
@@ -961,10 +968,20 @@ let fpsFrames = 0, fpsT = 0, fpsChecked = Q === 'low';
 function degradeLive() {
   Q = 'low';
   try { localStorage.setItem('officeQ', 'low'); } catch {}
+  // a reload applies the full low tier (fewer lights, no shadows, cheap
+  // materials) - shader programs cannot be swapped live. Guard against loops.
+  try {
+    if (!sessionStorage.getItem('officeDegraded')) {
+      sessionStorage.setItem('officeDegraded', '1');
+      console.warn('[office] fps low -> reloading into quality=low');
+      location.reload();
+      return;
+    }
+  } catch {}
   renderer.setPixelRatio(1);
   scene.getObjectByName('office_v8')?.getObjectByName?.('floor_dc_mirror')?.removeFromParent?.();
   for (const o of [...scene.children]) if (o.isRectAreaLight || o.isSpotLight) scene.remove(o);
-  console.warn('[office] fps low -> degraded to quality=low (override with ?q=high)');
+  console.warn('[office] fps low -> degraded in place (override with ?q=high)');
 }
 
 // ---- Phase 9.4: on-screen perf readout (Ray can read it without devtools).

@@ -94,8 +94,18 @@ export function buildOffice(report) {
   const BUMP = { concrete: 0.012, oak: 0.02, woodDark: 0.02, woodLight: 0.02, fabric: 0.025, leather: 0.015 };
 
   // ---------------------------------------------------------------- materials
+  // 9.5: low tier swaps physical (clearcoat) materials for plain standard -
+  // clearcoat roughly doubles the lighting cost of every covered pixel.
+  const _qp = new URLSearchParams(location.search);
+  const LOWQ = (_qp.get('q') ?? (() => { try { return localStorage.getItem('officeQ'); } catch { return null; } })()) === 'low';
   const std = (name, o) => { const m = new THREE.MeshStandardMaterial(o); m.name = name; return m; };
-  const phys = (name, o) => { const m = new THREE.MeshPhysicalMaterial(o); m.name = name; return m; };
+  const phys = (name, o) => {
+    if (LOWQ) {
+      const { clearcoat, clearcoatRoughness, ...rest } = o;
+      return std(name, rest);
+    }
+    const m = new THREE.MeshPhysicalMaterial(o); m.name = name; return m;
+  };
   const M = {
     // floors: polished, slight clearcoat reflection (Phase 8b)
     concrete:  phys('dark_concrete', { map: T.concrete, bumpMap: T.concrete, bumpScale: BUMP.concrete, color: 0xcfd2d8, roughness: 0.42, metalness: 0.05, clearcoat: 0.45, clearcoatRoughness: 0.35 }),
