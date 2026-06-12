@@ -133,7 +133,19 @@ gltf.scene.traverse(o => {
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     for (const m of mats) {
       if (m.emissive && (m.emissive.r > 0 || m.emissive.g > 0 || m.emissive.b > 0)) {
-        m.emissiveIntensity = Math.max(m.emissiveIntensity ?? 0, 1.0);
+        const name = (o.name || '').toLowerCase();
+        // orange emissive blocks — kill entirely
+        if (m.emissive.r > 0.7 && m.emissive.g > 0.3 && m.emissive.g < 0.7 && m.emissive.b < 0.3) {
+          m.emissiveIntensity = 0;
+        }
+        // ceiling light panels — dim to 60% of artist intent
+        else if (name.includes('light')) {
+          m.emissiveIntensity = (m.emissiveIntensity ?? 0.5) * 0.6;
+        }
+        // everything else — gentle boost, don't override artist
+        else {
+          m.emissiveIntensity = Math.min((m.emissiveIntensity ?? 0.3) * 1.2, 0.8);
+        }
       }
     }
   }
@@ -359,7 +371,6 @@ export class Agent {
   sitAt(name, pose) {
     const a = anchors.get(name);
     this.group.position.copy(a.pos); this.group.quaternion.copy(a.quat);
-    this.group.rotateY(Math.PI); // flip 180° — avatar forward matches seat direction
     this.seated = name; this.pose = pose; this.path = [];
   }
   acquire(poolKey, onGranted) {
@@ -453,7 +464,7 @@ export class Agent {
         if (!this.path.length) { this.pose = 'idle'; if (this.onArrive) { const f = this.onArrive; this.onArrive = null; f(); } }
       } else {
         this.group.position.addScaledVector(d.normalize(), Math.min(WALK_SPEED * dt, dist));
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(d.x, d.z));
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(d.x, -d.z));
         this.group.quaternion.slerp(q, Math.min(TURN_SPEED * dt, 1));
       }
     }
