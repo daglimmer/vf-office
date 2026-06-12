@@ -40,7 +40,7 @@ camera.position.set(20, 28, 44);
 
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.4, 0.4, 0.85);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.10, 0.4, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -82,14 +82,14 @@ function toggleWalk() {
   if (!walkMode) controls.update();
 }
 
-// Phase 5: boosted 3-4× brightness for Ray (2026-06-18) — hemi 3.0, ambient 3.0, key 2.8, fill 2.0
-const hemi = new THREE.HemisphereLight(0x8888cc, 0x443322, 2.8);
+// Balanced lighting for Phase 9 — comfortable indoor office feel
+const hemi = new THREE.HemisphereLight(0x8888cc, 0x443322, 1.2);
 scene.add(hemi);
-const ambient = new THREE.AmbientLight(0x404060, 2.8);
+const ambient = new THREE.AmbientLight(0x404060, 1.0);
 scene.add(ambient);
-const key = new THREE.DirectionalLight(0xe0e8ff, 3.0);
+const key = new THREE.DirectionalLight(0xe0e8ff, 1.5);
 key.position.set(30, 40, 10); scene.add(key);
-const fill = new THREE.DirectionalLight(0xffd080, 2.4);
+const fill = new THREE.DirectionalLight(0xffd080, 1.0);
 fill.position.set(-20, 10, -20); scene.add(fill);
 
 addEventListener('resize', () => {
@@ -133,12 +133,18 @@ gltf.scene.traverse(o => {
     const mats = Array.isArray(o.material) ? o.material : [o.material];
     for (const m of mats) {
       if (m.emissive && (m.emissive.r > 0 || m.emissive.g > 0 || m.emissive.b > 0)) {
-        m.emissiveIntensity = Math.max(m.emissiveIntensity ?? 0, 1.0);
+        // conservative baseline — no boosting, let the scene breathe
+        m.emissiveIntensity = 0.3;
       }
     }
   }
   if (!o.isMesh && o.name && !/^(floor_|wall_|prop_|mullion|ceiling_|backdrop|office$)/.test(o.name)) {
     anchors.set(o.name, { pos: o.getWorldPosition(new THREE.Vector3()), quat: o.getWorldQuaternion(new THREE.Quaternion()) });
+  }
+  // kill orange/amber lights baked into GLB (annoying glow between DevOps & DC)
+  if ((o.isPointLight || o.isSpotLight) && o.color) {
+    const hsl = {}; o.color.getHSL(hsl);
+    if (hsl.h > 0.07 && hsl.h < 0.15 && hsl.l > 0.3) o.intensity = 0;
   }
 });
 rooms = wp.rooms;
@@ -447,7 +453,7 @@ export class Agent {
         if (!this.path.length) { this.pose = 'idle'; if (this.onArrive) { const f = this.onArrive; this.onArrive = null; f(); } }
       } else {
         this.group.position.addScaledVector(d.normalize(), Math.min(WALK_SPEED * dt, dist));
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(-d.x, -d.z));
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(d.x, -d.z));
         this.group.quaternion.slerp(q, Math.min(TURN_SPEED * dt, 1));
       }
     }
@@ -470,7 +476,7 @@ export class Agent {
     let baseY = 0;
     switch (this.pose) {
       case 'walk': { const s = Math.sin(t * 7);
-        set(p.legL, s * 0.6); set(p.legR, -s * 0.6); set(p.armL, -s * 0.5); set(p.armR, s * 0.5);
+        set(p.legL, -s * 0.6); set(p.legR, s * 0.6); set(p.armL, s * 0.5); set(p.armR, -s * 0.5);
         baseY = Math.abs(Math.sin(t * 7)) * 0.04; break; }
       case 'sit': case 'type': case 'talk':
         baseY = -0.22; set(p.legL, -1.35); set(p.legR, -1.35);
