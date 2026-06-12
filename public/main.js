@@ -210,6 +210,10 @@ let holo = null, holoTarget = 0.25;
 // ---- Phase 8 (procedural): the office is generated in code by office.js.
 // No GLB, no Blender - anchors come from /anchors.json (extracted from the
 // original Phase 3 build, positions unchanged).
+// ---- Phase 9.3: no top-level await. Vite 5.4's build transpiles to es2020
+// regardless of config, so the whole awaited init lives in boot() instead.
+// All exports (bus, EMBED, VERSION) remain above, at module top level.
+async function boot() {
 bootStage('fetching layout');
 const [officeReport, wp] = await Promise.all([
   fetch('/anchors.json').then(r => r.json()),
@@ -434,12 +438,12 @@ function makeLabel(name, sub) {
 }
 
 // ----------------------------------------------------------------- Agent
-export const agents = [];               // all live avatars
-export const byCard = new Map();        // cardId -> Agent
-export const byId = new Map();          // persistent agentId -> Agent (incl card avatars by assignee)
+const agents = [];                      // all live avatars (was exported; unused externally)
+const byCard = new Map();               // cardId -> Agent
+const byId = new Map();                 // persistent agentId -> Agent (incl card avatars by assignee)
 let briefingCount = 0;
 
-export class Agent {
+class Agent {
   constructor({ name, sub, color, scale = 1, startAnchor = 'spawn_dc', agentId = null, cardId = null, role = null }) {
     this.name = name; this.agentId = agentId; this.cardId = cardId;
     this.role = role ?? (cardId ? 'devops' : 'specialist');
@@ -634,7 +638,7 @@ function flyTo(p) {
   sim.followAgent(null);
   flight = { from: camera.position.clone(), to: p.cam.clone(), t0: controls.target.clone(), t1: p.target.clone(), k: 0 };
 }
-export const sim = {
+const sim = {
   followed: null,
   followAgent(id) {
     sim.followed = id == null ? null : (typeof id === 'string' ? (byId.get(id) ?? byCard.get(id) ?? null) : id);
@@ -736,7 +740,7 @@ function walkUpdate(dt) {
 // ----------------------------------------------------------------- bridge events
 const COLUMN_STATE = { backlog: 'spawning', todo: 'briefing', in_progress: 'working', review: 'debrief' };
 let colorIdx = 0;
-export function handleEvent(ev) {
+function handleEvent(ev) {
   emit(ev);                                   // HUD + notification modules listen on bus
   switch (ev.event) {
     case 'snapshot':
@@ -828,7 +832,7 @@ setInterval(pollRoster, 30000);
 // Phase 5 (5) Ray: if the WebSocket cannot connect, poll the adapter's /snapshot
 // endpoint before giving up and going full demo. Polling diffs card columns and
 // synthesizes card.moved / card.deleted events.
-export let demoMode = false;
+let demoMode = false;
 let polling = false, pollTimer = null, wsRetryTimer = null;
 let wsConnected = false;                                   // Phase 7b: heartbeat status
 function stopPolling() {                                   // Phase 6 (1): WS recovered
@@ -1037,4 +1041,10 @@ renderer.setAnimationLoop(() => {
   if (camMode !== 'walk') controls.update();
   if (FX === 'off') renderer.render(scene, camera); else composer.render();
   css2d.render(scene, camera);
+});
+
+}
+boot().catch(e => {
+  console.error('[boot] failed:', e);
+  bootFail(String(e?.message ?? e));
 });
