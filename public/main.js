@@ -85,6 +85,8 @@ try {
 //   ?fx=noao  render+bloom+SMAA+grade      (DEFAULT)
 //   ?fx=basic render+bloom                 (pre-8c look)
 //   ?fx=off   no post-processing at all    (diagnosis)
+export const VERSION = '2.0.0';                            // "the procedural era"
+console.log(`%c110lymph.nl 3D Office v${VERSION}`, 'color:#4dd8ff;font-weight:bold');
 const FX = new URLSearchParams(location.search).get('fx') ?? 'noao';
 console.log('[office] fx pipeline:', FX);
 
@@ -181,8 +183,8 @@ const V8 = true;
 ambLight.intensity = 0.75; ambLight.color.set(0x434a55);
 hemiLight.intensity = 1.05; hemiLight.color.set(0xcfd9ee);
 key.intensity = 0.55;
-renderer.toneMappingExposure = 1.22;
-bloom.strength = 0.45; bloom.threshold = 0.82;
+renderer.toneMappingExposure = 1.15;                        // glare pass: was 1.22
+bloom.strength = 0.25; bloom.threshold = 0.9;               // glare pass: was 0.45 / 0.82
 scene.fog = new THREE.Fog(0x0d0f13, 30, 100);
 
 // (legacy 2x emissive boost removed - office.js materials are pre-tuned)
@@ -244,7 +246,7 @@ for (const [a, b] of wp.edges) {
     const mid = a0.clone().add(a1).multiplyScalar(0.5);
     const strip = new THREE.Mesh(
       new THREE.BoxGeometry(a0.distanceTo(a1) + 2, 0.05, 0.2),
-      new THREE.MeshStandardMaterial({ color: 0x0b0d12, emissive: 0x4dd8ff, emissiveIntensity: 1.8 }));
+      new THREE.MeshStandardMaterial({ color: 0x0b0d12, emissive: 0x4dd8ff, emissiveIntensity: 1.0 }));
     strip.position.set(mid.x, 2.42, mid.z);
     strip.rotation.y = -Math.atan2(a1.z - a0.z, a1.x - a0.x);
     scene.add(strip);

@@ -38,6 +38,11 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedNam
   const accMat = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 0.6 });
   const statusC = new THREE.Color('#FF9E2C');
   const statusMat = new THREE.MeshStandardMaterial({ color: statusC, emissive: statusC, emissiveIntensity: 1.4 });
+  // shared face/shoe materials - MUST be in `materials` so spawn/despawn fades
+  // cover the whole body (loose shoes/eyes used to stay behind at the floor)
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.3 });
+  const mouthMat = new THREE.MeshStandardMaterial({ color: 0x8a5a50, roughness: 0.6 });
+  const shoeMat = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.5 });
 
   const root = new THREE.Group();
   const parts = {};
@@ -67,12 +72,10 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedNam
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.108 * S, 14, 10), skinMat);
   head.scale.y = 1.15; headG.add(head);
   for (const sx of [-1, 1]) {                                  // eyes
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.013 * S, 6, 4),
-      new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.3 }));
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.013 * S, 6, 4), eyeMat);
     eye.position.set(sx * 0.04 * S, 0.012 * S, -0.095 * S); headG.add(eye);   // 8f: forward is -z
   }
-  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.035 * S, 0.008 * S, 0.01 * S),
-    new THREE.MeshStandardMaterial({ color: 0x8a5a50, roughness: 0.6 }));
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.035 * S, 0.008 * S, 0.01 * S), mouthMat);
   mouth.position.set(0, -0.045 * S, -0.102 * S); headG.add(mouth);
   const hair = new THREE.Mesh(new THREE.SphereGeometry(0.112 * S, 12, 8,
     0, Math.PI * 2, 0, Math.PI * 0.58), hairMat);
@@ -103,8 +106,7 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedNam
     const th = cyl(0.052 * S, 0.046 * S, 0.42 * S, clothMat); th.position.y = -0.21 * S; hip.add(th);
     const knee = new THREE.Group(); knee.position.y = -0.42 * S; hip.add(knee);
     const sh = cyl(0.042 * S, 0.036 * S, 0.40 * S, clothMat); sh.position.y = -0.20 * S; knee.add(sh);
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.085 * S, 0.05 * S, 0.17 * S),
-      new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.5 }));
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.085 * S, 0.05 * S, 0.17 * S), shoeMat);
     shoe.position.set(0, -0.43 * S, -0.045 * S); knee.add(shoe);
     parts[sx < 0 ? 'legL' : 'legR'] = hip;
     parts[sx < 0 ? 'shinL' : 'shinR'] = knee;
@@ -124,7 +126,7 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedNam
   root.add(ring);
 
   root.traverse(o => { if (o.isMesh && !o.material?.transparent) shadowify(o); });   // Phase 8b
-  const materials = [clothMat, skinMat, hairMat, tint, accMat, statusMat];
+  const materials = [clothMat, skinMat, hairMat, tint, accMat, statusMat, eyeMat, mouthMat, shoeMat];
   return { root, parts, materials, tint, statusMat, ring, S };
 }
 
@@ -146,19 +148,22 @@ export function animateHumanoid(agent, aY, dt) {
       bob = Math.abs(Math.cos(t * 7.5)) * 0.04;
       lean = -0.1;                                          // 8f: lean INTO the walk
       break;
+    // NOTE: model forward is -z; for limbs hanging down, POSITIVE x-rotation
+    // swings the lower end forward. Seated legs fold forward (+thigh, -shin),
+    // arms reach forward (+). Previous signs were +z-authored = backwards knees.
     case 'sit': case 'type': case 'talk':
-      hipsY = 0.46 * S; thigh = -Math.PI / 2 + 0.12; shin = Math.PI / 2 - 0.1;
-      armX = -0.5; foreX = -0.5;
-      if (agent.pose === 'type') { lean = -0.14; foreX = -0.85; gesture = Math.sin(t * 12) * 0.05; }
+      hipsY = 0.46 * S; thigh = Math.PI / 2 - 0.12; shin = -Math.PI / 2 + 0.1;
+      armX = 0.5; foreX = 0.5;
+      if (agent.pose === 'type') { lean = -0.14; foreX = 0.85; gesture = Math.sin(t * 12) * 0.05; }
       if (agent.pose === 'talk') { headX = Math.sin(t * 3.5) * 0.08; gesture = Math.sin(t * 2.2) * 0.35; }
       break;
     case 'glance':
       headX = 0.4;                                          // 8f: tilt face up
-      if (agent.seated) { hipsY = 0.46 * S; thigh = -Math.PI / 2 + 0.12; shin = Math.PI / 2 - 0.1; armX = -0.5; foreX = -0.5; }
+      if (agent.seated) { hipsY = 0.46 * S; thigh = Math.PI / 2 - 0.12; shin = -Math.PI / 2 + 0.1; armX = 0.5; foreX = 0.5; }
       break;
     case 'headdown':
       headX = -0.5; lean = -0.18;                           // 8f: slump forward
-      if (agent.seated) { hipsY = 0.46 * S; thigh = -Math.PI / 2 + 0.12; shin = Math.PI / 2 - 0.1; armX = -0.5; foreX = -0.6; }
+      if (agent.seated) { hipsY = 0.46 * S; thigh = Math.PI / 2 - 0.12; shin = -Math.PI / 2 + 0.1; armX = 0.5; foreX = 0.6; }
       break;
     case 'collapsed': {
       // downed agent eases to the floor (8d: no snap)
@@ -181,13 +186,20 @@ export function animateHumanoid(agent, aY, dt) {
   lerpTo(p.head, 'x', headX, k);
   lerpTo(p.legL, 'x', thigh + gait * 0.55, k);
   lerpTo(p.legR, 'x', thigh - gait * 0.55, k);
-  lerpTo(p.shinL, 'x', shin + (agent.pose === 'walk' ? Math.max(0, -gait) * 0.7 : 0), k);
-  lerpTo(p.shinR, 'x', shin + (agent.pose === 'walk' ? Math.max(0, gait) * 0.7 : 0), k);
+  lerpTo(p.shinL, 'x', shin - (agent.pose === 'walk' ? Math.max(0, -gait) * 0.7 : 0), k);   // knee flexes BACK
+  lerpTo(p.shinR, 'x', shin - (agent.pose === 'walk' ? Math.max(0, gait) * 0.7 : 0), k);
   lerpTo(p.armL, 'x', armX - gait * 0.45 + gesture * 0.3, k);
   lerpTo(p.armR, 'x', armX + gait * 0.45 - gesture, k);
-  lerpTo(p.foreL, 'x', foreX - Math.max(0, gait) * 0.3, k);
-  lerpTo(p.foreR, 'x', foreX - Math.max(0, -gait) * 0.3 - Math.abs(gesture) * 0.5, k);
+  lerpTo(p.foreL, 'x', foreX + Math.max(0, gait) * 0.3, k);                                 // elbow flexes FORWARD
+  lerpTo(p.foreR, 'x', foreX + Math.max(0, -gait) * 0.3 + Math.abs(gesture) * 0.5, k);
 
   if (agent.ring.visible) agent.ring.rotation.y = t * 1.5;
-  agent.group.position.y = aY + bob + (seatedish ? 0 : 0);
+  // keep feet out of the floor: compute the lowest shoe from the current joint
+  // angles and lift the whole rig if it would clip (fixes sinking while
+  // sitting down / standing up and the half-buried seated feet).
+  const LT = 0.42 * S, LF = 0.46 * S;                       // thigh len, knee->shoe bottom
+  const footY = (hipG, kneeG) => p.hips.position.y
+    - LT * Math.cos(hipG.rotation.x) - LF * Math.cos(hipG.rotation.x + kneeG.rotation.x);
+  const lowest = Math.min(footY(p.legL, p.shinL), footY(p.legR, p.shinR));
+  agent.group.position.y = aY + bob + Math.max(0, -lowest);
 }

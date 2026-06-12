@@ -1,6 +1,6 @@
 {
-  "name": "lymph-office-phase4",
-  "version": "1.0.0",
+  "name": "lymph-office",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,6 +8,10 @@
     "build": "vite build public --outDir ../dist --emptyOutDir",
     "deploy": "npm run build && cp -r public/office.glb public/waypoints.json dist/ 2>/dev/null; echo 'copy dist/* into adapter public dir'"
   },
-  "dependencies": { "three": "^0.165.0" },
-  "devDependencies": { "vite": "^5.3.0" }
+  "dependencies": {
+    "three": "^0.165.0"
+  },
+  "devDependencies": {
+    "vite": "^5.3.0"
+  }
 }

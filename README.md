@@ -1,4 +1,4 @@
-# 110lymph.nl — Phase 4: Mission Control Polish & VF Feature Merge
+# 110lymph.nl 3D Office — v2.0.0 (phases 4–9)
 
 Implements Build Spec v2.0 §9–§13 on top of Phase 1 (skeleton) + Phase 2 (bridge),
 plus the five VF dashboard features.

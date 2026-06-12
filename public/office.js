@@ -109,17 +109,17 @@ export function buildOffice(report) {
     prop:      std('dark_prop',     { color: 0x17191e, roughness: 0.5 }),
     sofa:      std('sofa_gray',     { map: T.fabric, bumpMap: T.fabric, bumpScale: BUMP.fabric, color: 0xffffff, roughness: 0.95 }),
     leather:   phys('leather_brown', { map: T.leather, bumpMap: T.leather, bumpScale: BUMP.leather, color: 0xffffff, roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.5 }),
-    white:     std('white_panel',   { color: 0xdfe1e5, roughness: 0.6, emissive: 0xfff8e8, emissiveIntensity: 0.45 }),   // 8d: halved (Ray)
-    whiteCeil: std('white_ceiling', { color: 0xc9ccd2, roughness: 0.7, emissive: 0xfff6e6, emissiveIntensity: 0.22 }),
-    screen:    std('screen_code',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x73c0ff, emissiveIntensity: 1.4 }),
-    screenDash:std('screen_dash',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x5ce6b8, emissiveIntensity: 1.3 }),
+    white:     std('white_panel',   { color: 0xdfe1e5, roughness: 0.6, emissive: 0xfff8e8, emissiveIntensity: 0.15 }),   // glare pass: was 0.45
+    whiteCeil: std('white_ceiling', { color: 0xc9ccd2, roughness: 0.7, emissive: 0xfff6e6, emissiveIntensity: 0.08 }),
+    screen:    std('screen_code',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x73c0ff, emissiveIntensity: 0.9 }),
+    screenDash:std('screen_dash',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x5ce6b8, emissiveIntensity: 0.85 }),
     cloudFrost:std('cloud_frost',   { color: 0xdde2e8, roughness: 0.4, transparent: true, opacity: 0.85 }),
-    cloudCool: std('cloud_cool',    { color: 0x6cc4ff, emissive: 0x4db4ff, emissiveIntensity: 1.6 }),
-    ringWarm:  std('ring_warm',     { color: 0xffb35c, emissive: 0xff9e38, emissiveIntensity: 1.8 }),
-    neon:      std('neon_cyan',     { color: 0x4dd8ff, emissive: 0x4dd8ff, emissiveIntensity: 2.2 }),
-    amber:     std('amber_neon',    { color: 0xffa733, emissive: 0xff9926, emissiveIntensity: 2.0 }),
-    frost:     std('frost_band',    { color: 0xe6e8eb, roughness: 0.6, transparent: true, opacity: 0.8, emissive: 0xe6e8eb, emissiveIntensity: 0.12 }),
-    hexf:      std('hex_floor',     { color: 0x9fd0ff, emissive: 0x8cc4ff, emissiveIntensity: 0.7 }),
+    cloudCool: std('cloud_cool',    { color: 0x6cc4ff, emissive: 0x4db4ff, emissiveIntensity: 0.9 }),
+    ringWarm:  std('ring_warm',     { color: 0xffb35c, emissive: 0xff9e38, emissiveIntensity: 1.0 }),
+    neon:      std('neon_cyan',     { color: 0x4dd8ff, emissive: 0x4dd8ff, emissiveIntensity: 1.2 }),
+    amber:     std('amber_neon',    { color: 0xffa733, emissive: 0xff9926, emissiveIntensity: 1.1 }),
+    frost:     std('frost_band',    { color: 0xe6e8eb, roughness: 0.6, transparent: true, opacity: 0.7, emissive: 0xe6e8eb, emissiveIntensity: 0.04 }),
+    hexf:      std('hex_floor',     { color: 0x9fd0ff, emissive: 0x8cc4ff, emissiveIntensity: 0.4 }),
     rack:      std('rack_metal',    { color: 0x101318, roughness: 0.4, metalness: 0.6 }),
     leaf:      [std('leaf_0', { color: 0x1f5c26, roughness: 0.75 }),
                 std('leaf_1', { color: 0x2c7a30, roughness: 0.75 }),
@@ -128,7 +128,7 @@ export function buildOffice(report) {
     shoe:      std('shoe',          { color: 0x14161a, roughness: 0.5 }),
   };
   const zoneMats = ZONES.map((c, i) => std(`rack_zone_${i}`,
-    { color: new THREE.Color(c), emissive: new THREE.Color(c), emissiveIntensity: 1.5 }));
+    { color: new THREE.Color(c), emissive: new THREE.Color(c), emissiveIntensity: 0.9 }));
   // 8d: blinking data LEDs - 6 phase groups, animated by tick()
   const blinkMats = ZONES.map((c, i) => std(`rack_blink_${i}`,
     { color: 0x101820, emissive: new THREE.Color(c), emissiveIntensity: 0.8 }));
@@ -483,15 +483,14 @@ export function buildOffice(report) {
     const hot = box('hot_agents_desks', 8.5, 1.05, 14.25, 11.5, 0.9, 3.6, M.glass);
     hot.material = M.glass.clone(); hot.material.opacity = 0.05;
   }
-  const traceMat = std('dv_trace', { color: 0x000000, emissive: 0x4dd8ff, emissiveIntensity: 1.5 });
+  const traceMat = std('dv_trace', { color: 0x000000, emissive: 0x4dd8ff, emissiveIntensity: 0.8 });
   [[3, 12.2, 14.5, 12.2], [3, 16.3, 14.5, 16.3], [14.5, 12.2, 14.5, 16.3], [3, 14.25, 9, 14.25]]
     .forEach(([x0, z0, x1, z1], i) => {
       const L = Math.hypot(x1 - x0, z1 - z0);
       box(`prop_trace_${i}`, (x0 + x1) / 2, 0.012, (z0 + z1) / 2, L, 0.015, 0.05,
           traceMat, -Math.atan2(z1 - z0, x1 - x0) / D2R);
     });
-  box('prop_shieldframe', 15.0, 1.7, 16.6, 1.7, 2.0, 0.1, M.amber, 40);   // shield window into DC
-  box('wall_shieldglass', 15.0, 1.7, 16.6, 1.5, 1.8, 0.04, M.glassDC, 40);
+  // (orange shield window between devops and the DC removed - Ray: too bright, no function)
   box('prop_lightbox', WX0 + 0.12, 1.8, 14.2, 0.08, 1.0, 2.6, M.white);
   textPanel('prop_logo_dv', '110lymph.nl', 2.2, 0.55, WX0 + 0.18, 1.8, 14.2, 90, '#1a1d22');
 
@@ -666,7 +665,7 @@ export function buildOffice(report) {
     const p = A(`doc_desk_${String(i).padStart(2, '0')}`);
     box(`prop_lamparm_${i}`, p.x - 0.6, 0.88, p.z + 0.7, 0.03, 0.32, 0.03, M.metal);
     const head = sphere(`prop_lamphead_${i}`, p.x - 0.55, 1.05, p.z + 0.62, 0.06, M.ringWarm, 0.7, 8, 6);
-    head.material = M.ringWarm.clone(); head.material.emissiveIntensity = 1.2;
+    head.material = M.ringWarm.clone(); head.material.emissiveIntensity = 0.8;
   }
   // door frames at every opening (verticals + lintel)
   const frame = (n, x, z, alongX) => {
@@ -826,7 +825,7 @@ export function buildOffice(report) {
   {
     const KEEP = /^(hot_|floor_dc_mirror|prop_mon_|prop_cmdmon_|backdrop)/;
     const fadeClass = n => /^(wall_|mullion|green_wall)/.test(n) ? 'wall'
-                         : /^ceiling_/.test(n) ? 'ceiling' : 'none';
+                         : /^(ceiling_|prop_ceillight)/.test(n) ? 'ceiling' : 'none';   // ceillights fade top-down too
     const buckets = new Map();
     for (const o of [...G.children]) {
       if (!o.isMesh || KEEP.test(o.name)) continue;
