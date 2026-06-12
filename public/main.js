@@ -45,6 +45,11 @@ if (SAFE) console.warn('[office] SAFE MODE: screens/moments disabled');
 
 // ---- Phase 9.2: quality tier. 'high' (default) or 'low'. Auto-degrades once
 // if measured fps stays poor, and remembers the decision.
+// 9.7: ?blur=0 strips all backdrop-filter glass (compositor cost A/B test)
+if (new URLSearchParams(location.search).get('blur') === '0') {
+  document.body.classList.add('noblur');
+  console.log('[office] blur disabled');
+}
 const QPARAM = new URLSearchParams(location.search).get('q');
 let Q = QPARAM ?? (() => { try { return localStorage.getItem('officeQ'); } catch { return null; } })() ?? 'high';
 if (Q !== 'low' && Q !== 'high') Q = 'high';
@@ -994,13 +999,17 @@ let perfFrames = 0, perfAccum = 0, perfFps = 0;
 addEventListener('keydown', e => {
   if (e.code === 'KeyP') perfHideAt = perfEl.style.display === 'none' ? Infinity : 0;
 });
+let frameMs = 0, frameMsAvg = 0;
 function perfTick(dt) {
   perfFrames++; perfAccum += dt;
-  if (perfAccum >= 0.5) { perfFps = perfFrames / perfAccum; perfFrames = 0; perfAccum = 0; }
-  const show = performance.now() < perfHideAt;
-  perfEl.style.display = show ? 'block' : 'none';
-  if (show) perfEl.textContent =
-    `${perfFps.toFixed(0)} fps | boot ${Math.round(bootDone)}ms | q=${Q} fx=${FX}${SAFE ? ' SAFE' : ''} | P to toggle`;
+  frameMsAvg += (frameMs - frameMsAvg) * 0.05;
+  if (perfAccum >= 0.5) {
+    perfFps = perfFrames / perfAccum; perfFrames = 0; perfAccum = 0;
+    const show = performance.now() < perfHideAt;
+    perfEl.style.display = show ? 'block' : 'none';
+    if (show) perfEl.textContent =
+      `${perfFps.toFixed(0)} fps | js ${frameMsAvg.toFixed(1)}ms | boot ${Math.round(bootDone)}ms | q=${Q} fx=${FX}${SAFE ? ' SAFE' : ''} | P`;
+  }
 }
 let bootDone = 0;
 
@@ -1013,6 +1022,7 @@ renderer.setAnimationLoop(() => {
     console.log('[boot] timeline:', bootStages.join(' | '));
   }
 
+  const frameT0 = performance.now();
   const dt = Math.min(clock.getDelta(), 0.05);
   simT += dt;
   perfTick(dt);
@@ -1080,6 +1090,7 @@ renderer.setAnimationLoop(() => {
   if (camMode !== 'walk') controls.update();
   if (FX === 'off') renderer.render(scene, camera); else composer.render();
   css2d.render(scene, camera);
+  frameMs = performance.now() - frameT0;
 });
 
 }

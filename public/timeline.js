@@ -28,8 +28,13 @@ export function initTimeline({ sim, demo }) {
     try {
       if (demo()) { render(window.__demoTimeline ?? []); return; }
       const r = await fetch('/timeline');
-      if (r.ok) render(await r.json());
-    } catch { /* offline */ }
+      if (r.ok) { render(await r.json()); return; }
+      offline(`/timeline -> HTTP ${r.status}`);
+    } catch { offline('/timeline unreachable'); }
+  }
+  function offline(why) {                  // 9.6: say it, don't blank it
+    bar.innerHTML = `<span class="tl-label">next 12h</span>
+      <span class="tl-empty">timeline offline (${why}) — is the adapter routed?</span>`;
   }
   poll();
   setInterval(poll, 60000);

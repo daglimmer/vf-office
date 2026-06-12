@@ -300,3 +300,6 @@ body.embed #presets { left: 118px; max-width: 50vw; }
 #perfbadge { position: fixed; bottom: 54px; left: 10px; z-index: 50; background: var(--glass);
   backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 6px;
   color: var(--green); font: 11px/1.4 monospace; padding: 4px 10px; pointer-events: none; }
+
+/* ---------------- Phase 9.7: ?blur=0 strips backdrop blur (perf A/B) ---------------- */
+body.noblur * { backdrop-filter: none !important; }
