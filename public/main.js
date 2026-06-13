@@ -1002,6 +1002,19 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyP') perfHideAt = perfEl.style.display === 'none' ? Infinity : 0;
 });
 let frameMs = 0, frameMsAvg = 0;
+// 9.9: per-segment frame profiler - the badge names the slowest parts
+const segT = {};
+let segNow = 0, segName = null;
+function seg(name) {
+  const t = performance.now();
+  if (segName) segT[segName] = (segT[segName] ?? 0) * 0.95 + (t - segNow) * 0.05;
+  segName = name; segNow = t;
+}
+function segEnd() { seg(null); segName = null; }
+function topSegs() {
+  return Object.entries(segT).sort((a, b) => b[1] - a[1]).slice(0, 3)
+    .map(([k, v]) => `${k}:${v.toFixed(1)}`).join(' ');
+}
 function perfTick(dt) {
   perfFrames++; perfAccum += dt;
   frameMsAvg += (frameMs - frameMsAvg) * 0.05;
@@ -1010,7 +1023,7 @@ function perfTick(dt) {
     const show = performance.now() < perfHideAt;
     perfEl.style.display = show ? 'block' : 'none';
     if (show) perfEl.textContent =
-      `${perfFps.toFixed(0)} fps | js ${frameMsAvg.toFixed(1)}ms | boot ${Math.round(bootDone)}ms | q=${Q} fx=${FX}${SAFE ? ' SAFE' : ''} | P`;
+      `${perfFps.toFixed(0)} fps | js ${frameMsAvg.toFixed(1)}ms [${topSegs()}] | boot ${Math.round(bootDone)}ms | q=${Q} fx=${FX}${SAFE ? ' SAFE' : ''} | P`;
   }
 }
 let bootDone = 0;
@@ -1038,9 +1051,14 @@ renderer.setAnimationLoop(() => {
     }
   }
   try {
+    seg('tick');
     office.tick?.(simT);                                   // 8d: rack data LEDs
-    if (!SAFE) { updateScreens(dt, simT); updateMoments(dt); }   // Phase 9
+    seg('screens');
+    if (!SAFE) updateScreens(dt, simT);
+    seg('moments');
+    if (!SAFE) updateMoments(dt);
   } catch (e) { if (!loopWarned) { loopWarned = true; console.error('[loop] extras failed:', e); } }
+  seg('agents');
   if (!tour && camMode === 'preset' && !flight && !sim.followed &&
       performance.now() - lastInput > 180000) {
     tour = { pos: camera.position.clone(), target: controls.target.clone(),
@@ -1056,6 +1074,7 @@ renderer.setAnimationLoop(() => {
     controls.target.lerp(new THREE.Vector3(20, 1.2, 13), Math.min(dt * 0.8, 1));
   }
   for (const a of [...agents]) a.update(dt);
+  seg('scene-fx');
   holo.rotation.y += dt * 0.8;
   const op = holo.children[0].material.opacity;
   holo.children[0].material.opacity = op + (holoTarget * 0.16 - op) * Math.min(dt * 4, 1);
@@ -1090,8 +1109,11 @@ renderer.setAnimationLoop(() => {
     camera.position.lerp(want, Math.min(dt * 2.2, 1));
   }
   if (camMode !== 'walk') controls.update();
+  seg('render3d');
   if (FX === 'off') renderer.render(scene, camera); else composer.render();
+  seg('css2d');
   css2d.render(scene, camera);
+  segEnd();
   frameMs = performance.now() - frameT0;
 });
 

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite public",
     "build": "vite build public --outDir ../dist --emptyOutDir",
-    "deploy": "npm run build && cp -r public/office.glb public/waypoints.json dist/ 2>/dev/null; echo 'copy dist/* into adapter public dir'"
+    "deploy": "npm run build && cp public/anchors.json public/waypoints.json dist/ && echo 'serve dist VIA the adapter: PUBLIC_DIR=<abs path to dist> PORT=3000 node adapter/index.js'"
   },
   "dependencies": {
     "three": "^0.165.0"
