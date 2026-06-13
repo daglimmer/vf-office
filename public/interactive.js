@@ -26,6 +26,7 @@ const LEGACY = [
 ];
 
 let ctx = null, bound = [], tooltip = null, hovered = null, pulseT = 0;
+let hoveredAgent = null;
 
 export function initInteractive(c) {
   ctx = c;                       // { scene, gltfScene, camera, renderer, sim, isEmbed, post }
@@ -67,8 +68,34 @@ function pick(e) {
   return hits.length ? hits[0].object : null;
 }
 
+function pickAgent(e) {                  // Phase 10b: hover an agent -> who + what
+  const list = ctx.sim?.getAgents?.() ?? [];
+  if (!list.length) return null;
+  ptr.x = (e.clientX / innerWidth) * 2 - 1;
+  ptr.y = -(e.clientY / innerHeight) * 2 + 1;
+  ray.setFromCamera(ptr, ctx.camera);
+  const hits = ray.intersectObjects(list.map(a => a.group), true);
+  if (!hits.length) return null;
+  let o = hits[0].object;
+  while (o) { const a = list.find(x => x.group === o); if (a) return a; o = o.parent; }
+  return null;
+}
+
 function hover(e) {
   if (!ctx) return;
+  const ag = pickAgent(e);
+  if (ag) {                                // agents win over hot objects
+    if (hovered) { setGlow(hovered, hovered.userData.hotBase); hovered = null; }
+    hoveredAgent = ag;
+    ctx.renderer.domElement.style.cursor = 'pointer';
+    tooltip.style.display = 'block';
+    const doing = ag.blocked ? 'BLOCKED' : (ag.taskTitle ?? ag.state ?? 'idle');
+    tooltip.textContent = `${ag.name} — ${doing}`;
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top = (e.clientY - 30) + 'px';
+    return;
+  }
+  hoveredAgent = null;
   const o = pick(e);
   if (o !== hovered) {
     if (hovered) setGlow(hovered, hovered.userData.hotBase);

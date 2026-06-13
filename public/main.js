@@ -444,16 +444,20 @@ function makeAvatar(colorHex, scale = 1, role = 'specialist', seedName = '') {
 }
 
 function makeLabel(name, sub) {
+  // Phase 10b (Ray): small name-only chip; the task shows on hover instead.
+  // A second line appears only for status overrides (BLOCKED / PAUSED / ...).
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 72;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
-  sprite.scale.set(1.9, 0.55, 1); sprite.position.y = 1.55;   // above the puppet head
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
+  sprite.scale.set(1.25, 0.36, 1); sprite.position.y = 1.5;
   sprite.userData.draw = (color, text) => {
     const x = cv.getContext('2d');
-    x.clearRect(0, 0, 256, 72); x.fillStyle = 'rgba(20,22,26,.8)'; x.fillRect(0, 0, 256, 72);
-    x.fillStyle = color ?? '#e8eaee'; x.font = 'bold 26px sans-serif'; x.textAlign = 'center';
-    x.fillText(name, 128, 30);
-    x.font = '20px sans-serif'; x.fillStyle = color ?? '#8a8f98';
-    x.fillText(text ?? sub ?? '', 128, 58);
+    x.clearRect(0, 0, 256, 72);
+    x.fillStyle = 'rgba(16,18,23,.66)';
+    const w = text ? 240 : 170;
+    x.beginPath(); x.roundRect((256 - w) / 2, text ? 2 : 14, w, text ? 68 : 44, 10); x.fill();
+    x.fillStyle = color ?? '#dfe3ea'; x.font = 'bold 27px sans-serif'; x.textAlign = 'center';
+    x.fillText(name, 128, text ? 30 : 44);
+    if (text) { x.font = '21px sans-serif'; x.fillStyle = color ?? '#8a8f98'; x.fillText(text, 128, 60); }
     sprite.material.map.needsUpdate = true;
   };
   sprite.userData.draw(null);
@@ -772,60 +776,99 @@ function walkUpdate(dt) {
 // ----------------------------------------------------------------- bridge events
 const COLUMN_STATE = { backlog: 'spawning', todo: 'briefing', in_progress: 'working', review: 'debrief' };
 let colorIdx = 0;
-// ---- Phase 10 (the ag:955 fix): avatars are REPRESENTATIVE, not 1:1.
-// A real kanban DB has hundreds of cards; the office seats ~30. Only cards in
-// active columns get a walking avatar, hard-capped. The kanban wall screen
-// still displays every card as data.
-const ACTIVE_COLS = ['in_progress', 'review', 'todo'];     // spawn priority order
-const MAX_CARD_AVATARS = 22;
-function spawnCardAvatar(card) {
-  if (byCard.has(card.cardId) || byCard.size >= MAX_CARD_AVATARS) return null;
-  const a = new Agent({ name: card.assignee ?? card.cardId, sub: card.cardId,
-                        color: SPECTRUM[colorIdx++ % 6], cardId: card.cardId });
-  a.taskTitle = card.title ?? null;
-  return a;
+// ---- Phase 10b: ONE avatar per ASSIGNEE (Ray). A real board has many cards
+// per worker - sentinel exists once and works its top-priority card. All of an
+// assignee's active cards map to the same body; when the top card changes the
+// worker switches tasks instead of a clone spawning. Roster bodies are reused.
+const ACTIVE_COLS = ['in_progress', 'review', 'todo'];
+const PRIO = { in_progress: 0, review: 1, todo: 2 };
+const MAX_WORKERS = 22;
+const cardsAll = new Map();             // cardId -> {cardId,title,column,assignee,blocked}
+const workers = new Map();              // assignee -> Agent
+let syncQueued = false;
+function queueSync() {
+  if (syncQueued) return;
+  syncQueued = true;
+  setTimeout(() => { syncQueued = false; syncWorkers(); }, 60);
+}
+function syncWorkers() {
+  const byAss = new Map();
+  for (const c of cardsAll.values()) {
+    if (!c.assignee || !ACTIVE_COLS.includes(c.column)) continue;
+    (byAss.get(c.assignee) ?? byAss.set(c.assignee, []).get(c.assignee)).push(c);
+  }
+  // release workers whose assignee has no active cards left
+  for (const [name, w] of [...workers]) {
+    if (byAss.has(name)) continue;
+    workers.delete(name);
+    for (const [cid, ag] of [...byCard]) if (ag === w) byCard.delete(cid);
+    w.taskTitle = null; w.cardId = null;
+    if (w.agentId) { w.state = 'idle'; w.refreshStatus(); }   // roster body: back to roster control
+    else w.setLifecycle('debrief');                           // ride the walk-out chain
+  }
+  // ensure/update one worker per assignee
+  for (const [name, list] of byAss) {
+    list.sort((a, b) => PRIO[a.column] - PRIO[b.column]);
+    let w = workers.get(name);
+    if (!w) {
+      if (workers.size >= MAX_WORKERS) continue;
+      // reuse the roster body for this agent if one exists
+      w = byId.get(name) ?? agents.find(a => a.name === name && !a.cardId) ?? null;
+      if (!w) w = new Agent({ name, sub: '', color: SPECTRUM[colorIdx++ % 6], role: 'devops' });
+      workers.set(name, w);
+    }
+    // top card: highest priority; prefer the current one within the same tier
+    let top = list[0];
+    if (w.cardId) {
+      const cur = cardsAll.get(w.cardId);
+      if (cur && ACTIVE_COLS.includes(cur.column) && PRIO[cur.column] === PRIO[top.column]) top = cur;
+    }
+    for (const [cid, ag] of [...byCard]) if (ag === w && !list.some(c => c.cardId === cid)) byCard.delete(cid);
+    for (const c of list) byCard.set(c.cardId, w);
+    const switched = w.cardId !== top.cardId;
+    w.cardId = top.cardId;
+    w.taskTitle = top.title ?? top.cardId;
+    const desired = COLUMN_STATE[top.column];
+    if (switched || w.lifecycle !== desired) w.setLifecycle(desired);
+    const blk = !!top.blocked;
+    if (blk !== w.blocked) w.setBlocked(blk, top.reason);
+  }
 }
 function handleEvent(ev) {
   emit(ev);                                   // HUD + notification modules listen on bus
   switch (ev.event) {
     case 'snapshot': {
-      const pool = (ev.cards ?? []).filter(c => !byCard.has(c.cardId) && ACTIVE_COLS.includes(c.column));
-      pool.sort((x, y) => ACTIVE_COLS.indexOf(x.column) - ACTIVE_COLS.indexOf(y.column));
-      for (const card of pool) {
-        const a = spawnCardAvatar(card);
-        if (!a) break;                                     // cap reached
-        a.setLifecycle(COLUMN_STATE[card.column]);
-      }
-      console.log(`[office] snapshot: ${ev.cards?.length ?? 0} cards -> ${byCard.size} avatars (cap ${MAX_CARD_AVATARS})`);
+      for (const c of ev.cards ?? [])
+        cardsAll.set(c.cardId, { cardId: c.cardId, title: c.title ?? c.cardId, column: c.column, assignee: c.assignee ?? null, blocked: false });
+      queueSync();
+      console.log(`[office] snapshot: ${ev.cards?.length ?? 0} cards -> ${[...new Set([...cardsAll.values()].filter(c => c.assignee && ACTIVE_COLS.includes(c.column)).map(c => c.assignee))].length} active assignees (cap ${MAX_WORKERS})`);
       break;
     }
-    case 'card.created': {
-      // new cards land in backlog - no body until they enter an active column
-      if (ACTIVE_COLS.includes(ev.column)) {
-        const a = spawnCardAvatar(ev);
-        if (a) a.setLifecycle(COLUMN_STATE[ev.column]);
-      } else if (demoMode) {                               // demo: keep the spawn show
-        const a = spawnCardAvatar(ev);
-        if (a) a.setLifecycle('spawning');
-      }
-      break;
-    }
+    case 'card.created':
+      cardsAll.set(ev.cardId, { cardId: ev.cardId, title: ev.title ?? ev.cardId, column: ev.column ?? 'backlog', assignee: ev.assignee ?? null, blocked: false });
+      queueSync(); break;
     case 'card.moved': {
-      let a = byCard.get(ev.cardId);
-      if (!a && ACTIVE_COLS.includes(ev.to)) {             // card became active: give it a body
-        a = spawnCardAvatar(ev);
-        if (a) { a.setLifecycle(COLUMN_STATE[ev.to]); break; }
-      }
-      if (!a) return;
-      const s = COLUMN_STATE[ev.to];
-      if (s) a.setLifecycle(s);
-      else if (ev.to === 'done') a.setLifecycle('debrief');   // ride the chain out to despawn
-      else if (ev.to === 'despawn') a.setLifecycle('despawning');
-      break;
+      const c = cardsAll.get(ev.cardId) ?? { cardId: ev.cardId, title: ev.title ?? ev.cardId, assignee: ev.assignee ?? null, blocked: false };
+      c.column = ev.to;
+      if (ev.title) c.title = ev.title;
+      if (ev.assignee) c.assignee = ev.assignee;
+      cardsAll.set(ev.cardId, c);
+      queueSync(); break;
     }
-    case 'card.blocked': byCard.get(ev.cardId)?.setBlocked(true, ev.reason); break;
-    case 'card.unblocked': byCard.get(ev.cardId)?.setBlocked(false); break;
-    case 'card.deleted': byCard.get(ev.cardId)?.remove(); break;
+    case 'card.blocked': {
+      const c = cardsAll.get(ev.cardId);
+      if (c) { c.blocked = true; c.reason = ev.reason; }
+      queueSync(); break;
+    }
+    case 'card.unblocked': {
+      const c = cardsAll.get(ev.cardId);
+      if (c) { c.blocked = false; c.reason = null; }
+      queueSync(); break;
+    }
+    case 'card.deleted':
+      cardsAll.delete(ev.cardId);
+      byCard.delete(ev.cardId);
+      queueSync(); break;
     case 'agent.paused': pAgent(ev.agentId)?.setOverlay('paused'); break;
     case 'agent.resumed': pAgent(ev.agentId)?.setOverlay('ok'); break;
     case 'agent.killed': pAgent(ev.agentId)?.setOverlay('killed'); break;
@@ -1132,6 +1175,15 @@ renderer.setAnimationLoop(() => {
     controls.target.lerp(new THREE.Vector3(20, 1.2, 13), Math.min(dt * 0.8, 1));
   }
   for (const a of [...agents]) a.update(dt);
+  // Phase 10b: labels fade with camera distance - close groups stop being
+  // a wall of gray boxes. Despawn fade keeps ownership while active.
+  for (const a of agents) {
+    if (a.fx?.kind === 'despawn') continue;
+    const d = camera.position.distanceTo(a.group.position);
+    const fade = THREE.MathUtils.clamp(1 - (d - 9) / 15, 0, 1);
+    a.label.material.opacity = (a.ghosted ? 0.5 : 0.95) * fade;
+    a.label.visible = fade > 0.02;
+  }
   seg('scene-fx');
   holo.rotation.y += dt * 0.8;
   const op = holo.children[0].material.opacity;
