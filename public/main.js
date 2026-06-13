@@ -478,6 +478,10 @@ class Agent {
     this.blocked = false; this.overlay = 'ok';      // ok|paused|down|killed
     this.fx = null; this.glowT = 0;
     scene.add(this.group); agents.push(this);
+    if (agents.length === 60 || agents.length === 200 || agents.length === 500) {
+      console.warn(`[leak-tracer] agent #${agents.length} "${name}" spawned by:`);
+      console.trace();
+    }
     if (agentId) byId.set(agentId, this);
     if (cardId) byCard.set(cardId, this);
     this.refreshStatus();
@@ -1038,7 +1042,7 @@ function perfTick(dt) {
     const inf = renderer.info;
     if (show) perfEl.textContent =
       `${perfFps.toFixed(0)} fps | js ${frameMsAvg.toFixed(1)}ms [${topSegs()}] | ` +
-      `dc:${inf.render.calls} tri:${(inf.render.triangles / 1000).toFixed(0)}k ` +
+      `ag:${agents.length} off:${scene.children.filter(c => c.name === 'office_v8').length} roots:${scene.children.length} ` +
       `geo:${inf.memory.geometries} tex:${inf.memory.textures} prog:${inf.programs?.length ?? '?'} nodes:${nodeCount} | ` +
       `q=${Q} fx=${FX}${SAFE ? ' SAFE' : ''} | P`;
   }
