@@ -985,7 +985,9 @@ function degradeLive() {
   } catch {}
   renderer.setPixelRatio(1);
   scene.getObjectByName('office_v8')?.getObjectByName?.('floor_dc_mirror')?.removeFromParent?.();
-  for (const o of [...scene.children]) if (o.isRectAreaLight || o.isSpotLight) scene.remove(o);
+  // 9.8: do NOT remove lights live - changing light count recompiles every
+  // shader in the scene. Just mute them; the reload path handles the rest.
+  for (const o of scene.children) if (o.isRectAreaLight || o.isSpotLight) o.intensity = 0;
   console.warn('[office] fps low -> degraded in place (override with ?q=high)');
 }
 

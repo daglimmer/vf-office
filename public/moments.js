@@ -6,17 +6,40 @@
 import * as THREE from 'three';
 
 let sim = null, scene = null;
-const fx = [];                        // {light, t, dur, kind, baseI}
+const fx = [];                        // {light, t, dur, baseI}
 
+// ---- Phase 9.8: FIXED light pool. Adding/removing lights at runtime forces
+// THREE to recompile every shader in the scene (a multi-hundred-ms stall,
+// twice per pulse). Demo mode fires events constantly, which turned that into
+// a permanent ~20fps recompilation storm. These 4 lights are created ONCE at
+// init and only ever change intensity/position - zero recompiles, ever.
+const POOL_SIZE = 4;
+const pool = [];
 function pulse(x, y, z, color, dur = 8, intensity = 5, dist = 9) {
-  const l = new THREE.PointLight(color, 0, dist, 1.8);
+  let l = pool.find(p => !p.userData.busy);
+  if (!l) {                                          // all busy: steal the oldest
+    const oldest = fx.reduce((a, b) => (a.t / a.dur > b.t / b.dur ? a : b), fx[0]);
+    if (!oldest) return;
+    fx.splice(fx.indexOf(oldest), 1);
+    l = oldest.light;
+  }
+  l.userData.busy = true;
+  l.color.set(color);
+  l.distance = dist;
   l.position.set(x, y, z);
-  scene.add(l);
+  l.intensity = 0;
   fx.push({ light: l, t: 0, dur, baseI: intensity });
 }
 
 export function initMoments({ bus, sim: simRef }) {
   sim = simRef; scene = sim.scene;
+  for (let i = 0; i < POOL_SIZE; i++) {              // 9.8: permanent pool
+    const l = new THREE.PointLight(0xffffff, 0, 9, 1.8);
+    l.position.set(20, -50, 13);                     // parked out of sight
+    l.userData.busy = false;
+    scene.add(l);
+    pool.push(l);
+  }
   const roomCenter = r => sim.rooms[r]?.center ?? [20, 0, 8.5];
 
   bus.addEventListener('bridge', ({ detail: ev }) => {
@@ -91,7 +114,12 @@ export function updateMoments(dt) {
     const f = fx[i];
     f.t += dt;
     const k = f.t / f.dur;
-    if (k >= 1) { scene.remove(f.light); fx.splice(i, 1); continue; }
+    if (k >= 1) {                                    // 9.8: release, never remove
+      f.light.intensity = 0;
+      f.light.position.y = -50;
+      f.light.userData.busy = false;
+      fx.splice(i, 1); continue;
+    }
     if (f.baseI < 0) {                                     // flicker (gateway down)
       f.light.intensity = Math.random() < 0.4 ? 2.2 * (1 - k) : 0.15;
     } else {                                               // pulse with decay
