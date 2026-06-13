@@ -582,6 +582,11 @@ class Agent {
   remove() {
     this.releaseSlot(); this.leaveBriefing();
     scene.remove(this.group);
+    this.group.traverse(o => {                 // Phase 10: free GPU memory
+      o.geometry?.dispose?.();
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) { m?.map?.dispose?.(); m?.dispose?.(); }
+    });
     agents.splice(agents.indexOf(this), 1);
     if (this.cardId) byCard.delete(this.cardId);
     if (this.agentId) byId.delete(this.agentId);
@@ -763,26 +768,54 @@ function walkUpdate(dt) {
 // ----------------------------------------------------------------- bridge events
 const COLUMN_STATE = { backlog: 'spawning', todo: 'briefing', in_progress: 'working', review: 'debrief' };
 let colorIdx = 0;
+// ---- Phase 10 (the ag:955 fix): avatars are REPRESENTATIVE, not 1:1.
+// A real kanban DB has hundreds of cards; the office seats ~30. Only cards in
+// active columns get a walking avatar, hard-capped. The kanban wall screen
+// still displays every card as data.
+const ACTIVE_COLS = ['in_progress', 'review', 'todo'];     // spawn priority order
+const MAX_CARD_AVATARS = 22;
+function spawnCardAvatar(card) {
+  if (byCard.has(card.cardId) || byCard.size >= MAX_CARD_AVATARS) return null;
+  const a = new Agent({ name: card.assignee ?? card.cardId, sub: card.cardId,
+                        color: SPECTRUM[colorIdx++ % 6], cardId: card.cardId });
+  a.taskTitle = card.title ?? null;
+  return a;
+}
 function handleEvent(ev) {
   emit(ev);                                   // HUD + notification modules listen on bus
   switch (ev.event) {
-    case 'snapshot':
-      for (const card of ev.cards ?? []) {
-        if (byCard.has(card.cardId)) continue;
-        const st = COLUMN_STATE[card.column];
-        if (!st && card.column !== 'done') continue;
-        const a = new Agent({ name: card.assignee ?? card.cardId, sub: card.cardId, color: SPECTRUM[colorIdx++ % 6], cardId: card.cardId });
-        a.setLifecycle(st ?? 'lunch');          // done cards rest in the lounge chain
+    case 'snapshot': {
+      const pool = (ev.cards ?? []).filter(c => !byCard.has(c.cardId) && ACTIVE_COLS.includes(c.column));
+      pool.sort((x, y) => ACTIVE_COLS.indexOf(x.column) - ACTIVE_COLS.indexOf(y.column));
+      for (const card of pool) {
+        const a = spawnCardAvatar(card);
+        if (!a) break;                                     // cap reached
+        a.setLifecycle(COLUMN_STATE[card.column]);
+      }
+      console.log(`[office] snapshot: ${ev.cards?.length ?? 0} cards -> ${byCard.size} avatars (cap ${MAX_CARD_AVATARS})`);
+      break;
+    }
+    case 'card.created': {
+      // new cards land in backlog - no body until they enter an active column
+      if (ACTIVE_COLS.includes(ev.column)) {
+        const a = spawnCardAvatar(ev);
+        if (a) a.setLifecycle(COLUMN_STATE[ev.column]);
+      } else if (demoMode) {                               // demo: keep the spawn show
+        const a = spawnCardAvatar(ev);
+        if (a) a.setLifecycle('spawning');
       }
       break;
-    case 'card.created': {
-      const a = new Agent({ name: ev.assignee ?? ev.cardId, sub: ev.cardId, color: SPECTRUM[colorIdx++ % 6], cardId: ev.cardId });
-      a.setLifecycle('spawning'); break;
     }
     case 'card.moved': {
-      const a = byCard.get(ev.cardId); if (!a) return;
+      let a = byCard.get(ev.cardId);
+      if (!a && ACTIVE_COLS.includes(ev.to)) {             // card became active: give it a body
+        a = spawnCardAvatar(ev);
+        if (a) { a.setLifecycle(COLUMN_STATE[ev.to]); break; }
+      }
+      if (!a) return;
       const s = COLUMN_STATE[ev.to];
       if (s) a.setLifecycle(s);
+      else if (ev.to === 'done') a.setLifecycle('debrief');   // ride the chain out to despawn
       else if (ev.to === 'despawn') a.setLifecycle('despawning');
       break;
     }
