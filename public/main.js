@@ -53,6 +53,10 @@ if (new URLSearchParams(location.search).get('blur') === '0') {
 const QPARAM = new URLSearchParams(location.search).get('q');
 let Q = QPARAM ?? (() => { try { return localStorage.getItem('officeQ'); } catch { return null; } })() ?? 'high';
 if (Q !== 'low' && Q !== 'high') Q = 'high';
+// explicit ?q= choice is sticky (overrides any earlier auto-degrade decision)
+if (QPARAM === 'high' || QPARAM === 'low') {
+  try { localStorage.setItem('officeQ', QPARAM); sessionStorage.removeItem('officeDegraded'); } catch {}
+}
 const LOWQ = Q === 'low';
 console.log('[office] quality:', Q);
 
