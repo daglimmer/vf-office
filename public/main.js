@@ -107,6 +107,13 @@ if (EMBED) {
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Q === 'low' ? 1 : Math.min(devicePixelRatio, 1.75));   // 9.2: fill-rate cap
+try {                                                      // 9.10: name the real GPU
+  const gl = renderer.getContext();
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  const gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+  console.log('[office] GPU:', gpu);
+  window.__gpu = gpu;
+} catch {}
 renderer.shadowMap.enabled = !LOWQ;                       // 9.5: shadows are high-only
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1015,15 +1022,25 @@ function topSegs() {
   return Object.entries(segT).sort((a, b) => b[1] - a[1]).slice(0, 3)
     .map(([k, v]) => `${k}:${v.toFixed(1)}`).join(' ');
 }
+let nodeCount = 0, nodeT = 0;
 function perfTick(dt) {
   perfFrames++; perfAccum += dt;
   frameMsAvg += (frameMs - frameMsAvg) * 0.05;
+  nodeT += dt;
+  if (nodeT > 2) {                                         // 9.10: scene node census
+    nodeT = 0; nodeCount = 0;
+    scene.traverse(() => nodeCount++);
+  }
   if (perfAccum >= 0.5) {
     perfFps = perfFrames / perfAccum; perfFrames = 0; perfAccum = 0;
     const show = performance.now() < perfHideAt;
     perfEl.style.display = show ? 'block' : 'none';
+    const inf = renderer.info;
     if (show) perfEl.textContent =
-      `${perfFps.toFixed(0)} fps | js ${frameMsAvg.toFixed(1)}ms [${topSegs()}] | boot ${Math.round(bootDone)}ms | q=${Q} fx=${FX}${SAFE ? ' SAFE' : ''} | P`;
+      `${perfFps.toFixed(0)} fps | js ${frameMsAvg.toFixed(1)}ms [${topSegs()}] | ` +
+      `dc:${inf.render.calls} tri:${(inf.render.triangles / 1000).toFixed(0)}k ` +
+      `geo:${inf.memory.geometries} tex:${inf.memory.textures} prog:${inf.programs?.length ?? '?'} nodes:${nodeCount} | ` +
+      `q=${Q} fx=${FX}${SAFE ? ' SAFE' : ''} | P`;
   }
 }
 let bootDone = 0;
