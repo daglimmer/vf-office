@@ -54,6 +54,9 @@ jobs:
     needs: quality-gates
     env:
       KUBECONFIG: ${{ secrets.KUBECONFIG }}
+    outputs:
+      image_tag: ${{ steps.vars.outputs.TAG }}
+      image_digest: ${{ steps.digest.outputs.digest }}
     defaults:
       run:
         working-directory: .
@@ -76,10 +79,14 @@ jobs:
         run: |
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }} .
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }}
-          echo "IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }} | cut -d'@' -f2)" >> $GITHUB_ENV
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }} | cut -d'@' -f2)
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
-      - name: Save tag for next jobs
-        run: echo "IMAGE_TAG=${{ steps.vars.outputs.TAG }}" >> $GITHUB_ENV
+      - name: Output image digest
+        id: digest
+        run: |
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }} | cut -d'@' -f2)
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
   deploy-staging:
     name: Deploy to Staging
@@ -88,11 +95,13 @@ jobs:
     environment: staging
     env:
       KUBECONFIG: ${{ secrets.KUBECONFIG }}
+      IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
+      IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
     steps:
       - name: Deploy to K3s (staging namespace)
         run: |
           kubectl set image deployment/${{ env.KUBE_DEPLOYMENT }}-staging \
-            ${{ env.KUBE_DEPLOYMENT }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG }} \
+            ${{ env.KUBE_DEPLOYMENT }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -n ${{ env.KUBE_NAMESPACE }} --record
 
       - name: Wait for rollout
@@ -121,11 +130,13 @@ jobs:
     environment: production
     env:
       KUBECONFIG: ${{ secrets.KUBECONFIG }}
+      IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
+      IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
     steps:
       - name: Deploy to K3s (production)
         run: |
           kubectl set image deployment/${{ env.KUBE_DEPLOYMENT }} \
-            ${{ env.KUBE_DEPLOYMENT }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG }} \
+            ${{ env.KUBE_DEPLOYMENT }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -n ${{ env.KUBE_NAMESPACE }} --record
 
       - name: Wait for rollout
@@ -155,17 +166,19 @@ jobs:
   kanban-complete:
     name: Kanban Complete with Evidence
     runs-on: self-hosted
-    needs: deploy-production
+    needs: [docker-build, deploy-staging, deploy-production]
     if: always()
     env:
       KUBECONFIG: ${{ secrets.KUBECONFIG }}
+      IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
+      IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
     steps:
       - name: Collect evidence
         run: |
           cat <<EOF > evidence.json
           {
             "sha": "${{ github.sha }}",
-            "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker-build.outputs.IMAGE_TAG }}",
+            "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}",
             "image_digest": "${{ env.IMAGE_DIGEST }}",
             "staging_screenshots": [
               "staging-home.png",
@@ -192,10 +205,11 @@ jobs:
       - name: Update Kanban task
         run: |
           echo "KANBAN TASK UPDATE REQUIRED:"
-          echo "Task: Deploy vf-office ${{ needs.docker-build.outputs.IMAGE_TAG }}"
+          echo "Task: Deploy vf-office ${{ env.IMAGE_TAG }}"
           echo "Evidence: $(cat evidence.json | jq -c .)"
-          echo "Status: ${NEEDS_RESULT:-SUCCESS}"
-          if [ "${NEEDS_RESULT}" != "success" ]; then
+          STATUS="${{ job.status }}"
+          echo "Status: $STATUS"
+          if [ "$STATUS" != "success" ]; then
             echo "::error::Pipeline failed - Kanban task NOT completed"
             exit 1
           fi
