@@ -12,7 +12,7 @@ env:
   REGISTRY: 10.75.1.211:30500
   IMAGE_NAME: vf-office
   KUBE_NAMESPACE: mission-control
-  KUBE_DEPLOYMENT: vf-office
+  KUBE_DEPLOYMENT: olympus-office
 
 jobs:
   quality-gates:
