@@ -47,6 +47,13 @@ jobs:
       - name: Verify build output
         run: test -f dist/index.html && echo "Build output verified"
 
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vf-office-dist
+          path: dist/
+          retention-days: 1
+
   docker-build:
     name: Docker Build & Push
     runs-on: self-hosted
@@ -61,6 +68,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vf-office-dist
+          path: dist
+
       - name: Set image tag
         id: vars
         run: echo "TAG=$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
@@ -69,7 +82,13 @@ jobs:
         run: |
           echo "${{ secrets.REGISTRY_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ secrets.REGISTRY_USER }} --password-stdin
 
+      - name: Prepare adapter context (copy frontend build to adapter/public)
+        run: |
+          rm -rf adapter/public
+          cp -r dist adapter/public
+
       - name: Build and push
+        working-directory: adapter
         run: |
           docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }} .
           docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }}
@@ -78,6 +97,7 @@ jobs:
 
       - name: Output image digest
         id: digest
+        working-directory: adapter
         run: |
           DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }} | cut -d'@' -f2)
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
