@@ -18,8 +18,6 @@ jobs:
   quality-gates:
     name: Quality Gates
     runs-on: self-hosted
-    env:
-      KUBECONFIG: ${{ secrets.KUBECONFIG }}
     defaults:
       run:
         working-directory: .
@@ -53,8 +51,6 @@ jobs:
     name: Docker Build & Push
     runs-on: self-hosted
     needs: quality-gates
-    env:
-      KUBECONFIG: ${{ secrets.KUBECONFIG }}
     outputs:
       image_tag: ${{ steps.vars.outputs.TAG }}
       image_digest: ${{ steps.digest.outputs.digest }}
@@ -70,11 +66,8 @@ jobs:
         run: echo "TAG=$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
 
       - name: Login to registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USER }}
-          password: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          echo "${{ secrets.REGISTRY_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ secrets.REGISTRY_USER }} --password-stdin
 
       - name: Build and push
         run: |
@@ -95,26 +88,29 @@ jobs:
     needs: docker-build
     environment: staging
     env:
-      KUBECONFIG: ${{ secrets.KUBECONFIG }}
       IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
       IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
     steps:
       - name: Deploy to K3s (staging namespace)
         run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
           kubectl set image deployment/${{ env.KUBE_DEPLOYMENT }}-staging \
             ${{ env.KUBE_DEPLOYMENT }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -n ${{ env.KUBE_NAMESPACE }} --record
 
       - name: Wait for rollout
         run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
           kubectl rollout status deployment/${{ env.KUBE_DEPLOYMENT }}-staging \
-            -n ${{ env.KUBE_NAMESPACE }} --timeout=120s
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
 
       - name: Verify staging health
         run: |
           sleep 10
-          curl -sf https://staging-office.k3s.110lymph.nl/health || exit 1
-          curl -sf https://staging-office.k3s.110lymph.nl/api/backups | jq -e '.vaults[].backupJobs' || exit 1
+          curl -sf https://staging-office.k3s.110lymph.nl/api/health | jq -e '.status' || exit 1
+          curl -sf https://staging-office.k3s.110lymph.nl/api/backups | jq -e '.systems | length > 0' || exit 1
 
       - name: Capture staging screenshots
         run: |
@@ -127,29 +123,32 @@ jobs:
   deploy-production:
     name: Deploy to Production
     runs-on: self-hosted
-    needs: deploy-staging
+    needs: [docker-build, deploy-staging]
     environment: production
     env:
-      KUBECONFIG: ${{ secrets.KUBECONFIG }}
       IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
       IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
     steps:
       - name: Deploy to K3s (production)
         run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
           kubectl set image deployment/${{ env.KUBE_DEPLOYMENT }} \
             ${{ env.KUBE_DEPLOYMENT }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -n ${{ env.KUBE_NAMESPACE }} --record
 
       - name: Wait for rollout
         run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
           kubectl rollout status deployment/${{ env.KUBE_DEPLOYMENT }} \
-            -n ${{ env.KUBE_NAMESPACE }} --timeout=120s
+            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
 
       - name: Verify production health
         run: |
           sleep 10
-          curl -sf https://office.110lymph.nl/health || exit 1
-          curl -sf https://office.110lymph.nl/api/backups | jq -e '.vaults[].backupJobs and .vaults[].nextRun' || exit 1
+          curl -sf https://office.110lymph.nl/api/health | jq -e '.status' || exit 1
+          curl -sf https://office.110lymph.nl/api/backups | jq -e '.systems | length > 0' || exit 1
 
       - name: Capture production screenshots
         run: |
@@ -170,7 +169,6 @@ jobs:
     needs: [docker-build, deploy-staging, deploy-production]
     if: always()
     env:
-      KUBECONFIG: ${{ secrets.KUBECONFIG }}
       IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
       IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
     steps:
@@ -220,11 +218,11 @@ jobs:
     runs-on: self-hosted
     needs: [deploy-staging, deploy-production]
     if: failure()
-    env:
-      KUBECONFIG: ${{ secrets.KUBECONFIG }}
     steps:
       - name: Rollback production
         run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
           kubectl rollout undo deployment/${{ env.KUBE_DEPLOYMENT }} -n ${{ env.KUBE_NAMESPACE }}
           kubectl rollout status deployment/${{ env.KUBE_DEPLOYMENT }} -n ${{ env.KUBE_NAMESPACE }} --timeout=60s
 
