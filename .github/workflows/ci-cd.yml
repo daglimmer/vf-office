@@ -84,6 +84,11 @@ jobs:
           rm -rf adapter/public
           cp -r dist adapter/public
 
+      - name: Verify Dockerfile exists
+        run: |
+          ls -la adapter/Dockerfile
+          test -f adapter/Dockerfile && echo "Dockerfile found"
+
       - name: Build and push
         run: |
           docker build -f adapter/Dockerfile -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }} .
