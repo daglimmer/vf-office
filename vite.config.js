@@ -8,8 +8,8 @@ const TARGET = process.env.ADAPTER_TARGET ?? 'http://127.0.0.1:3000';
 const WS_TARGET = TARGET.replace(/^http/, 'ws');
 
 export default defineConfig({
-  build: { target: 'esnext' },
-  esbuild: { target: 'esnext' },
+  build: { target: 'es2022' },
+  esbuild: { target: 'es2022', supported: { 'top-level-await': true } },
   server: {
     proxy: {
       '/agents': TARGET,
