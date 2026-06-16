@@ -948,7 +948,7 @@ function stopPolling() {                                   // Phase 6 (1): WS re
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws`);   // proxied by vite in dev; direct on adapter
-  const giveUp = setTimeout(() => { ws.close(); httpFallback(); }, 2000);
+  const giveUp = setTimeout(() => { ws.close(); httpFallback(); }, 5000);
   ws.onopen = () => { clearTimeout(giveUp); wsConnected = true; stopPolling(); };
   ws.onmessage = m => handleEvent(JSON.parse(m.data));
   ws.onclose = () => { wsConnected = false; if (!demoMode && !polling) setTimeout(connect, 2000); };
