@@ -5,7 +5,7 @@
 
 1. **Clone these repos:**
    - `https://github.com/daglimmer/vf-office` (branch: `master`) — [3D Office]
-   - `https://github.com/daglimmer/fable-dashboard` (branch: `master`) — [Dashboard]
+   - `https://github.com/daglimmer/Projects` (branch: `master`) — [Monorepo; dashboard lives at `dashboard/vf-dashboard/`]
 2. **Read the ARCHITECTURE.md** at `/root/110lymph-homelab/ARCHITECTURE.md` on the Hermes VM, or the Fumadocs mirror at `https://olympus.110lymph.nl/docs/architecture` — understand the system: canonical domains, K3s cluster, CI/CD pipeline, ingress routing, agent fleet.
 3. **Read the K3s manifests** at `/root/110lymph-homelab/infrastructure/kustomize/` — understand how deployments work: Docker images from `10.75.1.211:30500`, `ImagePullPolicy: IfNotPresent`, Traefik IngressRoutes, namespaces.
 4. **Verify current live state** — curl these endpoints and compare with what the repo says:
@@ -268,7 +268,7 @@ kubectl rollout status deployment/olympus-office -n mission-control
 
 **Docker build (for Dashboard):**
 ```bash
-cd /root/repos/fable-dashboard/dashboard/vf-dashboard
+cd /root/repos/Projects/dashboard/vf-dashboard
 docker build --no-cache -t 10.75.1.211:30500/vf-dashboard:<tag> .
 docker push 10.75.1.211:30500/vf-dashboard:<tag>
 kubectl set image deployment/vf-dashboard vf-dashboard=10.75.1.211:30500/vf-dashboard:<tag> -n mission-control
