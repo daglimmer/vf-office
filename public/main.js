@@ -418,6 +418,7 @@ function aStar(from, to) {
 class Pool {
   constructor(names, door) { this.free = [...names]; this.door = door; this.queue = []; }
   request(a) { if (this.free.length) return this.free.shift(); this.queue.push(a); return null; }
+  take() { return this.free.length ? this.free.shift() : null; }   // non-queueing: free seat or null
   release(n) { const nx = this.queue.shift(); if (nx) nx.grantSlot(n); else this.free.push(n); }
   unqueue(a) { this.queue = this.queue.filter(x => x !== a); }
   queueIndex(a) { return this.queue.indexOf(a); }
@@ -425,10 +426,27 @@ class Pool {
 const ids = (p, n) => Array.from({ length: n }, (_, i) => `${p}${String(i + 1).padStart(2, '0')}`);
 const pools = {
   work: new Pool(ids('doc_desk_', 4), 'nav_door_staff'),
-  doc: new Pool(ids('work_desk_', 8), 'nav_door_devops'),
+  doc: new Pool(ids('work_desk_', 8).slice(1), 'nav_door_devops'),  // work_desk_01 reserved for pinned Oly
   lounge: new Pool(ids('lounge_seat_', 8), 'nav_door_lounge'),
   meet: new Pool(ids('meet_seat_', 7), 'nav_door_meeting'),
 };
+// Phase-2 state-based seating, pileup-safe. Seats an agent in the first pool with
+// a free slot (no queueing -> never piles up at the door). 14 agents share 27
+// pool seats, so a free seat always exists. glow=true lights the desk (active).
+function seatAgent(a, order, pose, glow) {
+  for (const key of order) {
+    const slot = pools[key].take();
+    if (!slot) continue;
+    a.hold(key, slot);
+    a.goto(slot, () => {
+      a.sitAt(slot, pose);
+      const g = deskGlow.get(slot);
+      if (g) g.material.emissiveIntensity = glow ? 1.4 : 0.05;
+    });
+    return true;
+  }
+  return false;
+}
 function queueSpot(door, i) {
   const p = anchors.get(door).pos.clone();
   if (Math.abs(p.x - 17) < 0.1) p.x += 1.2; else if (Math.abs(p.x - 23) < 0.1) p.x -= 1.2; else p.z -= 1.2;
@@ -532,7 +550,14 @@ class Agent {
   gotoPoint(v, onArrive) { this.path = [{ name: null, pos: v.clone() }]; this.onArrive = onArrive ?? null; this.pose = 'walk'; this.seated = null; }
   sitAt(name, pose) {
     const a = anchors.get(name);
-    this.group.position.copy(a.pos); this.group.quaternion.copy(a.quat);
+    this.group.position.copy(a.pos);
+    // Seat anchors are upright with a pure yaw (facing direction). Copying a
+    // 180deg quaternion (0,-1,0,~0) makes Three decompose it to Euler (pi,0,pi);
+    // then animateHumanoid eases rotation.x -> 0 each frame, leaving (0,0,pi) =
+    // a 180deg ROLL = upside-down. Set a clean yaw-only Euler so x and z stay 0.
+    const q = a.quat;
+    const yaw = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.z * q.z));
+    this.group.rotation.set(0, yaw, 0);
     this.seated = name; this.pose = pose; this.path = [];
   }
   acquire(poolKey, onGranted) {
@@ -909,16 +934,25 @@ async function pollRoster() {
         a.setGhost(false);
         a.state = 'working';
         if (anchor) { if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, 'type')); }
-        else if (!a.heldSlot && !a.waitingPool && !a.path.length)
-          a.acquire('work', s => { a.hold('work', s); a.goto(s, () => { a.sitAt(s, 'type'); deskGlow.get(s).material.emissiveIntensity = 1.4; }); });
+        else if (a.heldSlot) {                            // already seated -> wake the desk up
+          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = 1.4;
+        } else if (!a.waitingPool && !a.path.length) {
+          // State-based seating by role, seat-guaranteed (no door pileup):
+          // devops -> big room (work_desk via 'doc' pool), others -> staff room.
+          seatAgent(a, a.role === 'devops' ? ['doc', 'work', 'lounge'] : ['work', 'doc', 'lounge'], 'type', true);
+        }
       } else {                                            // idle / offline <24h: ghost in place
         a.setGhost(true);
         a.state = 'idle';
         if (anchor) {
           // go to assigned anchor even when idle (ghosted at desk, not spawn)
           if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, 'sit'));
-        } else if (a.heldSlot) {
-          a.releaseSlot(); a.seated = null; a.pose = 'idle';
+        } else if (a.heldSlot) {                          // stay seated, just dim the desk (resting)
+          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = 0.05;
+        } else if (!a.waitingPool && !a.path.length) {
+          // Idle agents rest at a desk (ghosted), spread across the work rooms,
+          // overflowing to the lounge -- always a seat, never queued.
+          seatAgent(a, ['doc', 'work', 'lounge'], 'sit', false);
         }
       }
     } else {

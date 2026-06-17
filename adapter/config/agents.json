@@ -1,16 +1,16 @@
 [
   { "id": "marcus",       "name": "CEO Marcus",     "color": "#FFD24D", "anchor": "ceo_desk",        "role": "command" },
   { "id": "oly",          "name": "COO - Oly",      "color": "#2ECC71", "anchor": "work_desk_01",    "role": "coo" },
-  { "id": "sentinel",     "name": "Sentinel",       "color": "#E74C3C", "anchor": "doc_desk_01",     "role": "sentinel" },
-  { "id": "storekeeper",  "name": "Storekeeper",    "color": "#4A90D9", "anchor": "doc_desk_02",     "role": "specialist" },
-  { "id": "deploybot",    "name": "Deploybot",      "color": "#9B59B6", "anchor": "doc_desk_03",     "role": "specialist" },
-  { "id": "netwatch",     "name": "NetWatch",       "color": "#E67E22", "anchor": "doc_desk_04",     "role": "specialist" },
-  { "id": "finwise",      "name": "FinWise",        "color": "#1ABC9C", "anchor": "meet_seat_ollie", "role": "specialist" },
-  { "id": "proxguard",    "name": "ProxGuard",      "color": "#E91E63", "anchor": "lounge_seat_01",  "role": "specialist" },
-  { "id": "homeassistant","name": "Home Assistant", "color": "#BB8FCE", "anchor": "lounge_seat_02",  "role": "specialist" },
-  { "id": "k8slearn",     "name": "k8slearn",       "color": "#FF6B35", "anchor": "work_desk_02",    "role": "specialist" },
-  { "id": "devops",       "name": "DevOps",         "color": "#F1C40F", "anchor": "work_desk_03",    "role": "devops" },
-  { "id": "devops-api",   "name": "DevOps API",     "color": "#00BCD4", "anchor": "work_desk_04",    "role": "devops", "parent": "devops" },
-  { "id": "devops-app",   "name": "DevOps App",     "color": "#8BC34A", "anchor": "work_desk_05",    "role": "devops", "parent": "devops" },
-  { "id": "devops-infra", "name": "DevOps Infra",   "color": "#FF5722", "anchor": "work_desk_06",    "role": "devops", "parent": "devops" }
+  { "id": "sentinel",     "name": "Sentinel",       "color": "#E74C3C", "anchor": "ollie_station",     "role": "sentinel" },
+  { "id": "storekeeper",  "name": "Storekeeper",    "color": "#4A90D9", "anchor": null,     "role": "specialist" },
+  { "id": "deploybot",    "name": "Deploybot",      "color": "#9B59B6", "anchor": null,     "role": "specialist" },
+  { "id": "netwatch",     "name": "NetWatch",       "color": "#E67E22", "anchor": null,     "role": "specialist" },
+  { "id": "finwise",      "name": "FinWise",        "color": "#1ABC9C", "anchor": null, "role": "specialist" },
+  { "id": "proxguard",    "name": "ProxGuard",      "color": "#E91E63", "anchor": null,  "role": "specialist" },
+  { "id": "homeassistant","name": "Home Assistant", "color": "#BB8FCE", "anchor": null,  "role": "specialist" },
+  { "id": "k8slearn",     "name": "k8slearn",       "color": "#FF6B35", "anchor": null,    "role": "specialist" },
+  { "id": "devops",       "name": "DevOps",         "color": "#F1C40F", "anchor": null,    "role": "devops" },
+  { "id": "devops-api",   "name": "DevOps API",     "color": "#00BCD4", "anchor": null,    "role": "devops", "parent": "devops" },
+  { "id": "devops-app",   "name": "DevOps App",     "color": "#8BC34A", "anchor": null,    "role": "devops", "parent": "devops" },
+  { "id": "devops-infra", "name": "DevOps Infra",   "color": "#FF5722", "anchor": null,    "role": "devops", "parent": "devops" }
 ]

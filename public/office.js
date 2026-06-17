@@ -875,29 +875,5 @@ export function buildOffice(report) {
       blinkMats[i].emissiveIntensity = v > 0.55 ? 1.7 : v < -1.2 ? 0.1 : 0.45;
     }
   }
-  // ================================================================
-  // CONFIRMATION MARKER: Giant red "D" floating at center of office
-  // This proves the user is seeing THIS build, not a cached/stale version
-  const dGeo = new THREE.BoxGeometry(6, 3, 0.5);
-  const dMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 2 });
-  const dMesh = new THREE.Mesh(dGeo, dMat);
-  dMesh.position.set(20, 4.5, 9);
-  dMesh.name = 'marker_D';
-  G.add(dMesh);
-  // Also add a smaller floating text plane below it
-  const textGeo = new THREE.PlaneGeometry(12, 1.5);
-  const cv = document.createElement('canvas'); cv.width = 600; cv.height = 80;
-  const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 600, 80);
-  ctx.fillStyle = '#ff0000'; ctx.font = 'bold 56px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('NEW BUILD 2026-06-16 — DO YOU SEE THIS?', 300, 40);
-  const textMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, side: THREE.DoubleSide });
-  const textMesh = new THREE.Mesh(textGeo, textMat);
-  textMesh.position.set(20, 3.2, 9);
-  textMesh.name = 'marker_label';
-  G.add(textMesh);
-  console.log('%c🔥🔥🔥 CONFIRMATION MARKER "D" IS IN THIS BUILD 🔥🔥🔥', 'color:red;font-size:24px;font-weight:bold');
-  // ================================================================
-
   return { group: G, anchors, tick };
 }

@@ -359,7 +359,14 @@ export class Agent {
   gotoPoint(v, onArrive) { this.path = [{ name: null, pos: v.clone() }]; this.onArrive = onArrive ?? null; this.pose = 'walk'; this.seated = null; }
   sitAt(name, pose) {
     const a = anchors.get(name);
-    this.group.position.copy(a.pos); this.group.quaternion.copy(a.quat);
+    this.group.position.copy(a.pos);
+    // Seat anchors are upright with a pure yaw (facing direction). Copying a
+    // 180deg quaternion (0,-1,0,~0) makes Three decompose it to Euler (pi,0,pi);
+    // then animateHumanoid eases rotation.x -> 0 each frame, leaving (0,0,pi) =
+    // a 180deg ROLL = upside-down. Set a clean yaw-only Euler so x and z stay 0.
+    const q = a.quat;
+    const yaw = Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.z * q.z));
+    this.group.rotation.set(0, yaw, 0);
     this.seated = name; this.pose = pose; this.path = [];
   }
   acquire(poolKey, onGranted) {
