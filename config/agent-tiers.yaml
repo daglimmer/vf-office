@@ -1,0 +1,100 @@
+# Agent Trust Tiers
+# Maps every agent to a trust level. The trust level determines base policy:
+# which actions are pre-approved, which require notification, and which are blocked.
+# Hot-reloadable.
+
+agent_tiers:
+
+  unrestricted:
+    description: "Full access, all environments. Policy still applies but overrides are self-approved."
+    agents:
+      - marcus
+      - oly
+    capabilities:
+      - read: allow
+      - write: allow
+      - modify: allow
+      - create: allow
+      - delete: allow_with_notify  # Even Marcus logs deletes
+    environments:
+      - production
+      - staging
+      - monitoring
+      - knowledge
+      - development
+    can_override_policy: true
+    override_expiry_hours: 24
+
+  operational:
+    description: "Full operational access. All production writes notify. Delete requires approval."
+    agents:
+      - devops
+      - devops-app
+      - devops-api
+      - devops-infra
+      - operations-specialist
+    capabilities:
+      - read: allow
+      - write: allow
+      - modify: allow
+      - create: allow
+      - delete: require_human_approval
+    environments:
+      - production
+      - staging
+      - monitoring
+      - knowledge
+      - development
+    production_write: allow_with_notify
+    can_override_policy: false
+
+  observation:
+    description: "Read-only for data sources. Alert creation only. No infra modification."
+    agents:
+      - netwatch
+      - hermes-sentinel
+    capabilities:
+      - read: allow
+      - write: require_human_approval  # Only alert/ticket creation
+      - modify: block
+      - create: block
+      - delete: block
+    environments:
+      - monitoring
+      - production  # Read-only access
+    production_write: block
+
+  guided:
+    description: "Execution within known playbooks only. New actions require approval."
+    agents:
+      - vaultwarden
+      - vaultwarden-alpine-lxc
+    capabilities:
+      - read: allow
+      - write: allow_with_notify  # Only within known playbook scope
+      - modify: allow_with_notify
+      - create: block  # No new service creation
+      - delete: block
+    environments:
+      - production  # Within their specific domain only
+      - staging
+    playbook_required: true  # Action must match a known playbook, otherwise BLOCK
+
+  restricted:
+    description: "Read-only + staging writes. No production, no delete, no infrastructure."
+    agents:
+      - sub-agent              # All leaf sub-agents
+      - external-contractor    # Opus and similar external access
+      - kanban-worker
+      - fable-agent
+    capabilities:
+      - read: allow
+      - write: allow  # Staging only (see environment restrictions)
+      - modify: block
+      - create: block
+      - delete: block
+    environments:
+      - staging
+      - development
+      - monitoring  # Read-only
+    production_write: block

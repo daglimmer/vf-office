@@ -1,0 +1,376 @@
+# Governance Policy Configuration
+# Hot-reloadable: change this file, policies update on next pre-flight check.
+# No agent restart needed. Policy API picks up changes within 5 seconds.
+
+# Default policy (applied if no other rule matches)
+default:
+  action: ALLOW
+  notify: false
+  log: true
+
+# Policy rules — evaluated in order, first match wins
+rules:
+
+  # --- READ OPERATIONS (always allowed) ---
+  - id: read-always
+    description: "Read operations are never blocked"
+    priority: 100
+    match:
+      action_type: read
+    decision: ALLOW
+    notify: false
+    log: false  # Too noisy to log every status check
+
+  # --- DELETE OPERATIONS (always gated) ---
+  - id: delete-requires-human
+    description: "Delete operations always require human approval"
+    priority: 90
+    match:
+      action_type: delete
+    decision: REQUIRE_HUMAN_APPROVAL
+    notify: true
+    notify_target:
+      - telegram:@oly
+      - discord:@oly
+
+  - id: delete-prod-blocks-subagent
+    description: "Sub-agents and restricted agents cannot delete any resource"
+    priority: 95
+    match:
+      agent: sub-agent
+      action_type: delete
+    decision: BLOCK
+    block_message: "Sub-agents cannot perform delete operations. Delegate to a specialist or ask Marcus."
+    notify: true
+    notify_target:
+      - telegram:@oly
+
+  # --- PRODUCTION WRITE (business hours) ---
+  - id: prod-write-business-hours
+    description: "Production writes during business hours are allowed with notification"
+    priority: 70
+    match:
+      action_type:
+        - write
+        - modify
+        - create
+      environment: production
+      time_window: business_hours
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:#homelab
+
+  # --- PRODUCTION WRITE (outside business hours) ---
+  - id: prod-write-outside-hours
+    description: "Production writes outside business hours blocked unless P1 incident"
+    priority: 71
+    match:
+      action_type:
+        - write
+        - modify
+        - create
+      environment: production
+      time_window:
+        - out_of_hours
+        - maintenance_window
+    decision: BLOCK
+    block_message: "Production writes outside business hours require P1 incident tag or Marcus approval."
+    notify: true
+    notify_target:
+      - telegram:@marcus
+    override:
+      allowed_with: p1_incident
+      override_notify:
+        - telegram:@marcus
+
+  # --- BLAST RADIUS >= 5 (cluster-wide or infra) ---
+  - id: blast-radius-5-plus
+    description: "Cluster-wide or infrastructure changes require inventory + approval"
+    priority: 80
+    match:
+      blast_radius:
+        - 5
+        - 6
+        - 7
+    decision: REQUIRE_INVENTORY_AND_APPROVAL
+    notify: true
+    notify_target:
+      - telegram:@oly
+      - telegram:#homelab
+
+  - id: blast-radius-5-plus-subagent
+    description: "Sub-agents cannot perform cluster-wide or infrastructure changes"
+    priority: 85
+    match:
+      agent: sub-agent
+      blast_radius:
+        - 5
+        - 6
+        - 7
+    decision: BLOCK
+    block_message: "Cluster-wide changes require a specialist agent. Sub-agents cannot perform this action."
+    notify: true
+    notify_target:
+      - telegram:@oly
+
+  # --- CUSTOMER-FACING CHANGES ---
+  - id: customer-facing-change
+    description: "Changes that affect customers require customer ticket reference"
+    priority: 75
+    match:
+      customer_impact: true
+      action_type:
+        - write
+        - modify
+        - create
+        - delete
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:#homelab
+    require_ticket_reference: true
+    ticket_field: customer_ticket
+    block_message: "Customer-facing changes require a ticket reference. Set customer_ticket in the action context or cancel."
+
+  # --- ARGUS (customer-facing) SPECIFIC RULES ---
+  - id: argus-prod-write
+    description: "Changes to Argus (customer-facing frontend) require explicit approval"
+    priority: 78
+    match:
+      action_type:
+        - write
+        - modify
+        - create
+      dns_suffix: argus.110lymph.nl
+    decision: REQUIRE_HUMAN_APPROVAL
+    notify: true
+    notify_target:
+      - telegram:@ray
+      - telegram:@oly
+    block_message: "Changes to Argus (customer-facing) require Ray or Oly approval. This is our customer storefront."
+
+  # --- LEAF SUB-AGENTS (restricted) ---
+  - id: leaf-agent-prod-write
+    description: "Leaf sub-agents cannot write to production"
+    priority: 85
+    match:
+      agent: sub-agent
+      environment: production
+      action_type:
+        - write
+        - modify
+        - create
+    decision: BLOCK
+    block_message: "Sub-agents cannot modify production. Delegate to a specialist or ask Marcus."
+    notify: true
+    notify_target:
+      - telegram:@oly
+
+  - id: leaf-agent-staging-write
+    description: "Leaf sub-agents can write to staging with notification"
+    priority: 80
+    match:
+      agent: sub-agent
+      environment: staging
+      action_type:
+        - write
+        - modify
+        - create
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:@oly
+
+  # --- SCHEDULED MAINTENANCE WINDOWS ---
+  - id: maintenance-window-ops
+    description: "Allowed operations during defined maintenance windows"
+    priority: 60
+    match:
+      time_window: maintenance_window
+      action_type:
+        - write
+        - modify
+        - create
+      environment: production
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:#homelab
+    require_pre_approval: true
+    approval_deadline_minutes: 60
+
+  # --- INFRASTRUCTURE-LEVEL (firewall, DNS, VLAN) ---
+  - id: infra-change-blocked-for-operations
+    description: "Infrastructure changes (firewall, DNS, VLAN) require Marcus approval"
+    priority: 90
+    match:
+      action_type:
+        - write
+        - modify
+        - create
+        - delete
+      environment: production
+      host:
+        - fw01
+        - fw02
+        - fw03
+    decision: REQUIRE_HUMAN_APPROVAL
+    notify: true
+    notify_target:
+      - telegram:@marcus
+    block_message: "Firewall or infrastructure changes require Marcus approval."
+
+  # --- GATEWAY CHANGES ---
+  - id: gateway-write-restricted
+    description: "Hermes Gateway config changes require approval"
+    priority: 85
+    match:
+      action_type:
+        - write
+        - modify
+      target: hermes
+      host: hermes-vm
+    decision: REQUIRE_HUMAN_APPROVAL
+    notify: true
+    notify_target:
+      - telegram:@marcus
+
+  # --- DEPLOYMENT PIPELINE ---
+  - id: pipeline-deploy-staging
+    description: "Deployments to staging are allowed with notification"
+    priority: 70
+    match:
+      action_type: write
+      target: pipeline
+      environment: staging
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:#homelab
+
+  - id: pipeline-deploy-prod
+    description: "Deployments to production require approval"
+    priority: 75
+    match:
+      action_type: write
+      target: pipeline
+      environment: production
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:#homelab
+    require_pre_approval: true
+    approval_deadline_minutes: 15
+
+  # --- TECH WATCH / SECURITY CVES ---
+  - id: techwatch-cve-patch-critical
+    description: "Critical CVE patches are expedited — allowed at any time with notification"
+    priority: 50  # Lower priority, but specific match
+    match:
+      action_type:
+        - write
+        - modify
+      is_cve_patch: true
+      cve_severity: critical
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:#homelab
+    block_message: null  # Always allowed
+
+  - id: techwatch-cve-patch-high
+    description: "High severity CVE patches during business hours"
+    priority: 55
+    match:
+      action_type:
+        - write
+        - modify
+      is_cve_patch: true
+      cve_severity: high
+      time_window: business_hours
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:#homelab
+
+  - id: techwatch-cve-patch-high-outside
+    description: "High severity CVE patches outside hours require P1 or approval"
+    priority: 56
+    match:
+      action_type:
+        - write
+        - modify
+      is_cve_patch: true
+      cve_severity: high
+      time_window:
+        - out_of_hours
+        - maintenance_window
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:@marcus
+
+  # --- OUTLINE / KNOWLEDGE BASE WRITES ---
+  - id: kb-write-allowed
+    description: "Knowledge base writes are allowed with log"
+    priority: 65
+    match:
+      environment: knowledge
+      action_type:
+        - write
+        - modify
+        - create
+    decision: ALLOW_WITH_LOG
+    notify: false
+    log: true
+
+  # --- SPECIFIC AGENT: NETWATCH (read-only enforcement) ---
+  - id: netwatch-read-only
+    description: "NetWatch is read-only — cannot modify infrastructure"
+    priority: 85
+    match:
+      agent: netwatch
+      action_type:
+        - write
+        - modify
+        - create
+        - delete
+    decision: BLOCK
+    block_message: "NetWatch is a monitoring agent — it cannot modify infrastructure. Delegate to devops-infra."
+    notify: true
+    notify_target:
+      - telegram:@oly
+
+  # --- SPECIFIC AGENT: OPUS (restricted external) ---
+  - id: opus-production-restricted
+    description: "Opus (external contractor) cannot modify production"
+    priority: 85
+    match:
+      agent: external-contractor
+      environment: production
+      action_type:
+        - write
+        - modify
+        - create
+        - delete
+    decision: BLOCK
+    block_message: "External contractors cannot modify production. Changes must go through staging pipeline with review."
+    notify: true
+    notify_target:
+      - telegram:@marcus
+      - telegram:@oly
+
+  # --- AGENT CONFIG CHANGES (self-modification) ---
+  - id: agent-self-config-modify
+    description: "Agents can modify their own config with notification"
+    priority: 60
+    match:
+      action_type:
+        - write
+        - modify
+      target: self-config
+    decision: ALLOW_WITH_NOTIFY
+    notify: true
+    notify_target:
+      - telegram:#homelab

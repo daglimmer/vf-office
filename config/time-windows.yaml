@@ -1,0 +1,39 @@
+# Time Windows Configuration
+# Used by the Policy API to determine which policy-relevant time window applies.
+# Hot-reloadable.
+
+time_windows:
+
+  business_hours:
+    - timezone: Europe/Amsterdam
+      schedule: "Mon-Fri 08:00-18:00"
+      description: "Standard working hours — most changes allowed"
+      action_default: ALLOW_WITH_NOTIFY
+
+  maintenance_window:
+    - timezone: Europe/Amsterdam
+      schedule: "Sun 02:00-06:00"
+      description: "Weekly maintenance — heavy operations allowed"
+      action_default: ALLOW_WITH_NOTIFY
+    - timezone: Europe/Amsterdam
+      schedule: "Wed 03:00-04:00"
+      description: "Database maintenance window (PostgreSQL, Redis)"
+      action_default: ALLOW_WITH_NOTIFY
+
+  out_of_hours:
+    - timezone: Europe/Amsterdam
+      schedule: "Mon-Fri 18:00-08:00"
+      description: "Evening/night — restricted changes only"
+      action_default: BLOCK
+    - timezone: Europe/Amsterdam
+      schedule: "Sat-Sun all day"
+      description: "Weekend — restricted changes only"
+      action_default: BLOCK
+
+  p1_incident:
+    - timezone: Europe/Amsterdam
+      schedule: "always"
+      description: "P1/P2 incident override — any time, any day"
+      action_default: ALLOW_WITH_NOTIFY
+      # Note: p1_incident must be explicitly tagged by the agent.
+      # It is NOT auto-derived from the clock.

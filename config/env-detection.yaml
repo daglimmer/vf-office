@@ -1,0 +1,72 @@
+# Environment Detection Rules
+# Hot-reloadable: Policy API picks up changes within 5 seconds.
+# Evaluated in order, first match wins.
+# Default: "production" (safe default — unknown = production).
+
+environments:
+
+  production:
+    description: "Live customer-facing or internal production services"
+    match:
+      - dns_suffix: olympus.110lymph.nl
+      - dns_suffix: argus.110lymph.nl
+      - kube_namespace: mission-control
+      - kube_namespace: argus
+      - kube_namespace: outline
+      - kube_namespace: vaultwarden
+      - kube_namespace: observability
+      - host_ip: 10.11.1.0/24    # Management/production VLAN
+      - host_ip: 10.75.1.0/24    # K3s cluster network
+      - host_ip: 10.2.1.0/24     # Ceph storage network
+      - hostname_suffix: .110lymph.nl
+      - hostname: k3s-srv-01
+      - hostname: k3s-srv-02
+      - hostname: k3s-srv-03
+      - hostname: k3s-srv-04
+      - hostname: k3s-srv-05
+      - hostname: fw01
+      - hostname: fw02
+      - hostname: fw03
+      - hostname: the-vault
+      - hostname: vault-01
+      - hostname: vault-02
+
+  staging:
+    description: "Pre-production services for testing"
+    match:
+      - kube_namespace: staging
+      - hostname_suffix: staging.110lymph.nl
+      - hostname: olympus-office-staging
+      - hostname: vf-dashboard-staging
+      - hostname: workspace-server-staging
+      - dns_suffix: staging.110lymph.nl
+
+  monitoring:
+    description: "Observability stack — read-only for most agents"
+    match:
+      - kube_namespace: observability
+      - hostname: observ-pg
+      - hostname: observ-redis
+      - dns_suffix: grafana.110lymph.nl
+      - dns_suffix: prometheus.110lymph.nl
+      - dns_suffix: loki.110lymph.nl
+
+  knowledge:
+    description: "Documentation and knowledge base"
+    match:
+      - kube_namespace: outline
+      - dns_suffix: docs.dev.110lymph.nl
+      - path_prefix: /root/110lymph-homelab
+      - path_prefix: /root/repos/*/prompts-for-opus
+
+  development:
+    description: "Local development — non-deployed code, experiments"
+    match:
+      - hostname: hermes-vm.local
+      - hostname: dev-pve-01
+      - path_prefix: /home/*/dev
+      - path_prefix: /tmp/*/dev
+      - label: env=dev
+
+  # Fallback — any target that matches no rule above is treated as production
+  default: production
