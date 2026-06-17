@@ -678,8 +678,11 @@ class Agent {
     this.animate(dt);
   }
   animate(dt) {                             // Phase 8: humanoid pose driver
-    const CHAIR_HEIGHT = 0.42;
-    animateHumanoid(this, this.seated ? anchors.get(this.seated).pos.y + CHAIR_HEIGHT : 0, dt);
+    // aY = floor offset. Anchors sit at Y=0 (floor), but the avatar's seated
+    // hip position (0.46*S) puts the butt at ~0.46 — way above the chair seat
+    // (~0.15-0.20 in the GLB). Negative offset drops them onto the chair.
+    const SEAT_OFFSET = -0.12;
+    animateHumanoid(this, this.seated ? anchors.get(this.seated).pos.y + SEAT_OFFSET : 0, dt);
   }
 }
 
