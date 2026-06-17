@@ -35,7 +35,7 @@ The pipeline is fully configurable at every decision point. Customers can insert
 │                                                                     │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐    │
 │  │Prometheus│  │  Loki    │  │ NetWatch │  │ External Sources │    │
-│  │(metrics) │  │(logs)    │  │(health)  │  │(API,Custom,etc)  │    │
+│  │(metrics) │  │(logs)    │  │(health)  │  │(RSS,API,Custom)  │    │
 │  └─────┬────┘  └─────┬────┘  └─────┬────┘  └────────┬─────────┘    │
 │        │              │              │                │              │
 │        ▼              ▼              ▼                ▼              │
@@ -329,6 +329,9 @@ grafana_link: "https://olympus.110lymph.nl/d/disk-usage?server=k3s-srv-03"
 | 8 | DNS resolution failure | NetWatch check | ✅ P1 manual | 5 min |
 | 9 | Firewall rule drift | Config diff | ✅ P3 auto | 15 min |
 | 10 | Container image vulnerability | Trivy scan | 🔴 P2 manual | 20 min |
+| 11 | Security advisory: fleet-affecting CVE | Tech Watch ingestion | 🔴 P2 manual | 30 min |
+| 12 | OPNsense security update | Tech Watch OPNsense feed | ✅ P3 auto | 15 min |
+| 13 | Proxmox VE security patch | Tech Watch Proxmox feed | 🔴 P2 manual | 20 min |
 
 ### 3.6 Verification Layer
 
@@ -351,6 +354,142 @@ After closure, the agent:
 2. **Updates KB** — if steps differed from playbook, update article
 3. **Updates metrics** — time-to-detect, time-to-remediate, success rate
 4. **Suggests improvements** — if same issue repeats, suggest permanent fix
+
+### 3.8 Tech Watch — Security Advisory Ingestion
+
+> **Status:** UI built and live on olympus.110lymph.nl (Tech Watch tab) — needs data feed
+>
+> The Tech Watch tab displays the full pipeline: Investigation → Fix → Deploy → Needs Re-attention. Currently has 6 hardcoded/stale advisories. This spec describes the automatic RSS-based ingestion to keep it populated with fresh, relevant security content.
+
+**Architecture — Same pattern as News feeds:**
+
+The Tech Watch ingester follows the identical pattern as the News feed system (Cluster 2, B4) but for security content. A cron-driven poller fetches RSS/Atom feeds from authoritative security sources, correlates them against the fleet inventory, and pushes matched advisories into the Tech Watch pipeline.
+
+```
+Feed Poller (cron, every 30m)
+    │
+    ▼
+┌──────────────────────────────────────────────┐
+│           TECH WATCH INGESTER                │
+│                                              │
+│  1. Fetch RSS from each source               │
+│  2. Parse → extract: title, description,     │
+│     link, published date, CVE ID (if any)    │
+│  3. Correlate against fleet inventory        │
+│     ├─ "Does this CVE affect our stack?"     │
+│     ├─ "Does this advisory match a service   │
+│     │   we run?"                             │
+│     └─ "Is this a false positive?"           │
+│  4. Assign severity (CRITICAL/HIGH/MEDIUM)   │
+│  5. Push into Tech Watch Investigation queue │
+│  6. Log: ingested N advisories, M matched    │
+└──────────────────────────────────────────────┘
+```
+
+**Required RSS Sources (the "fat" feed set):**
+
+| Category | Source | Feed URL | Why |
+|----------|--------|----------|-----|
+| **OS/Linux** | Ubuntu Security | `https://ubuntu.com/security/notices/rss.xml` | Our K3s nodes run Ubuntu |
+| | Debian Security | `https://www.debian.org/security/dsa.rdf` | Some containers on Debian |
+| | Proxmox VE | `https://forum.proxmox.com/forums/proxmox-ve-news-and-announcements.23/index.rss` | Our hypervisor |
+| | Proxmox Backup Server | `https://forum.proxmox.com/forums/proxmox-backup-server-news-and-announcements.21/index.rss` | Our backup platform |
+| **Networking** | OPNsense | `https://opnsense.org/feed/` | Our firewall |
+| | Cisco PSIRT | `https://tools.cisco.com/security/center/psirtrss20/CiscoSecurityAdvisory.xml` | Network gear (future) |
+| **Vulnerability DBs** | NVD (NIST) | `https://nvd.nist.gov/feeds/xml/cve/misc/nvd-rss.xml` | Official CVE feed |
+| | GitHub Security Advisories | `https://github.com/advisories.rss` | CVEs with GitHub analysis |
+| | The Hacker News | `https://feeds.feedburner.com/TheHackersNews` | General security news |
+| | Krebs on Security | `https://krebsonsecurity.com/feed/` | High-signal security reporting |
+| | BleepingComputer | `https://www.bleepingcomputer.com/feed/` | Consumer/enterprise security |
+| **Community** | Reddit r/netsec | `https://www.reddit.com/r/netsec/.rss` | Community-sourced intel |
+| | Reddit r/selfhosted | `https://www.reddit.com/r/selfhosted/.rss` | Our use case community |
+| | Reddit r/kubernetes | `https://www.reddit.com/r/kubernetes/.rss` | K3s/K8s-specific |
+| | Lobsters (security) | `https://lobste.rs/t/security.rss` | Tech-curated security |
+| **Vendor** | Microsoft Security | `https://msrc.microsoft.com/update-guide/rss` | Windows/AD/Exchange vulns |
+| | Docker Security | `https://www.docker.com/blog/category/security/feed/` | Container runtime vulns |
+| | NVIDIA Security | `https://nvidia.custhelp.com/app/answers/list/p/1/kw/security/rss` | GPU driver vulns |
+
+**Correlation against fleet inventory:**
+
+The ingester maintains (or queries) a fleet inventory to determine relevance:
+
+```yaml
+fleet_inventory:
+  os:
+    - ubuntu: "24.04"    # K3s nodes
+    - debian: "12"       # Some containers
+  hypervisor:
+    - proxmox: "8.x"     # All PVE hosts
+  firewall:
+    - opnsense: "25.x"   # FW01/FW02/FW03
+  container_runtime:
+    - containerd: "1.7+" # All K3s nodes
+  services:
+    - postgres: "16.x"
+    - redis: "7.x"
+    - nginx: "1.25+"
+    - traefik: "3.x"
+    - outline: "0.80+"
+    - nextcloud: "29.x"
+    - vaultwarden: "1.30+"
+```
+
+**Correlation logic:**
+- If advisory contains a CVE → check if affected software/version matches fleet inventory
+- If advisory names a specific product (e.g., "OPNsense 25.7") → check if we run it
+- If advisory is general security news → flag as "Review" for human triage
+- If no match → archive (don't push into pipeline) but log for trend analysis
+
+**Severity mapping:**
+
+| Source Signal | Tech Watch Severity |
+|---------------|---------------------|
+| CVSS 9.0-10.0 + affects fleet | CRITICAL |
+| CVSS 7.0-8.9 + affects fleet | HIGH |
+| CVSS 4.0-6.9 + affects fleet | MEDIUM |
+| General advisory (no CVE) | MEDIUM (tag: review) |
+| Informational | LOW |
+
+**Integration with existing Tech Watch UI:**
+
+The ingester pushes advisories as structured JSON into the Tech Watch API endpoint (same pattern as `/api/news` but at `/api/techwatch`):
+
+```json
+{
+  "id": 1234,
+  "title": "Proxmox VE kernel CVE-2026-5678 — privilege escalation",
+  "source": "Ubuntu Security",
+  "cve": "CVE-2026-5678",
+  "severity": "HIGH",
+  "cvss": 7.8,
+  "published_at": "2026-06-17T12:00:00Z",
+  "affected": ["pve01", "pve02", "pve03", "pve04"],
+  "summary": "A privilege escalation vulnerability was found in the Linux kernel...",
+  "link": "https://ubuntu.com/security/CVE-2026-5678",
+  "status": "investigation"  // investigation | fix | deploy | re_attention | resolved
+}
+```
+
+**Tech Watch pipeline flow (matching the UI tabs):**
+
+```
+1. INGEST → New advisory arrives
+2. CORRELATE → Does it affect us? 
+   ├─ Yes → Auto-assign severity, tag affected hosts
+   └─ No → Archive (log for trend analysis)
+3. INVESTIGATION QUEUE → "We know about it, assessing impact"
+   ├─ Human reviews, adds notes
+   └─ Auto-suggest fix based on advisory (if available)
+4. FIX QUEUE → "We have a plan, executing"
+   ├─ Apply patch, upgrade package, reconfigure
+   └─ Steps logged
+5. DEPLOY QUEUE → "Fix applied, verifying"
+   ├─ Verify fix (check version, test functionality)
+   └─ Rollback if verification fails
+6. NEEDS RE-ATTENTION → "Something changed, re-check"
+   └─ New CVE for same component, patch failed, etc.
+7. RESOLVED → Closed, logged to KB
+```
 
 ---
 
