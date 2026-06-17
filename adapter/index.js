@@ -394,13 +394,15 @@ reminderTick();
 // ------------------------------------------------------------------ agent roster (Phase 6 - /api/agents)
 function agentGroup(a) {
   if ((a.type ?? 'agent') === 'infrastructure') return 'infrastructure';
-  if (a.id === 'ollie' || a.id === 'ceo') return 'command';
+  if (a.id === 'marcus' || a.id === 'ceo') return 'command';
   let cur = a, guard = 0;
   while (cur.parent && agents.has(cur.parent) && guard++ < 4) cur = agents.get(cur.parent);
   if (cur.id !== a.id) return cur.id;                       // child -> family root
   if (a.ephemeralPattern || childrenOf(a.id).length) return a.id;   // family root itself
   return 'specialist';
 }
+const GROUP_LABEL = { command:'Command', devops:'DevOps', specialist:'Operations' };
+function agentGroupLabel(a) { return GROUP_LABEL[agentGroup(a)] ?? agentGroup(a); }
 function agentStatus(id) {
   const rt = runtime.get(id);
   if (rt === 'down' || rt === 'killed') return 'offline';
@@ -413,7 +415,7 @@ function agentStatus(id) {
 function agentRoster() {
   return [...agents.values()].map(a => ({
     id: a.id, name: a.name ?? a.id, color: a.color ?? null,
-    role: a.role ?? null, group: agentGroup(a),
+    role: a.role ?? null, group: agentGroupLabel(a),
     status: agentStatus(a.id),
     lastSeen: lastPush.has(a.id) ? Math.floor(lastPush.get(a.id) / 1000) : null,
     anchor: a.anchor ?? null,
@@ -435,7 +437,7 @@ function agentDetail(id) {
   return {
     ok: true,
     id, name: a.name ?? id, color: a.color ?? null,
-    role: a.role ?? null, group: agentGroup(a), parent: a.parent ?? null,
+    role: a.role ?? null, group: agentGroupLabel(a), parent: a.parent ?? null,
     status: agentStatus(id), runtime: runtime.get(id) ?? 'ok',
     model: u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null),
     provider: u.modelProvider ?? null, fallbackActive: u.fallbackActive ?? false,
