@@ -380,16 +380,20 @@ if (Q === 'low') {                                         // 9.2: cheap stand-i
   holo.add(holo.userData.light);
   scene.add(holo);
   // desk monitor glow stand-ins (only if Phase 1 gray-box GLB; Phase 3 art has its own)
-  for (let i = 1; i <= 8; i++) {
-    const name = `work_desk_${String(i).padStart(2, '0')}`;
-    const a = anchors.get(name);
-    const m = new THREE.Mesh(
-      V8 ? new THREE.BoxGeometry(0.9, 0.05, 0.05) : new THREE.BoxGeometry(0.9, 0.5, 0.05),
-      new THREE.MeshStandardMaterial({ color: 0x111418, emissive: 0x3dff7a, emissiveIntensity: 0.05 }));
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(a.quat);
-    m.position.copy(a.pos).addScaledVector(fwd, V8 ? 0.5 : 0.75).setY(V8 ? 0.78 : 1.15);
-    m.quaternion.copy(a.quat);
-    scene.add(m); deskGlow.set(name, m);
+  for (const prefix of ['work_desk_', 'doc_desk_']) {
+    const limit = prefix === 'work_desk_' ? 8 : 4;
+    for (let i = 1; i <= limit; i++) {
+      const name = `${prefix}${String(i).padStart(2, '0')}`;
+      const a = anchors.get(name);
+      if (!a) continue;
+      const m = new THREE.Mesh(
+        V8 ? new THREE.BoxGeometry(0.9, 0.05, 0.05) : new THREE.BoxGeometry(0.9, 0.5, 0.05),
+        new THREE.MeshStandardMaterial({ color: 0x111418, emissive: 0x3dff7a, emissiveIntensity: 0.05 }));
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(a.quat);
+      m.position.copy(a.pos).addScaledVector(fwd, V8 ? 0.5 : 0.75).setY(V8 ? 0.78 : 1.15);
+      m.quaternion.copy(a.quat);
+      scene.add(m); deskGlow.set(name, m);
+    }
   }
 }
 
@@ -420,8 +424,8 @@ class Pool {
 }
 const ids = (p, n) => Array.from({ length: n }, (_, i) => `${p}${String(i + 1).padStart(2, '0')}`);
 const pools = {
-  work: new Pool(ids('work_desk_', 8), 'nav_door_devops'),
-  doc: new Pool(ids('doc_desk_', 4), 'nav_door_staff'),
+  work: new Pool(ids('doc_desk_', 4), 'nav_door_staff'),
+  doc: new Pool(ids('work_desk_', 8), 'nav_door_devops'),
   lounge: new Pool(ids('lounge_seat_', 8), 'nav_door_lounge'),
   meet: new Pool(ids('meet_seat_', 7), 'nav_door_meeting'),
 };
@@ -541,7 +545,8 @@ class Agent {
   releaseSlot() {
     if (this.waitingPool) { pools[this.waitingPool].unqueue(this); this.waitingPool = null; this._granted = null; }
     if (this.heldSlot) {
-      if (this.heldPool === 'work') deskGlow.get(this.heldSlot).material.emissiveIntensity = 0.05;
+      const glow = deskGlow.get(this.heldSlot);
+      if (glow) glow.material.emissiveIntensity = 0.05;
       pools[this.heldPool].release(this.heldSlot); this.heldSlot = this.heldPool = null;
     }
   }
