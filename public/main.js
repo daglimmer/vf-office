@@ -565,8 +565,8 @@ class Agent {
     }
     this.refreshStatus();
   }
-  enterBriefing() { this.inMeeting = true; briefingCount++; syncOllie(); }
-  leaveBriefing() { if (this.inMeeting) { this.inMeeting = false; briefingCount--; syncOllie(); } }
+  enterBriefing() { this.inMeeting = true; briefingCount++; holoTarget = 1.0; }
+  leaveBriefing() { if (this.inMeeting) { this.inMeeting = false; briefingCount--; holoTarget = briefingCount > 0 ? 1.0 : 0.25; } }
   setBlocked(on, reason) {
     if (on && !this.blocked) {
       this.blocked = true; this.savedPath = this.path; this.path = []; this.pose = 'headdown';
@@ -650,18 +650,6 @@ class Agent {
   animate(dt) {                             // Phase 8: humanoid pose driver
     animateHumanoid(this, this.seated ? anchors.get(this.seated).pos.y : 0, dt);
   }
-}
-
-// ----------------------------------------------------------------- ollie & ceo
-const ollie = new Agent({ name: 'Ollie', sub: 'orchestrator', color: '#4DD8FF', scale: 1.18, startAnchor: 'ollie_station', agentId: 'ollie', role: 'command' });
-ollie.sitAt('ollie_station', 'type');
-ollie.state = 'working'; ollie.refreshStatus();
-const ceoAv = new Agent({ name: 'CEO', sub: 'executive', color: '#FFD24D', scale: 1.1, startAnchor: 'ceo_desk', agentId: 'ceo', role: 'command' });
-ceoAv.sitAt('ceo_desk', 'idle');
-function syncOllie() {
-  holoTarget = briefingCount > 0 ? 1.0 : 0.25;
-  if (briefingCount > 0 && ollie.seated !== 'meet_seat_ollie') ollie.goto('meet_seat_ollie', () => ollie.sitAt('meet_seat_ollie', 'talk'));
-  else if (briefingCount === 0 && ollie.seated !== 'ollie_station') ollie.goto('ollie_station', () => ollie.sitAt('ollie_station', 'type'));
 }
 
 // ----------------------------------------------------------------- sim API (§9.1)
@@ -887,7 +875,7 @@ window.__inject = handleEvent;
 // Polls /api/agents: online agents take a desk (via the work pool), idle and
 // recently-offline agents stand ghosted at their last known position, agents
 // offline for >24h are removed. Demo mode supplies its own roster instead.
-const ROSTER_PINNED = new Set(['ollie', 'ceo']);          // never relocated/removed
+const ROSTER_PINNED = new Set();          // no hardcoded agents — all dynamic from API
 function rosterRole(g) { return g === 'command' ? 'command' : g === 'specialist' ? 'specialist' : 'devops'; }
 async function pollRoster() {
   if (demoMode) return;
@@ -910,17 +898,22 @@ async function pollRoster() {
     }
     a.rosterStatus = r.status;
     if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok' && !a.blocked) {
+      const anchor = r.anchor && anchors.has(r.anchor) ? r.anchor : null;
       if (r.status === 'online') {
         a.setGhost(false);
         a.state = 'working';
-        const anchor = r.anchor && anchors.has(r.anchor) ? r.anchor : null;
         if (anchor) { if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, 'type')); }
         else if (!a.heldSlot && !a.waitingPool && !a.path.length)
           a.acquire('work', s => { a.hold('work', s); a.goto(s, () => { a.sitAt(s, 'type'); deskGlow.get(s).material.emissiveIntensity = 1.4; }); });
       } else {                                            // idle / offline <24h: ghost in place
         a.setGhost(true);
         a.state = 'idle';
-        if (a.heldSlot) { a.releaseSlot(); a.seated = null; a.pose = 'idle'; }
+        if (anchor) {
+          // go to assigned anchor even when idle (ghosted at desk, not spawn)
+          if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, 'sit'));
+        } else if (a.heldSlot) {
+          a.releaseSlot(); a.seated = null; a.pose = 'idle';
+        }
       }
     } else {
       a.setGhost(r.status !== 'online');

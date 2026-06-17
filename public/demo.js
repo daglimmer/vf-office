@@ -4,7 +4,6 @@
 // WebSocket alone falls back to /snapshot polling instead (see main.js).
 
 const AGENTS = [
-  { id: 'ollie', name: 'Ollie', color: '#4DD8FF' },
   { id: 'ceo', name: 'CEO', color: '#FFD24D' },
   { id: 'storekeeper', name: 'Storekeeper', color: '#2E5BFF' },
   { id: 'store-nas', name: 'Store NAS', color: '#2E5BFF', parent: 'storekeeper' },
@@ -40,7 +39,7 @@ export function runDemo(inject) {
     const t0 = now();
     window.__demoTimeline = [
       { ts: t0 + 14 * 60, label: 'backup-sweep', kind: 'cron', owner: 'storekeeper' },
-      { ts: t0 + 45 * 60, label: 'DeepSeek balance check', kind: 'balance', owner: 'ollie' },
+      { ts: t0 + 45 * 60, label: 'DeepSeek balance check', kind: 'balance', owner: 'ceo' },
       { ts: t0 + 2 * 3600, label: 'cluster maintenance', kind: 'maintenance', owner: 'deploybot' },
       { ts: t0 + 3 * 3600 + 600, label: 'Weekly cost report', kind: 'reminder', owner: 'ceo' },
       { ts: t0 + 7 * 3600, label: 'cert-renew', kind: 'cron', owner: 'deploy-build' },
