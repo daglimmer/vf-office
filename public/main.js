@@ -274,7 +274,7 @@ for (const [r, info] of Object.entries(wp.rooms)) {
   const x = cv.getContext('2d');
   x.fillStyle = 'rgba(13,15,19,.55)'; x.fillRect(0, 0, 256, 64);
   x.fillStyle = '#e8eaee'; x.font = 'bold 34px sans-serif'; x.textAlign = 'center';
-  x.fillText(r.toUpperCase(), 128, 43);
+  x.fillText((info.label ?? r).toUpperCase(), 128, 43);
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0, depthTest: false }));
   sp.scale.set(4.2, 1.05, 1);
   sp.position.set(info.center[0], 4.6, info.center[2]);
@@ -681,7 +681,7 @@ class Agent {
     // aY = floor offset. Anchors sit at Y=0 (floor), but the avatar's seated
     // hip position (0.46*S) puts the butt at ~0.46 — way above the chair seat
     // (~0.15-0.20 in the GLB). Negative offset drops them onto the chair.
-    const SEAT_OFFSET = -0.12;
+    const SEAT_OFFSET = -0.08;
     animateHumanoid(this, this.seated ? anchors.get(this.seated).pos.y + SEAT_OFFSET : 0, dt);
   }
 }
