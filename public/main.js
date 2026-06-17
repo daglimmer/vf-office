@@ -653,7 +653,10 @@ class Agent {
     this.animate(dt);
   }
   animate(dt) {                             // Phase 8: humanoid pose driver
-    animateHumanoid(this, this.seated ? anchors.get(this.seated).pos.y : 0, dt);
+    // CHAIR_HEIGHT lifts seated agents from floor Y=0 to chair surface Y≈0.42
+    // (anchor positions are at floor level in the GLB model).
+    const CHAIR_HEIGHT = 0.42;
+    animateHumanoid(this, this.seated ? anchors.get(this.seated).pos.y + CHAIR_HEIGHT : 0, dt);
   }
 }
 
