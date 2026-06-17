@@ -1,1 +1,8 @@
 node_modules
+dist/
+public/public/
+adapter/public/
+Dockerfile.bak
+build.sh
+*.log
+.env

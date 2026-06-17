@@ -4,24 +4,25 @@ import { defineConfig } from 'vite';
 // override with ADAPTER_TARGET=http://host:port when it runs elsewhere.
 // NOTE Phase 5: this previously pointed at :3001, which silently broke the /ws
 // proxy and left the dashboard in permanent DEMO MODE.
-const TARGET = process.env.ADAPTER_TARGET ?? 'http://127.0.0.1:3000';
+const TARGET = process.env.ADAPTER_TARGET ?? 'http://127.0.0.1:3002';
 const WS_TARGET = TARGET.replace(/^http/, 'ws');
 
 export default defineConfig({
+  base: '/office/',
   build: { target: 'es2022' },
   esbuild: { target: 'es2022' },
   server: {
     proxy: {
-      '/agents': TARGET,
-      '/announce': TARGET,
-      '/snapshot': TARGET,
-      '/api': TARGET,
-      '/mapping.json': TARGET,
+      '/agents': { target: TARGET, changeOrigin: true, prependPath: false },
+      '/announce': { target: TARGET, changeOrigin: true, prependPath: false },
+      '/snapshot': { target: TARGET, changeOrigin: true, prependPath: false },
+      '/api': { target: TARGET, changeOrigin: true, prependPath: false },
+      '/mapping.json': { target: TARGET, changeOrigin: true, prependPath: false },
       '/ws': { target: WS_TARGET, ws: true },
       '/timeline': {
         target: TARGET,
+        changeOrigin: true,
         bypass: function(req, res, proxyOptions) {
-          // If the request is for /timeline.js, don't proxy it
           if (req.url.endsWith('.js') || req.url.endsWith('.css')) {
             return req.url;
           }
@@ -30,3 +31,4 @@ export default defineConfig({
     },
   },
 });
+
