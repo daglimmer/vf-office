@@ -1,5 +1,11 @@
 name: VF Office CI/CD
 
+# E5 (master-spec v5): this pipeline was a copy of the vf-dashboard pipeline and
+# deployed the WRONG image/target. It now builds the office image and deploys to
+# deploy/olympus-office. Trigger is still `main` while the repo's working branch
+# is `master`, so this is INERT on normal pushes — activate via a push to main
+# or workflow_dispatch once the office staging URL + evidence steps are confirmed.
+
 on:
   push:
     branches: [main]
@@ -9,7 +15,7 @@ on:
 
 env:
   REGISTRY: 10.75.1.211:30500
-  IMAGE_NAME: vf-dashboard
+  IMAGE_NAME: vf-office
   KUBECONFIG_PATH: /root/.kube/config
 
 jobs:
@@ -65,7 +71,7 @@ jobs:
           echo "✓ PointLight count OK ($CURRENT)"
 
   # ════════════════════════════════════════════════════════════════
-  # DOCKER BUILD & PUSH
+  # DOCKER BUILD & PUSH — office image (root Dockerfile)
   # ════════════════════════════════════════════════════════════════
   docker:
     name: Build & Push Docker
@@ -100,7 +106,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: adapter/Dockerfile
+          file: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -114,7 +120,8 @@ jobs:
           echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
 
   # ════════════════════════════════════════════════════════════════
-  # DEPLOY TO K3s — STAGING FIRST
+  # DEPLOY TO K3s — STAGING FIRST (rollout status is the gate; the office
+  # has no separate public staging URL configured here)
   # ════════════════════════════════════════════════════════════════
   deploy-staging:
     name: Deploy to Staging
@@ -128,48 +135,12 @@ jobs:
           export KUBECONFIG=${{ env.KUBECONFIG_PATH }}
           NS="mission-control-staging"
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.digest }}"
-          kubectl set image deploy/vf-dashboard -n "$NS" "vf-dashboard=$IMAGE" --record
-          kubectl rollout status deploy/vf-dashboard -n "$NS" --timeout=120s
-
-      - name: Staging health checks
-        run: |
-          sleep 5
-          STAGING_URL="https://staging-vf.k3s.110lymph.nl"
-          HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$STAGING_URL/" || echo "000")
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ Staging health check failed: HTTP $HTTP_CODE"
-            exit 1
-          fi
-          echo "✓ Staging health check: HTTP $HTTP_CODE"
-
-      - name: Staging API verification
-        run: |
-          STAGING_API="https://staging-vf.k3s.110lymph.nl/api/backups"
-          RESPONSE=$(curl -sk --max-time 10 "$STAGING_API" || echo '{}')
-          echo "$RESPONSE" | jq -e '.vaults | length >= 3' || (echo "❌ API verification failed"; exit 1)
-          echo "✓ Staging API verified: 3 vaults with backupJobs"
-
-      - name: Staging screenshot evidence
-        uses: addnab/docker-run-action@v3
-        with:
-          image: mcr.microsoft.com/playwright:v1.40.0-jammy
-          run: |
-            npx playwright install chromium 2>/dev/null
-            npx -y playwright screenshot "${{ env.STAGING_URL }}/" /tmp/staging-home.png --full-page
-            npx -y playwright screenshot "${{ env.STAGING_URL }}/backups" /tmp/staging-backups.png --full-page
-          options: -v /tmp:/tmp
-        env:
-          STAGING_URL: https://staging-vf.k3s.110lymph.nl
-
-      - name: Upload staging screenshots
-        uses: actions/upload-artifact@v4
-        with:
-          name: staging-evidence-${{ github.sha }}
-          path: /tmp/staging-*.png
-          retention-days: 7
+          kubectl set image deploy/olympus-office -n "$NS" "olympus-office=$IMAGE" --record
+          kubectl rollout status deploy/olympus-office -n "$NS" --timeout=120s
+          echo "✓ Staging rollout complete"
 
   # ════════════════════════════════════════════════════════════════
-  # DEPLOY TO PRODUCTION — Manual approval gate
+  # DEPLOY TO PRODUCTION
   # ════════════════════════════════════════════════════════════════
   deploy-production:
     name: Deploy to Production
@@ -183,27 +154,19 @@ jobs:
           export KUBECONFIG=${{ env.KUBECONFIG_PATH }}
           NS="mission-control"
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.digest }}"
-          kubectl set image deploy/vf-dashboard -n "$NS" "vf-dashboard=$IMAGE" --record
-          kubectl rollout status deploy/vf-dashboard -n "$NS" --timeout=120s
+          kubectl set image deploy/olympus-office -n "$NS" "olympus-office=$IMAGE" --record
+          kubectl rollout status deploy/olympus-office -n "$NS" --timeout=120s
 
-      - name: Production health checks
+      - name: Production health check (office)
         run: |
           sleep 5
-          PROD_URL="https://vf.k3s.110lymph.nl"
-          HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$PROD_URL/" || echo "000")
+          OFFICE_URL="https://olympus.110lymph.nl/office/"
+          HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 10 "$OFFICE_URL" || echo "000")
           if [ "$HTTP_CODE" != "200" ]; then
             echo "❌ Production health check failed: HTTP $HTTP_CODE"
             exit 1
           fi
           echo "✓ Production health check: HTTP $HTTP_CODE"
-
-      - name: Production API verification
-        run: |
-          PROD_API="https://olympus.110lymph.nl/api/backups"
-          RESPONSE=$(curl -sk --max-time 10 "$PROD_API" || echo '{}')
-          echo "$RESPONSE" | jq -e '.vaults | length >= 3' || (echo "❌ API verification failed"; exit 1)
-          echo "$RESPONSE" | jq -e '.vaults[].backupJobs | length >= 0' || (echo "❌ backupJobs missing"; exit 1)
-          echo "✓ Production API verified: 3 vaults with backupJobs + nextRun"
 
       - name: Production screenshot evidence
         uses: addnab/docker-run-action@v3
@@ -211,12 +174,10 @@ jobs:
           image: mcr.microsoft.com/playwright:v1.40.0-jammy
           run: |
             npx playwright install chromium 2>/dev/null
-            npx -y playwright screenshot "${{ env.PROD_URL }}/" /tmp/prod-home.png --full-page
-            npx -y playwright screenshot "${{ env.PROD_URL }}/backups" /tmp/prod-backups.png --full-page
-            npx -y playwright screenshot "${{ env.PROD_URL }}/dashboard" /tmp/prod-dashboard.png --full-page
+            npx -y playwright screenshot "${{ env.OFFICE_URL }}" /tmp/prod-office.png --full-page
           options: -v /tmp:/tmp
         env:
-          PROD_URL: https://vf.k3s.110lymph.nl
+          OFFICE_URL: https://olympus.110lymph.nl/office/
 
       - name: Upload production screenshots
         uses: actions/upload-artifact@v4
@@ -224,29 +185,6 @@ jobs:
           name: production-evidence-${{ github.sha }}
           path: /tmp/prod-*.png
           retention-days: 30
-
-      - name: Kanban task completion with evidence
-        if: env.KANBAN_TASK_ID != ''
-        run: |
-          cat > /tmp/kanban-complete.md <<'EOF'
-          ## Deployment Complete — ${{ github.sha }}
-
-          **Evidence:**
-          - Production health: ✓ HTTP 200
-          - Production API: ✓ 3 vaults with backupJobs
-          - Screenshots: [Home](/artifacts/production-evidence-), [Backups], [Dashboard]
-          - Image digest: ${{ needs.docker.outputs.digest }}
-
-          **Verification checklist:**
-          ✓ Quality gates passed (lint, typecheck, build, PointLight guard)
-          ✓ Staging deployed & verified
-          ✓ Production deployed & verified
-          ✓ Screenshots captured
-          EOF
-          # Post to Kanban via API or CLI
-          # hermes kanban complete ${{ env.KANBAN_TASK_ID }} --summary "$(cat /tmp/kanban-complete.md)"
-        env:
-          KANBAN_TASK_ID: ${{ github.event.inputs.kanban_task_id }}
 
   # ════════════════════════════════════════════════════════════════
   # ROLLBACK ON FAILURE
@@ -261,11 +199,10 @@ jobs:
         run: |
           export KUBECONFIG=${{ env.KUBECONFIG_PATH }}
           NS="mission-control"
-          # Get previous revision
-          PREV_REV=$(kubectl rollout history deploy/vf-dashboard -n "$NS" --revision=0 -o jsonpath='{.revisions[-2].revision}')
+          PREV_REV=$(kubectl rollout history deploy/olympus-office -n "$NS" --revision=0 -o jsonpath='{.revisions[-2].revision}')
           if [ -n "$PREV_REV" ]; then
-            kubectl rollout undo deploy/vf-dashboard -n "$NS" --to-revision="$PREV_REV"
-            kubectl rollout status deploy/vf-dashboard -n "$NS" --timeout=60s
+            kubectl rollout undo deploy/olympus-office -n "$NS" --to-revision="$PREV_REV"
+            kubectl rollout status deploy/olympus-office -n "$NS" --timeout=60s
             echo "✓ Rolled back to revision $PREV_REV"
           else
             echo "⚠ No previous revision to rollback to"
@@ -274,4 +211,3 @@ jobs:
       - name: Alert on failure
         run: |
           echo "::warning::Deployment failed — rollback attempted. Check workflow logs."
-          # Send to Telegram/Discord via webhook if configured
