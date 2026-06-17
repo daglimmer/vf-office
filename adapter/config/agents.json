@@ -1,20 +1,15 @@
 [
-  { "id": "ollie",        "name": "Ollie",        "color": "#4DD8FF" },
-  { "id": "ceo",          "name": "CEO",          "color": "#FFD24D" },
-  { "id": "storekeeper",  "name": "Storekeeper",  "color": "#2E5BFF", "ephemeralPattern": "store-tmp-*" },
-  { "id": "store-nas",    "name": "Store NAS",    "color": "#2E5BFF", "parent": "storekeeper" },
-  { "id": "store-pbs",    "name": "Store PBS",    "color": "#2E5BFF", "parent": "storekeeper" },
-  { "id": "store-zfs",    "name": "Store ZFS",    "color": "#2E5BFF", "parent": "storekeeper" },
-  { "id": "archive",      "name": "Archive",      "color": "#2E5BFF", "parent": "storekeeper" },
-  { "id": "deploybot",    "name": "Deploybot",    "color": "#9B30FF", "ephemeralPattern": "deploy-tmp-*" },
-  { "id": "deploy-build", "name": "Deploy Build", "color": "#9B30FF", "parent": "deploybot" },
-  { "id": "deploy-cicd",  "name": "Deploy CI/CD", "color": "#9B30FF", "parent": "deploybot" },
-  { "id": "deploy-cluster","name": "Deploy Cluster","color": "#9B30FF", "parent": "deploybot" },
-  { "id": "devops",       "name": "DevOps",       "color": "#FF9E2C" },
-  { "id": "devops-api",   "name": "DevOps API",   "color": "#FF9E2C", "parent": "devops" },
-  { "id": "devops-infra", "name": "DevOps Infra", "color": "#FF9E2C", "parent": "devops" },
-
-  { "id": "vm-301",       "name": "VM 301",       "color": "#8A8F98", "type": "infrastructure" },
-  { "id": "thermic",      "name": "Thermic",      "color": "#8A8F98", "type": "infrastructure" },
-  { "id": "cloudnode-01", "name": "cloudnode-01", "color": "#8A8F98", "type": "infrastructure" }
+  { "id": "marcus",       "name": "CEO Marcus",     "color": "#FFD24D", "role": "command",    "anchor": "ceo_desk" },
+  { "id": "oly",          "name": "COO - Oly",      "color": "#2ECC71", "role": "coo",        "anchor": "work_desk_01" },
+  { "id": "sentinel",     "name": "Sentinel",       "color": "#E74C3C", "role": "sentinel",   "anchor": "doc_desk_01" },
+  { "id": "storekeeper",  "name": "Storekeeper",    "color": "#4A90D9", "role": "specialist", "anchor": "doc_desk_02" },
+  { "id": "deploybot",    "name": "Deploybot",      "color": "#9B59B6", "role": "specialist", "anchor": "doc_desk_03" },
+  { "id": "netwatch",     "name": "NetWatch",       "color": "#E67E22", "role": "specialist", "anchor": "doc_desk_04" },
+  { "id": "finwise",      "name": "FinWise",        "color": "#1ABC9C", "role": "specialist", "anchor": "meet_seat_ollie" },
+  { "id": "proxguard",    "name": "ProxGuard",      "color": "#E91E63", "role": "specialist", "anchor": "lounge_01" },
+  { "id": "homeassistant","name": "Home Assistant", "color": "#BB8FCE", "role": "specialist", "anchor": "lounge_02" },
+  { "id": "k8slearn",     "name": "k8slearn",       "color": "#FF6B35", "role": "specialist", "anchor": "work_desk_02" },
+  { "id": "devops",       "name": "DevOps",         "color": "#F1C40F", "role": "devops",     "anchor": "work_desk_03" },
+  { "id": "devops-api",   "name": "DevOps API",     "color": "#00BCD4", "role": "specialist", "anchor": "work_desk_04", "parent": "devops" },
+  { "id": "devops-infra", "name": "DevOps Infra",   "color": "#FF5722", "role": "specialist", "anchor": "ollie_station", "parent": "devops" }
 ]
