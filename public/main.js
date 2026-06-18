@@ -233,9 +233,12 @@ let holo = null, holoTarget = 0.25;
 // All exports (bus, EMBED, VERSION) remain above, at module top level.
 async function boot() {
 bootStage('fetching layout');
-const [officeReport, wp] = await Promise.all([
+const [officeReport, wp, topology] = await Promise.all([
   fetch('/anchors.json').then(r => r.json()),
   fetch('/waypoints.json').then(r => r.json()),
+  // Project E (E2): canonical room labels from the single source of truth
+  // (dashboard /api/topology). Falls back to waypoints/key if unavailable.
+  fetch('/api/topology').then(r => r.ok ? r.json() : null).catch(() => null),
 ]);
 bootStage('building office');
 const office = buildOffice(officeReport);
@@ -274,7 +277,7 @@ for (const [r, info] of Object.entries(wp.rooms)) {
   const x = cv.getContext('2d');
   x.fillStyle = 'rgba(13,15,19,.55)'; x.fillRect(0, 0, 256, 64);
   x.fillStyle = '#e8eaee'; x.font = 'bold 34px sans-serif'; x.textAlign = 'center';
-  x.fillText((info.label ?? r).toUpperCase(), 128, 43);
+  x.fillText(((topology && topology.rooms && topology.rooms[r] && topology.rooms[r].label) ?? info.label ?? r).toUpperCase(), 128, 43);
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0, depthTest: false }));
   sp.scale.set(4.2, 1.05, 1);
   sp.position.set(info.center[0], 4.6, info.center[2]);

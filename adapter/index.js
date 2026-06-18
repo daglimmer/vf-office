@@ -43,6 +43,19 @@ const log = (...a) => console.log(new Date().toISOString(), '[adapter]', ...a);
 const mapping = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'mapping.json'), 'utf8'));
 const agentsCfg = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'agents.json'), 'utf8'));
 
+// Project E (E4): canonical org topology — single source of truth for
+// agent -> group. Read defensively; if absent we fall back to the legacy
+// hierarchy-based agentGroup() logic so nothing breaks.
+let topology = null;
+try {
+  const tf = ENV('TOPOLOGY_FILE', '');
+  const candidates = [tf, path.join(CONFIG_DIR, 'topology.json'), path.resolve(ROOT, '../config/topology.json')].filter(Boolean);
+  const found = candidates.find(f => { try { return fs.existsSync(f); } catch { return false; } });
+  if (found) topology = JSON.parse(fs.readFileSync(found, 'utf8'));
+} catch (e) { /* keep topology null → legacy logic */ }
+const TOPO_GROUP = {}; // agentId -> group label
+for (const g of (topology && topology.groups) || []) for (const id of g.agents || []) TOPO_GROUP[id] = g.label;
+
 // Phase 6: StoreKeeper backup source + docs portal roots
 const { readBackups } = require('./sources/storekeeper');
 const BACKUPS_FILE = path.resolve(ROOT, mapping.backupsSource ?? 'data/storekeeper-report.json');
@@ -402,7 +415,7 @@ function agentGroup(a) {
   return 'specialist';
 }
 const GROUP_LABEL = { command:'Command', devops:'DevOps', specialist:'Operations' };
-function agentGroupLabel(a) { return GROUP_LABEL[agentGroup(a)] ?? agentGroup(a); }
+function agentGroupLabel(a) { return TOPO_GROUP[a.id] ?? GROUP_LABEL[agentGroup(a)] ?? agentGroup(a); }
 function agentStatus(id) {
   const rt = runtime.get(id);
   if (rt === 'down' || rt === 'killed') return 'offline';
@@ -537,6 +550,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/api/docs/file') return docsFile(res, url.searchParams.get('path'));
     if (req.method === 'GET' && p === '/mapping.json') {
       return json(res, 200, { models: mapping.models ?? {}, budgets: mapping.budgets ?? {}, dashboardUrl: mapping.dashboardUrl ?? '' });   // Phase 8
+    }
+    if (req.method === 'GET' && p === '/config/topology.json') {                                            // Project E (E4)
+      return topology ? json(res, 200, topology) : json(res, 404, { error: 'topology not configured' });
     }
     if (req.method === 'POST' && p === '/announce') {
       const { message, priority } = await readBody(req);
