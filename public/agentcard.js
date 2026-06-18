@@ -63,6 +63,18 @@ async function fillDetail(agent) {
   const tasks = (d.tasks ?? []).map(t =>
     `<div class="ad-task"><em>${esc(t.cardId)}</em> ${esc(t.title)} <span>${esc(t.status)}</span></div>`).join('')
     || '<div class="ad-task ad-none">no recent tasks</div>';
+  // Runtime controls (Section 7.2) — pause/resume + kill, wired to the adapter's
+  // /agents/:id/(pause|resume|kill) endpoints. Resume shown when already paused.
+  const rt = d.runtime ?? 'ok';
+  const btn = (act, label, danger) =>
+    `<button class="ad-ctl${danger ? ' ad-ctl-danger' : ''}" data-act="${act}"` +
+    ` style="flex:1;padding:5px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.18);` +
+    `background:${danger ? 'rgba(255,77,77,.15)' : 'rgba(255,255,255,.08)'};color:inherit;cursor:pointer;font-size:11px">${label}</button>`;
+  const controls =
+    `<div class="ad-controls" style="display:flex;gap:6px;margin-top:8px">` +
+    (rt === 'paused' ? btn('resume', '&#9654; Resume', false) : btn('pause', '&#10073;&#10073; Pause', false)) +
+    btn('kill', '&#9209; Kill', true) +
+    `</div>`;
   body.innerHTML = `
     ${row('role', d.role ?? d.group)}
     ${row('group', d.group)}
@@ -72,7 +84,18 @@ async function fillDetail(agent) {
     ${row('tokens today', d.tokensToday != null ? d.tokensToday.toLocaleString() : '&mdash;', true)}
     ${row('cost', d.costUsd != null ? '$' + d.costUsd.toFixed(2) : '&mdash;', true)}
     ${row('last seen', ago(d.lastSeen), true)}
+    ${controls}
     <div class="ad-tasks-head">recent tasks</div>${tasks}`;
+  for (const b of body.querySelectorAll('.ad-ctl')) {
+    b.onclick = async () => {
+      const act = b.dataset.act;
+      if (act === 'kill' && !confirm(`Kill ${agent.name}? This stops the agent (and its children).`)) return;
+      b.disabled = true;
+      try { await fetch('/agents/' + encodeURIComponent(id) + '/' + act, { method: 'POST' }); }
+      catch { /* adapter unreachable — leave card as-is */ }
+      fillDetail(agent); // refresh runtime state
+    };
+  }
 }
 
 function row(k, v, raw = false) {
