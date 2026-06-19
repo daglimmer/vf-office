@@ -16,7 +16,7 @@ on:
 env:
   REGISTRY: 10.75.1.211:30500
   IMAGE_NAME: vf-office
-  KUBECONFIG_PATH: /root/.kube/config
+  KUBECONFIG_PATH: /home/gh-runner/.kube/config
 
 jobs:
   # ════════════════════════════════════════════════════════════════
