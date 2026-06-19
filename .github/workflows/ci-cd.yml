@@ -1,16 +1,16 @@
 name: VF Office CI/CD
 
-# E5 (master-spec v5): this pipeline was a copy of the vf-dashboard pipeline and
-# deployed the WRONG image/target. It now builds the office image and deploys to
-# deploy/olympus-office. Trigger is still `main` while the repo's working branch
-# is `master`, so this is INERT on normal pushes — activate via a push to main
-# or workflow_dispatch once the office staging URL + evidence steps are confirmed.
+# Builds the office image (root Dockerfile = Vite frontend + adapter) and deploys
+# to deploy/olympus-office (staging -> production -> health check -> rollback).
+# Runs on push to master (the repo's working branch) or manual dispatch.
+# REQUIRES: a self-hosted runner registered to this repo/org (LAN access to the
+# registry + kubectl) and REGISTRY_USER/REGISTRY_TOKEN secrets.
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 env:
@@ -76,11 +76,17 @@ jobs:
   docker:
     name: Build & Push Docker
     needs: quality-gates
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: self-hosted   # private registry (10.75.1.211) is only reachable on the LAN
+    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Compute immutable image tag
+        id: tag
+        run: echo "tag=$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -92,32 +98,17 @@ jobs:
           username: ${{ secrets.REGISTRY_USER }}
           password: ${{ secrets.REGISTRY_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
-
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Output image digest
-        id: digest
-        run: |
-          DIGEST=$(docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest --format '{{json .Manifest.Digest}}' 2>/dev/null || echo "")
-          echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
 
   # ════════════════════════════════════════════════════════════════
   # DEPLOY TO K3s — STAGING FIRST (rollout status is the gate; the office
@@ -127,14 +118,14 @@ jobs:
     name: Deploy to Staging
     needs: docker
     runs-on: self-hosted
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
     environment: staging
     steps:
       - name: Deploy to K3s staging namespace
         run: |
           export KUBECONFIG=${{ env.KUBECONFIG_PATH }}
           NS="mission-control-staging"
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.digest }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}"
           kubectl set image deploy/olympus-office -n "$NS" "olympus-office=$IMAGE" --record
           kubectl rollout status deploy/olympus-office -n "$NS" --timeout=120s
           echo "✓ Staging rollout complete"
@@ -144,16 +135,16 @@ jobs:
   # ════════════════════════════════════════════════════════════════
   deploy-production:
     name: Deploy to Production
-    needs: deploy-staging
+    needs: [docker, deploy-staging]
     runs-on: self-hosted
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
     environment: production
     steps:
       - name: Deploy to K3s production namespace
         run: |
           export KUBECONFIG=${{ env.KUBECONFIG_PATH }}
           NS="mission-control"
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.digest }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}"
           kubectl set image deploy/olympus-office -n "$NS" "olympus-office=$IMAGE" --record
           kubectl rollout status deploy/olympus-office -n "$NS" --timeout=120s
 
@@ -169,17 +160,17 @@ jobs:
           echo "✓ Production health check: HTTP $HTTP_CODE"
 
       - name: Production screenshot evidence
+        continue-on-error: true   # evidence only — must never roll back a healthy deploy
         uses: addnab/docker-run-action@v3
         with:
           image: mcr.microsoft.com/playwright:v1.40.0-jammy
           run: |
             npx playwright install chromium 2>/dev/null
-            npx -y playwright screenshot "${{ env.OFFICE_URL }}" /tmp/prod-office.png --full-page
+            npx -y playwright screenshot "https://olympus.110lymph.nl/office/" /tmp/prod-office.png --full-page
           options: -v /tmp:/tmp
-        env:
-          OFFICE_URL: https://olympus.110lymph.nl/office/
 
       - name: Upload production screenshots
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: production-evidence-${{ github.sha }}
