@@ -122,10 +122,9 @@ jobs:
       - name: Deploy to K3s staging namespace
         run: |
           export KUBECONFIG=${{ env.KUBECONFIG_PATH }}
-          NS="mission-control-staging"
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}"
-          kubectl set image deploy/olympus-office -n "$NS" "olympus-office=$IMAGE" --record
-          kubectl rollout status deploy/olympus-office -n "$NS" --timeout=120s
+          kubectl set image deploy/olympus-office-staging -n mission-control "olympus-office-staging=$IMAGE"
+          kubectl rollout status deploy/olympus-office-staging -n mission-control --timeout=120s
           echo "✓ Staging rollout complete"
 
   # ════════════════════════════════════════════════════════════════
