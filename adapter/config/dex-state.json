@@ -1,0 +1,11 @@
+{
+  "users": [
+    { "email": "ray@110lymph.nl", "username": "ray", "method": "password", "role": "admin" }
+  ],
+  "connectors": [
+    { "id": "github", "name": "GitHub", "type": "github", "configured": false, "redirectURI": "https://olympus.110lymph.nl/dex/callback" },
+    { "id": "google", "name": "Google", "type": "google", "configured": false, "redirectURI": "https://olympus.110lymph.nl/dex/callback" },
+    { "id": "microsoft", "name": "Microsoft", "type": "microsoft", "configured": false, "redirectURI": "https://olympus.110lymph.nl/dex/callback" }
+  ],
+  "loginActivity": []
+}

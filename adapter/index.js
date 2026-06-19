@@ -643,6 +643,12 @@ const server = http.createServer(async (req, res) => {
       return d ? json(res, 200, d) : json(res, 404, { ok: false, error: 'unknown agent' });
     }
     if (req.method === 'GET' && p === '/api/docs/tree') return json(res, 200, docsTree());                // Phase 6
+    if (req.method === 'GET' && p === '/api/admin/accounts') {             // Phase 2 — admin visibility
+      const candidates = [path.join(CONFIG_DIR, 'dex-state.json'), '/root/.hermes/dex-state.json'];
+      const df = candidates.find(f => { try { return fs.existsSync(f); } catch { return false; } });
+      if (df) { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(fs.readFileSync(df, 'utf8')); }
+      return json(res, 404, { error: 'dex-state.json not found' });
+    }
     if (req.method === 'GET' && p === '/api/docs/file') return docsFile(res, url.searchParams.get('path'));
     if (req.method === 'GET' && p === '/mapping.json') {
       return json(res, 200, { models: mapping.models ?? {}, budgets: mapping.budgets ?? {}, dashboardUrl: mapping.dashboardUrl ?? '' });   // Phase 8
