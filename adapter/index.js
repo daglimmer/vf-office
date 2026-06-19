@@ -474,6 +474,29 @@ function statusFromLastSeen(iso) {
   if (age < 1800000) return 'idle';
   return 'offline';
 }
+
+// activityState: per-agent activity label set via POST /api/agents/:id/activity.
+// Value: { label: 'documenting' | 'consulting', expires?: number }. 'consulting'
+// auto-expires after 30 min. NOT used for online/idle/offline — only an activity
+// label layered on top of an agent that is *currently online*.
+const activityState = new Map();
+const ACTIVITY_TTL = 30 * 60 * 1000;
+function cleanActivities() {
+  const t = Date.now();
+  for (const [id, e] of activityState) if (e && e.expires && t > e.expires) activityState.delete(id);
+}
+setInterval(cleanActivities, 60000);
+
+// computeAgentStatus — authoritative status. NEVER trusts the gateway `status`
+// field (it hardcodes "online" for all agents). online/idle/offline come from
+// last_seen; documenting/consulting layer on top only when the agent is online.
+function computeAgentStatus(id, gw) {
+  const base = statusFromLastSeen(gw && gw.last_seen);   // online | idle | offline
+  if (base !== 'online') return base;                    // stale → ignore any activity label
+  const a = activityState.get(id);
+  if (a && (a.label === 'documenting' || a.label === 'consulting')) return a.label;
+  return 'online';
+}
 function taskRow(r) {
   return {
     id: r.id, title: r.title, status: r.status, assignee: r.assignee,
@@ -497,7 +520,7 @@ async function agentRoster() {
     return {
       id: a.id, name: a.name ?? a.id, color: a.color ?? null,
       role: a.role ?? null, group: agentGroupLabel(a),
-      status: h.status || (h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(a.id)),
+      status: computeAgentStatus(a.id, h),
       lastSeen,
       anchor: a.anchor ?? null,
       model, provider, reportedModel: model, reportedProvider: provider,
@@ -522,7 +545,7 @@ async function agentDetail(id) {
     ok: true,
     id, name: a.name ?? id, color: a.color ?? null,
     role: a.role ?? null, group: agentGroupLabel(a), parent: a.parent ?? null,
-    status: agentStatus(id), runtime: runtime.get(id) ?? 'ok',
+    status: computeAgentStatus(id, h), runtime: runtime.get(id) ?? 'ok',
     model: h.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null)),
     provider: h.provider ?? u.modelProvider ?? null, fallbackActive: u.fallbackActive ?? false,
     sessions24h: (pushHist.get(id) ?? []).filter(t => t >= cut).length,
@@ -637,6 +660,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
     if (req.method === 'GET' && p === '/api/agents') return json(res, 200, await agentRoster());           // Phase 6
+    const aact = p.match(/^\/api\/agents\/([\w.\-]+)\/activity$/);                                         // activity label (consulting/documenting)
+    if (req.method === 'POST' && aact) {
+      const { activity } = await readBody(req);
+      const id = aact[1];
+      if (activity === 'consulting') activityState.set(id, { label: 'consulting', expires: Date.now() + ACTIVITY_TTL });
+      else if (activity === 'documenting') activityState.set(id, { label: 'documenting' });
+      else activityState.delete(id);   // null / anything else clears it
+      return json(res, 200, { ok: true, id, activity: activityState.get(id)?.label ?? null });
+    }
     const adet = p.match(/^\/api\/agents\/([\w.\-]+)$/);                                                   // Phase 7b
     if (req.method === 'GET' && adet) {
       const d = await agentDetail(adet[1]);
