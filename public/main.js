@@ -51,6 +51,9 @@ if (new URLSearchParams(location.search).get('blur') === '0') {
   console.log('[office] blur disabled');
 }
 const QPARAM = new URLSearchParams(location.search).get('q');
+// 9.11: ?nodegrade pins the chosen tier (skips the fps auto-degrade watchdog) -
+// lets us hold high quality on weak GPUs to compare against the offline renders.
+const NODEGRADE = new URLSearchParams(location.search).get('nodegrade') !== null;
 let Q = QPARAM ?? (() => { try { return localStorage.getItem('officeQ'); } catch { return null; } })() ?? 'high';
 if (Q !== 'low' && Q !== 'high') Q = 'high';
 // explicit ?q= choice is sticky (overrides any earlier auto-degrade decision)
@@ -125,7 +128,31 @@ renderer.toneMappingExposure = 1.3;                       // Phase 5 (1): bright
 document.getElementById('view').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d0f13);
+// Phase A (lighting): dusk sky instead of a flat-black void. An equirectangular
+// vertical gradient stays horizon-aligned from any camera angle, and its palette
+// continues office.js's dusk skyline (top #070b18 -> warm horizon -> dark ground)
+// so the city backdrop reads as haze on a real sky, not a band floating in black.
+function makeDuskSky() {
+  const cv = document.createElement('canvas');
+  cv.width = 8; cv.height = 512;
+  const g = cv.getContext('2d');
+  // NB: the skyline planes are opaque up to ~+37 deg elevation, so the band that
+  // actually shows above the city silhouette is the UPPER sky (canvas ~0.30-0.46).
+  // Keep that readably dusk-blue, not near-black, or the change is invisible.
+  const grad = g.createLinearGradient(0, 0, 0, 512);     // top = zenith, bottom = nadir
+  grad.addColorStop(0.00, '#0b1024');                    // zenith: dusk indigo (lifted off black)
+  grad.addColorStop(0.30, '#121a36');                    // high sky
+  grad.addColorStop(0.44, '#1e2444');                    // just above the skyline tops (visible band)
+  grad.addColorStop(0.50, '#3a3550');                    // horizon: subtle warm dusk (peeks at gaps)
+  grad.addColorStop(0.60, '#10131f');                    // just below horizon
+  grad.addColorStop(1.00, '#080a10');                    // nadir: dark ground side
+  g.fillStyle = grad; g.fillRect(0, 0, 8, 512);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+scene.background = makeDuskSky();
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
 camera.position.set(20, 28, 44);
 
@@ -254,7 +281,7 @@ hemiLight.intensity = 1.05; hemiLight.color.set(0xcfd9ee);
 key.intensity = 0.55;
 renderer.toneMappingExposure = 1.15;                        // glare pass: was 1.22
 bloom.strength = 0.25; bloom.threshold = 0.9;               // glare pass: was 0.45 / 0.82
-scene.fog = new THREE.Fog(0x0d0f13, 30, 100);
+scene.fog = new THREE.Fog(0x141a2e, 28, 105);              // Phase A: dusk-blue haze (was flat 0x0d0f13)
 
 // (legacy 2x emissive boost removed - office.js materials are pre-tuned)
 
@@ -709,6 +736,7 @@ const sim = {
   flyToAgent(id) { const a = byId.get(id) ?? byCard.get(id); if (a) sim.flyToRoom(a.room()); },
   getAgents: () => agents,
   rooms, anchors, scene, byId, byCard,
+  camera, controls, renderer,                 // Phase A: exposed for visual verification / debug framing
 };
 window.sim = sim;
 
@@ -1105,7 +1133,7 @@ bootStage('first frame');
 let firstFrame = true;
 // fps watchdog: if high quality cannot hold a usable framerate, drop to low
 // once, remember it, and tell the user how to override (?q=high).
-let fpsFrames = 0, fpsT = 0, fpsChecked = Q === 'low';
+let fpsFrames = 0, fpsT = 0, fpsChecked = Q === 'low' || NODEGRADE;
 function degradeLive() {
   Q = 'low';
   try { localStorage.setItem('officeQ', 'low'); } catch {}
