@@ -726,7 +726,9 @@ export function buildOffice(report) {
       for (let wy = 8; wy < h - 8; wy += 14)
         for (let wx = 6; wx < w - 6; wx += 11) {
           const r = rnd();
-          if (r < 0.30) { c.fillStyle = r < 0.07 ? 'rgba(150,200,255,.85)' : 'rgba(255,205,125,.8)'; c.fillRect(wx, wy, 6, 8); }
+          // tall/narrow windows (was 6x8 wide → read as a "row of cars"); the
+          // small per-cell height jitter stops them lining up into uniform rows.
+          if (r < 0.30) { c.fillStyle = r < 0.07 ? 'rgba(150,200,255,.85)' : 'rgba(255,205,125,.8)'; c.fillRect(wx, wy, 4, 9 + ((wx + wy) % 3)); }
         }
     }, 128, 256, 1, 1);
     const towers = [
