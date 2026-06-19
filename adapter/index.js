@@ -571,7 +571,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   try {
-    if (req.method === 'GET' && p === '/agents/usage') {
+    if (req.method === 'GET' && (p === '/agents/usage' || p === '/api/agents/usage')) {
       const out = [...agents.keys()].map(id => {
         const u = usage.get(id) ?? {};
         const hb = lastPush.has(id) ? Math.floor((Date.now() - lastPush.get(id)) / 1000) : null;
@@ -584,7 +584,7 @@ const server = http.createServer(async (req, res) => {
       });
       return json(res, 200, out);
     }
-    if (req.method === 'POST' && p === '/agents/usage') {
+    if (req.method === 'POST' && (p === '/agents/usage' || p === '/api/agents/usage')) {
       const body = await readBody(req);
       for (const rec of Array.isArray(body) ? body : [body]) intakeUsage(rec);
       return json(res, 200, { status: 'ok' });
