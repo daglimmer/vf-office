@@ -201,5 +201,9 @@ export function animateHumanoid(agent, aY, dt) {
   const footY = (hipG, kneeG) => p.hips.position.y
     - LT * Math.cos(hipG.rotation.x) - LF * Math.cos(hipG.rotation.x + kneeG.rotation.x);
   const lowest = Math.min(footY(p.legL, p.shinL), footY(p.legR, p.shinR));
-  agent.group.position.y = aY + bob + Math.max(0, -lowest);
+  // Walking: the lift-only correction (Math.max) left feet hovering above the
+  // floor. Plant the rig at a STEADY height (constant offset, not the per-step
+  // `lowest`, so the body doesn't bounce each stride). Other poses keep lift-only.
+  const WALK_PLANT = 0.08 * S;
+  agent.group.position.y = aY + bob + (agent.pose === 'walk' ? -WALK_PLANT : Math.max(0, -lowest));
 }

@@ -963,7 +963,7 @@ async function pollRoster() {
         if (a.heldPool === want) {                        // already in the right place → just adjust the desk glow
           const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = active ? 1.4 : 0.05;
         } else if (!a.waitingPool && !a.path.length) {    // status changed → release current seat and WALK to the new pool
-          a.release();
+          a.releaseSlot();
           seatAgent(a, rosterOrder(want), st === 'consulting' ? 'talk' : active ? 'type' : 'sit', active);
         }
       }
