@@ -75,7 +75,7 @@ const DOCS_ROOTS = {};
 const SQL = Object.assign({
   events:   "SELECT id, task_id, kind, payload, created_at FROM task_events WHERE id > ? ORDER BY id LIMIT 500",
   comments: "SELECT id, task_id, author, body, created_at FROM task_comments WHERE id > ? ORDER BY id LIMIT 200",
-  tasks:    "SELECT * FROM tasks WHERE status != 'Archive'",
+  tasks:    "SELECT * FROM tasks WHERE status NOT IN ('archived','Archive')",
 }, mapping.sql || {});
 const EVENT_TYPES = Object.assign({
   created: 'card.created', status_changed: 'card.moved', deleted: 'card.deleted',
@@ -179,8 +179,10 @@ function snapshot() {
       cards.push({
         cardId: String(r.id), title: r.title, column: colKey(r.status),
         assignee: r.assignee, priority: r.priority,
-        // Task description/body — the column name varies, so accept the common ones.
-        description: r.description ?? r.body ?? r.details ?? r.notes ?? r.content ?? null,
+        description: r.body ?? null,                              // tasks.body = the description
+        createdAt: r.created_at                                  // epoch (s or ms) -> ISO for the dashboard
+          ? new Date(r.created_at < 1e12 ? r.created_at * 1000 : r.created_at).toISOString()
+          : null,
       });
     }
   } catch (e) { log('snapshot query failed:', e.message); }
