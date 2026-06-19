@@ -179,14 +179,10 @@ function snapshot() {
       cards.push({
         cardId: String(r.id), title: r.title, column: colKey(r.status),
         assignee: r.assignee, priority: r.priority,
-<<<<<<< HEAD
         description: r.body ?? null,                              // tasks.body = the description
         createdAt: r.created_at                                  // epoch (s or ms) -> ISO for the dashboard
           ? new Date(r.created_at < 1e12 ? r.created_at * 1000 : r.created_at).toISOString()
           : null,
-=======
-        body: r.body ?? '',
->>>>>>> 16b6772 (fix: agent detail endpoint uses agentStatus() instead of statusFromLastSeen() for consistent online/offline reporting)
       });
     }
   } catch (e) { log('snapshot query failed:', e.message); }
