@@ -791,20 +791,8 @@ export function buildOffice(report) {
       }
       sphere(`env_palmtop_${i}`, px, 3.95, pz, 0.16, M.woodDark, 1, 7, 5);
     });
-    // small parking row, west side
-    const carColors = [0x2b2f38, 0x3a2024, 0x20303a, 0x33312a, 0x23262c, 0x2f2335];
-    for (let i = 0; i < 6; i++) {
-      const cx2 = -13, cz2 = 4 + i * 3.1;
-      const paint = phys(`car_${i}`, { color: carColors[i], roughness: 0.25, clearcoat: 0.8, clearcoatRoughness: 0.15 });
-      rbox(`env_car_${i}`, cx2, 0.34, cz2, 3.9, 0.55, 1.75, paint, 4 * ((i % 3) - 1), 0.12);
-      rbox(`env_carcab_${i}`, cx2 - 0.25, 0.78, cz2, 1.9, 0.45, 1.55,
-           phys(`carglass_${i}`, { color: 0x0e1216, roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.08 }),
-           4 * ((i % 3) - 1), 0.16);
-      for (const [dx, dz] of [[-1.3, -0.85], [1.3, -0.85], [-1.3, 0.85], [1.3, 0.85]]) {
-        const wheel = cyl(`env_wheel_${i}_${dx}_${dz}`, cx2 + dx, 0.3, cz2 + dz, 0.3, 0.22, M.prop, 12);
-        wheel.rotation.z = Math.PI / 2;
-      }
-    }
+    // parking row removed (Ray): the low-poly cars clipped the building and read
+    // poorly. Keep the empty lot only.
     box('floor_parking', -13, -0.065, 12, 6.5, 0.02, 22, pathMat);
     // benches along the facade walk
     for (let i = 0; i < 4; i++) {
