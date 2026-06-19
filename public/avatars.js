@@ -205,5 +205,8 @@ export function animateHumanoid(agent, aY, dt) {
   // floor. Plant the rig at a STEADY height (constant offset, not the per-step
   // `lowest`, so the body doesn't bounce each stride). Other poses keep lift-only.
   const WALK_PLANT = 0.08 * S;
-  agent.group.position.y = aY + bob + (agent.pose === 'walk' ? -WALK_PLANT : Math.max(0, -lowest));
+  // EASE the body to the target height (don't snap) — otherwise leaving a seat to
+  // walk reads as the agent "falling" as the height jumps in one frame.
+  const targetY = aY + bob + (agent.pose === 'walk' ? -WALK_PLANT : Math.max(0, -lowest));
+  agent.group.position.y += (targetY - agent.group.position.y) * k;
 }
