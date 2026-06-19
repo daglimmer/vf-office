@@ -32,6 +32,7 @@ const ENV = (k, d) => process.env[k] ?? d;
 const DB_PATH = ENV('HERMES_DB', '/root/.hermes/kanban.db');
 const HOST = ENV('HOST', '127.0.0.1');
 const PORT = parseInt(ENV('PORT', '3000'), 10);
+const GATEWAY_URL = ENV('GATEWAY_URL', 'http://10.11.1.120:7100');   // live agent telemetry (status/model/provider)
 const CONFIG_DIR = ENV('CONFIG_DIR', path.join(ROOT, 'config'));
 const PUBLIC_DIR = ENV('PUBLIC_DIR', path.join(ROOT, 'public'));
 const STATE_FILE = ENV('STATE_FILE', path.join(ROOT, 'state.json'));
@@ -425,21 +426,62 @@ function agentStatus(id) {
   if (lp != null && Date.now() - lp > 24 * 3600 * 1000) return 'offline';
   return 'idle';
 }
-function agentRoster() {
-  return [...agents.values()].map(a => ({
-    id: a.id, name: a.name ?? a.id, color: a.color ?? null,
-    role: a.role ?? null, group: agentGroupLabel(a),
-    status: agentStatus(a.id),
-    lastSeen: lastPush.has(a.id) ? Math.floor(lastPush.get(a.id) / 1000) : null,
-    anchor: a.anchor ?? null,
-  }));
+// Live telemetry from the Hermes Gateway (authoritative for status/model/provider).
+// Cached 30s + hard 3s timeout so a slow/down gateway never hangs /api/agents
+// (this also addresses the /api/agents/:id timeout). Falls back to local data.
+let _gw = { at: 0, map: new Map() };
+async function gatewayMap() {
+  if (Date.now() - _gw.at < 30000) return _gw.map;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch(`${GATEWAY_URL}/heartbeats`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (r.ok) {
+      const arr = await r.json();
+      const m = new Map();
+      for (const h of (Array.isArray(arr) ? arr : [])) m.set(h.id, h);
+      _gw = { at: Date.now(), map: m };
+    }
+  } catch (e) { log('gateway heartbeats fetch failed:', e.message); }
+  return _gw.map;
+}
+function statusFromLastSeen(iso) {
+  if (!iso) return 'offline';
+  const age = Date.now() - new Date(iso).getTime();
+  if (age < 120000) return 'online';
+  if (age < 1800000) return 'idle';
+  return 'offline';
+}
+
+// /api/agents — a SUPERSET endpoint: anchors + identity from agents.json (for the
+// 3D office) merged with live status/model/provider from the Gateway (for the
+// dashboard). One endpoint serves both, so the ingress can route /api/agents here.
+async function agentRoster() {
+  const gw = await gatewayMap();
+  return [...agents.values()].map(a => {
+    const h = gw.get(a.id) || {};
+    const u = usage.get(a.id) || {};
+    const lastSeen = h.last_seen ?? (lastPush.has(a.id) ? new Date(lastPush.get(a.id)).toISOString() : null);
+    const model = h.model ?? u.modelName ?? null;
+    const provider = h.provider ?? u.modelProvider ?? null;
+    return {
+      id: a.id, name: a.name ?? a.id, color: a.color ?? null,
+      role: a.role ?? null, group: agentGroupLabel(a),
+      status: h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(a.id),
+      lastSeen,
+      anchor: a.anchor ?? null,
+      model, provider, reportedModel: model, reportedProvider: provider,
+    };
+  });
 }
 
 // ------------------------------------------------------------------ agent detail (Phase 7b - /api/agents/:id)
-function agentDetail(id) {
+async function agentDetail(id) {
   const a = agents.get(id);
   if (!a) return null;
   const u = usage.get(id) ?? {};
+  const h = (await gatewayMap()).get(id) || {};
   const cut = Date.now() - 24 * 3600 * 1000;
   let tasks = [];
   try {
@@ -451,13 +493,13 @@ function agentDetail(id) {
     ok: true,
     id, name: a.name ?? id, color: a.color ?? null,
     role: a.role ?? null, group: agentGroupLabel(a), parent: a.parent ?? null,
-    status: agentStatus(id), runtime: runtime.get(id) ?? 'ok',
-    model: u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null),
-    provider: u.modelProvider ?? null, fallbackActive: u.fallbackActive ?? false,
+    status: h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(id), runtime: runtime.get(id) ?? 'ok',
+    model: h.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null)),
+    provider: h.provider ?? u.modelProvider ?? null, fallbackActive: u.fallbackActive ?? false,
     sessions24h: (pushHist.get(id) ?? []).filter(t => t >= cut).length,
     tokensToday: u.tokens ?? null, costUsd: u.costUsd ?? null,
     cacheHitRate: u.cacheHitRate ?? null,
-    lastSeen: lastPush.has(id) ? Math.floor(lastPush.get(id) / 1000) : null,
+    lastSeen: h.last_seen ?? (lastPush.has(id) ? new Date(lastPush.get(id)).toISOString() : null),
     tasks,
   };
 }
@@ -540,10 +582,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
-    if (req.method === 'GET' && p === '/api/agents') return json(res, 200, agentRoster());                // Phase 6
+    if (req.method === 'GET' && p === '/api/agents') return json(res, 200, await agentRoster());           // Phase 6
     const adet = p.match(/^\/api\/agents\/([\w.\-]+)$/);                                                   // Phase 7b
     if (req.method === 'GET' && adet) {
-      const d = agentDetail(adet[1]);
+      const d = await agentDetail(adet[1]);
       return d ? json(res, 200, d) : json(res, 404, { ok: false, error: 'unknown agent' });
     }
     if (req.method === 'GET' && p === '/api/docs/tree') return json(res, 200, docsTree());                // Phase 6
