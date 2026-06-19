@@ -179,10 +179,14 @@ function snapshot() {
       cards.push({
         cardId: String(r.id), title: r.title, column: colKey(r.status),
         assignee: r.assignee, priority: r.priority,
+<<<<<<< HEAD
         description: r.body ?? null,                              // tasks.body = the description
         createdAt: r.created_at                                  // epoch (s or ms) -> ISO for the dashboard
           ? new Date(r.created_at < 1e12 ? r.created_at * 1000 : r.created_at).toISOString()
           : null,
+=======
+        body: r.body ?? '',
+>>>>>>> 16b6772 (fix: agent detail endpoint uses agentStatus() instead of statusFromLastSeen() for consistent online/offline reporting)
       });
     }
   } catch (e) { log('snapshot query failed:', e.message); }
@@ -482,7 +486,7 @@ async function agentRoster() {
     return {
       id: a.id, name: a.name ?? a.id, color: a.color ?? null,
       role: a.role ?? null, group: agentGroupLabel(a),
-      status: h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(a.id),
+      status: h.status || (h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(a.id)),
       lastSeen,
       anchor: a.anchor ?? null,
       model, provider, reportedModel: model, reportedProvider: provider,
@@ -507,7 +511,7 @@ async function agentDetail(id) {
     ok: true,
     id, name: a.name ?? id, color: a.color ?? null,
     role: a.role ?? null, group: agentGroupLabel(a), parent: a.parent ?? null,
-    status: h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(id), runtime: runtime.get(id) ?? 'ok',
+    status: agentStatus(id), runtime: runtime.get(id) ?? 'ok',
     model: h.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null)),
     provider: h.provider ?? u.modelProvider ?? null, fallbackActive: u.fallbackActive ?? false,
     sessions24h: (pushHist.get(id) ?? []).filter(t => t >= cut).length,
