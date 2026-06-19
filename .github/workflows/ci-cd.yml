@@ -123,7 +123,7 @@ jobs:
         run: |
           export KUBECONFIG=${{ env.KUBECONFIG_PATH }}
           IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}"
-          kubectl set image deploy/olympus-office-staging -n mission-control "olympus-office-staging=$IMAGE"
+          kubectl set image deploy/olympus-office-staging -n mission-control "olympus-office=$IMAGE"
           kubectl rollout status deploy/olympus-office-staging -n mission-control --timeout=120s
           echo "✓ Staging rollout complete"
 
