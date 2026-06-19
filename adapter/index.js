@@ -25,6 +25,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
+const { execFile } = require('child_process');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
@@ -33,6 +34,7 @@ const DB_PATH = ENV('HERMES_DB', '/root/.hermes/kanban.db');
 const HOST = ENV('HOST', '127.0.0.1');
 const PORT = parseInt(ENV('PORT', '3000'), 10);
 const GATEWAY_URL = ENV('GATEWAY_URL', 'http://10.11.1.120:7100');   // live agent telemetry (status/model/provider)
+const HERMES_BIN = ENV('HERMES_BIN', 'hermes');                      // CLI for kanban task creation; dispatcher auto-picks 'ready' tasks
 const CONFIG_DIR = ENV('CONFIG_DIR', path.join(ROOT, 'config'));
 const PUBLIC_DIR = ENV('PUBLIC_DIR', path.join(ROOT, 'public'));
 const STATE_FILE = ENV('STATE_FILE', path.join(ROOT, 'state.json'));
@@ -592,6 +594,26 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       for (const rec of Array.isArray(body) ? body : [body]) intakeUsage(rec);
       return json(res, 200, { status: 'ok' });
+    }
+    if (req.method === 'POST' && p === '/api/kanban/items') {       // create a kanban task via the Hermes CLI (dispatcher picks up 'ready')
+      const b = await readBody(req);
+      if (!b || !b.title) return json(res, 400, { ok: false, error: 'title required' });
+      const args = ['kanban', 'create', '--json', '--created-by', String(b.createdBy ?? 'dashboard')];
+      if (b.assignee) args.push('--assignee', String(b.assignee));
+      if (b.priority != null) args.push('--priority', String(b.priority));
+      if (b.body) args.push('--body', String(b.body));
+      if (b.idempotencyKey) args.push('--idempotency-key', String(b.idempotencyKey));
+      args.push(String(b.title));                                   // positional title, last
+      try {
+        const out = await new Promise((resolve, reject) => {
+          execFile(HERMES_BIN, args, { timeout: 15000, maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
+            if (err) return reject(new Error((stderr && stderr.trim()) || err.message));
+            resolve(stdout);
+          });
+        });
+        let task = null; try { task = JSON.parse(out); } catch {}
+        return json(res, 200, { ok: true, task: task ?? { raw: String(out).trim() } });
+      } catch (e) { log('kanban create failed:', e.message); return json(res, 502, { ok: false, error: e.message }); }
     }
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
