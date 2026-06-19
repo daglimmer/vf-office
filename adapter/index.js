@@ -25,7 +25,6 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
-const { execFile } = require('child_process');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = __dirname;
@@ -34,7 +33,6 @@ const DB_PATH = ENV('HERMES_DB', '/root/.hermes/kanban.db');
 const HOST = ENV('HOST', '127.0.0.1');
 const PORT = parseInt(ENV('PORT', '3000'), 10);
 const GATEWAY_URL = ENV('GATEWAY_URL', 'http://10.11.1.120:7100');   // live agent telemetry (status/model/provider)
-const HERMES_BIN = ENV('HERMES_BIN', 'hermes');                      // CLI for kanban task creation; dispatcher auto-picks 'ready' tasks
 const CONFIG_DIR = ENV('CONFIG_DIR', path.join(ROOT, 'config'));
 const PUBLIC_DIR = ENV('PUBLIC_DIR', path.join(ROOT, 'public'));
 const STATE_FILE = ENV('STATE_FILE', path.join(ROOT, 'state.json'));
@@ -169,10 +167,17 @@ function handleUpgrade(req, sock) {
 }
 
 // ------------------------------------------------------------------ snapshot
-let db = null;
+let db = null;       // read-only — used by snapshot/timeline/agent queries
+let writeDb = null;  // read-write — used by POST /api/kanban/items (dir must be writable)
 function openDb() {
   db = new DatabaseSync(DB_PATH, { readOnly: true });
   db.exec('PRAGMA busy_timeout = 2000');
+  try {
+    writeDb = new DatabaseSync(DB_PATH, { readOnly: false });
+    writeDb.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL');
+  } catch (e) {
+    log('WARNING: kanban.db write connection failed — task creation disabled:', e.message);
+  }
 }
 function snapshot() {
   const cards = [];
@@ -469,6 +474,14 @@ function statusFromLastSeen(iso) {
   if (age < 1800000) return 'idle';
   return 'offline';
 }
+function taskRow(r) {
+  return {
+    id: r.id, title: r.title, status: r.status, assignee: r.assignee,
+    priority: r.priority, body: r.body ?? null, createdBy: r.created_by ?? null,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
+    idempotencyKey: r.idempotency_key ?? null
+  };
+}
 
 // /api/agents — a SUPERSET endpoint: anchors + identity from agents.json (for the
 // 3D office) merged with live status/model/provider from the Gateway (for the
@@ -595,24 +608,29 @@ const server = http.createServer(async (req, res) => {
       for (const rec of Array.isArray(body) ? body : [body]) intakeUsage(rec);
       return json(res, 200, { status: 'ok' });
     }
-    if (req.method === 'POST' && p === '/api/kanban/items') {       // create a kanban task via the Hermes CLI (dispatcher picks up 'ready')
+    if (req.method === 'POST' && p === '/api/kanban/items') {       // direct DB insert; Hermes dispatcher auto-picks 'ready' tasks
       const b = await readBody(req);
       if (!b || !b.title) return json(res, 400, { ok: false, error: 'title required' });
-      const args = ['kanban', 'create', '--json', '--created-by', String(b.createdBy ?? 'dashboard')];
-      if (b.assignee) args.push('--assignee', String(b.assignee));
-      if (b.priority != null) args.push('--priority', String(b.priority));
-      if (b.body) args.push('--body', String(b.body));
-      if (b.idempotencyKey) args.push('--idempotency-key', String(b.idempotencyKey));
-      args.push(String(b.title));                                   // positional title, last
+      if (!writeDb) return json(res, 503, { ok: false, error: 'kanban.db not writable' });
       try {
-        const out = await new Promise((resolve, reject) => {
-          execFile(HERMES_BIN, args, { timeout: 15000, maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
-            if (err) return reject(new Error((stderr && stderr.trim()) || err.message));
-            resolve(stdout);
-          });
-        });
-        let task = null; try { task = JSON.parse(out); } catch {}
-        return json(res, 200, { ok: true, task: task ?? { raw: String(out).trim() } });
+        // idempotency: if dispatch approval sent twice, return existing task
+        if (b.idempotencyKey) {
+          const existing = writeDb.prepare('SELECT * FROM tasks WHERE idempotency_key = ?').get(String(b.idempotencyKey));
+          if (existing) return json(res, 200, { ok: true, task: taskRow(existing), idempotent: true });
+        }
+        const id = 't_' + crypto.randomBytes(4).toString('hex');
+        const now = Date.now();
+        writeDb.prepare(`INSERT INTO tasks (id, title, body, assignee, status, priority, created_by, created_at, idempotency_key, workspace_kind)
+          VALUES (?, ?, ?, ?, 'ready', ?, ?, ?, ?, 'scratch')`)
+          .run(id, String(b.title), String(b.body ?? ''), String(b.assignee ?? 'unassigned'),
+               b.priority != null ? Number(b.priority) : 0,
+               String(b.createdBy ?? 'dashboard'), now,
+               b.idempotencyKey ? String(b.idempotencyKey) : null);
+        const task = { id, title: String(b.title), status: 'ready', assignee: String(b.assignee ?? 'unassigned'),
+                       priority: b.priority != null ? Number(b.priority) : 0, createdBy: String(b.createdBy ?? 'dashboard'),
+                       createdAt: new Date(now).toISOString() };
+        log('kanban task created:', id, '→', task.assignee);
+        return json(res, 201, { ok: true, task });
       } catch (e) { log('kanban create failed:', e.message); return json(res, 502, { ok: false, error: e.message }); }
     }
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
