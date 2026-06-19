@@ -54,8 +54,9 @@ try {
   const found = candidates.find(f => { try { return fs.existsSync(f); } catch { return false; } });
   if (found) topology = JSON.parse(fs.readFileSync(found, 'utf8'));
 } catch (e) { /* keep topology null → legacy logic */ }
-const TOPO_GROUP = {}; // agentId -> group label
-for (const g of (topology && topology.groups) || []) for (const id of g.agents || []) TOPO_GROUP[id] = g.label;
+const TOPO_GROUP = {}; // agentId (lowercase) -> group label, from canonical topology.json
+for (const g of (topology && topology.groups) || []) for (const id of g.agents || []) TOPO_GROUP[String(id).toLowerCase()] = g.label;
+console.log(`[adapter] topology ${topology ? 'loaded' : 'NOT FOUND — legacy grouping'}: ${Object.keys(TOPO_GROUP).length} agents mapped (oly=${TOPO_GROUP['oly'] ?? '?'}, sentinel=${TOPO_GROUP['sentinel'] ?? '?'})`);
 
 // Phase 6: StoreKeeper backup source + docs portal roots
 const { readBackups } = require('./sources/storekeeper');
@@ -181,8 +182,17 @@ function snapshot() {
       });
     }
   } catch (e) { log('snapshot query failed:', e.message); }
+  // Task dependency links with the linked task TITLES resolved — task_links has
+  // only parent_id/child_id, so JOIN tasks so the Kanban UI can show what a
+  // connection means. (Guarded: empty if the table is absent.)
+  let links = [];
+  try {
+    for (const r of db.prepare('SELECT l.parent_id AS parentId, l.child_id AS childId, p.title AS parentTitle, c.title AS childTitle FROM task_links l LEFT JOIN tasks p ON p.id = l.parent_id LEFT JOIN tasks c ON c.id = l.child_id').all()) {
+      links.push({ parentId: String(r.parentId), childId: String(r.childId), parentTitle: r.parentTitle ?? null, childTitle: r.childTitle ?? null });
+    }
+  } catch (e) { log('snapshot links query failed:', e.message); }
   return {
-    event: 'snapshot', ts: now(), cards,
+    event: 'snapshot', ts: now(), cards, links,
     agents: [...agents.values()].map(a => ({
       id: a.id, name: a.name ?? a.id, color: a.color, parent: a.parent ?? null,
       type: a.type ?? 'agent',                     // 'infrastructure' for VMs (VF #1)
@@ -416,7 +426,7 @@ function agentGroup(a) {
   return 'specialist';
 }
 const GROUP_LABEL = { command:'Command', devops:'DevOps', specialist:'Operations' };
-function agentGroupLabel(a) { return TOPO_GROUP[a.id] ?? GROUP_LABEL[agentGroup(a)] ?? agentGroup(a); }
+function agentGroupLabel(a) { return TOPO_GROUP[String(a.id).toLowerCase()] ?? GROUP_LABEL[agentGroup(a)] ?? agentGroup(a); }
 function agentStatus(id) {
   const rt = runtime.get(id);
   if (rt === 'down' || rt === 'killed') return 'offline';
