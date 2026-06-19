@@ -914,6 +914,20 @@ window.__inject = handleEvent;
 // offline for >24h are removed. Demo mode supplies its own roster instead.
 const ROSTER_PINNED = new Set();          // no hardcoded agents — all dynamic from API
 function rosterRole(g) { return g === 'command' ? 'command' : g === 'specialist' ? 'specialist' : 'devops'; }
+// Target pool by REAL status. NOTE: pool keys are inverted vs rooms (see `pools`):
+//   'doc' = DevOps room (work_desk) · 'work' = Staff room (doc_desk) · 'lounge' · 'meet'
+function rosterPool(st, role) {
+  if (st === 'consulting') return 'meet';
+  if (st === 'documenting') return 'work';                          // staff room
+  if (st === 'online') return role === 'devops' ? 'doc' : 'work';   // devops room : staff room
+  return 'lounge';                                                  // idle / offline → lounge
+}
+// seat order with fallbacks so an agent always gets a seat (never queued at a door)
+function rosterOrder(want) {
+  if (want === 'lounge') return ['lounge', 'work', 'doc'];
+  if (want === 'meet') return ['meet', 'work', 'doc'];
+  return want === 'doc' ? ['doc', 'work', 'lounge'] : ['work', 'doc', 'lounge'];
+}
 async function pollRoster() {
   if (demoMode) return;
   let list;
@@ -936,29 +950,21 @@ async function pollRoster() {
     a.rosterStatus = r.status;
     if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok' && !a.blocked) {
       const anchor = r.anchor && anchors.has(r.anchor) ? r.anchor : null;
-      if (r.status === 'online') {
-        a.setGhost(false);
-        a.state = 'working';
-        if (anchor) { if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, 'type')); }
-        else if (a.heldSlot) {                            // already seated -> wake the desk up
-          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = 1.4;
-        } else if (!a.waitingPool && !a.path.length) {
-          // State-based seating by role, seat-guaranteed (no door pileup):
-          // devops -> big room (work_desk via 'doc' pool), others -> staff room.
-          seatAgent(a, a.role === 'devops' ? ['doc', 'work', 'lounge'] : ['work', 'doc', 'lounge'], 'type', true);
-        }
-      } else {                                            // idle / offline <24h: ghost in place
-        a.setGhost(true);
-        a.state = 'idle';
-        if (anchor) {
-          // go to assigned anchor even when idle (ghosted at desk, not spawn)
-          if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, 'sit'));
-        } else if (a.heldSlot) {                          // stay seated, just dim the desk (resting)
-          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = 0.05;
-        } else if (!a.waitingPool && !a.path.length) {
-          // Idle agents rest at a desk (ghosted), spread across the work rooms,
-          // overflowing to the lounge -- always a seat, never queued.
-          seatAgent(a, ['doc', 'work', 'lounge'], 'sit', false);
+      const st = r.status;                                // online | idle | offline | documenting | consulting
+      const active = st === 'online' || st === 'documenting' || st === 'consulting';
+      a.setGhost(!active);                                // idle/offline → ghosted
+      a.state = active ? 'working' : 'idle';
+
+      // Fixed-anchor agents (marcus/oly/sentinel) stay at their office/station — unless consulting.
+      if (anchor && st !== 'consulting') {
+        if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, active ? 'type' : 'sit'));
+      } else {
+        const want = rosterPool(st, a.role);
+        if (a.heldPool === want) {                        // already in the right place → just adjust the desk glow
+          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = active ? 1.4 : 0.05;
+        } else if (!a.waitingPool && !a.path.length) {    // status changed → release current seat and WALK to the new pool
+          a.release();
+          seatAgent(a, rosterOrder(want), st === 'consulting' ? 'talk' : active ? 'type' : 'sit', active);
         }
       }
     } else {
