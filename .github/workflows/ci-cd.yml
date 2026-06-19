@@ -88,27 +88,25 @@ jobs:
         id: tag
         run: echo "tag=$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Log in to registry (plain Docker — respects host daemon.json)
+        run: |
+          echo "${{ secrets.REGISTRY_TOKEN }}" | \
+            docker login "${{ env.REGISTRY }}" \
+              --username "${{ secrets.REGISTRY_USER }}" \
+              --password-stdin
 
-      - name: Log in to registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.REGISTRY_USER }}
-          password: ${{ secrets.REGISTRY_TOKEN }}
+      - name: Build image (plain docker build — no Buildx isolation)
+        run: |
+          docker build \
+            --tag "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}" \
+            --tag "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" \
+            -f Dockerfile \
+            .
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: Dockerfile
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      - name: Push image (plain docker push — uses host daemon's insecure-registries)
+        run: |
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}"
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
 
   # ════════════════════════════════════════════════════════════════
   # DEPLOY TO K3s — STAGING FIRST (rollout status is the gate; the office
