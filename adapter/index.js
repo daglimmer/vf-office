@@ -58,6 +58,43 @@ const TOPO_GROUP = {}; // agentId (lowercase) -> group label, from canonical top
 for (const g of (topology && topology.groups) || []) for (const id of g.agents || []) TOPO_GROUP[String(id).toLowerCase()] = g.label;
 console.log(`[adapter] topology ${topology ? 'loaded' : 'NOT FOUND — legacy grouping'}: ${Object.keys(TOPO_GROUP).length} agents mapped (oly=${TOPO_GROUP['oly'] ?? '?'}, sentinel=${TOPO_GROUP['sentinel'] ?? '?'})`);
 
+// Hermes profile model resolution — authoritative source for model/provider assignments.
+// The Gateway may report stale model info; Hermes profile config.yaml is ground truth.
+const HERMES_PROFILES_DIR = path.dirname(DB_PATH);  // ~/.hermes/  — profiles live under ~/.hermes/profiles/
+let _profileModels = { at: 0, map: new Map() };  // agentId -> { model, provider, base_url }
+function readProfileModel(agentId) {
+  const configPath = path.join(HERMES_PROFILES_DIR, 'profiles', agentId, 'config.yaml');
+  try {
+    if (!fs.existsSync(configPath)) return null;
+    const lines = fs.readFileSync(configPath, 'utf8').split('\n');
+    let inModel = false;
+    let model = null, provider = null, baseUrl = null;
+    for (const line of lines) {
+      if (/^model:\s*$/.test(line)) { inModel = true; continue; }
+      if (inModel && /^\S/.test(line)) break;  // exit model section
+      if (!inModel) continue;
+      const m = line.match(/^\s+model:\s*(.+)\s*$/);
+      if (m) model = m[1].trim();
+      const p = line.match(/^\s+provider:\s*(.+)\s*$/);
+      if (p) provider = p[1].trim();
+      const b = line.match(/^\s+base_url:\s*(.+)\s*$/);
+      if (b) baseUrl = b[1].trim();
+    }
+    if (model || provider) return { model, provider, baseUrl };
+  } catch (e) { /* ignore — profile may not exist */ }
+  return null;
+}
+function profileModelMap() {
+  if (Date.now() - _profileModels.at < 60000) return _profileModels.map;  // cache 60s
+  const m = new Map();
+  for (const id of agents.keys()) {
+    const pm = readProfileModel(id);
+    if (pm) m.set(id, pm);
+  }
+  _profileModels = { at: Date.now(), map: m };
+  return m;
+}
+
 // Phase 6: StoreKeeper backup source + docs portal roots
 const { readBackups } = require('./sources/storekeeper');
 const BACKUPS_FILE = path.resolve(ROOT, mapping.backupsSource ?? 'data/storekeeper-report.json');
@@ -202,14 +239,33 @@ function snapshot() {
       links.push({ parentId: String(r.parentId), childId: String(r.childId), parentTitle: r.parentTitle ?? null, childTitle: r.childTitle ?? null });
     }
   } catch (e) { log('snapshot links query failed:', e.message); }
+  // Count blocked cards for the frontend
+  let blockedCount = 0;
+  try {
+    const row = db.prepare("SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'Blocked'").get();
+    blockedCount = row ? Number(row.cnt) : 0;
+  } catch (e) { /* ignore */ }
+  // Dynamic active count: agents with recent heartbeat (last 5 minutes)
+  let activeCount = 0;
+  const activeThreshold = Date.now() - 5 * 60 * 1000;
+  for (const [id] of agents) {
+    const lp = lastPush.get(id);
+    if (lp != null && lp >= activeThreshold) activeCount++;
+    else if (runtime.get(id) === 'ok' && lp == null) activeCount++; // never pushed but runtime says ok
+  }
   return {
-    event: 'snapshot', ts: now(), cards, links,
-    agents: [...agents.values()].map(a => ({
-      id: a.id, name: a.name ?? a.id, color: a.color, parent: a.parent ?? null,
-      type: a.type ?? 'agent',                     // 'infrastructure' for VMs (VF #1)
-      ephemeral: a.ephemeral, runtime: runtime.get(a.id) ?? 'ok',
-      fallbackActive: usage.get(a.id)?.fallbackActive ?? false,
-    })),
+    event: 'snapshot', ts: now(), cards, links, blockedCount, activeCount,
+    agents: [...agents.values()].map(a => {
+      const pcfg = profileModelMap().get(a.id);
+      return {
+        id: a.id, name: a.name ?? a.id, color: a.color, parent: a.parent ?? null,
+        type: a.type ?? 'agent',                     // 'infrastructure' for VMs (VF #1)
+        ephemeral: a.ephemeral, runtime: runtime.get(a.id) ?? 'ok',
+        fallbackActive: usage.get(a.id)?.fallbackActive ?? false,
+        model: pcfg?.model ?? null,
+        provider: pcfg?.provider ?? null,
+      };
+    }),
   };
 }
 
@@ -474,29 +530,6 @@ function statusFromLastSeen(iso) {
   if (age < 1800000) return 'idle';
   return 'offline';
 }
-
-// activityState: per-agent activity label set via POST /api/agents/:id/activity.
-// Value: { label: 'documenting' | 'consulting', expires?: number }. 'consulting'
-// auto-expires after 30 min. NOT used for online/idle/offline — only an activity
-// label layered on top of an agent that is *currently online*.
-const activityState = new Map();
-const ACTIVITY_TTL = 30 * 60 * 1000;
-function cleanActivities() {
-  const t = Date.now();
-  for (const [id, e] of activityState) if (e && e.expires && t > e.expires) activityState.delete(id);
-}
-setInterval(cleanActivities, 60000);
-
-// computeAgentStatus — authoritative status. NEVER trusts the gateway `status`
-// field (it hardcodes "online" for all agents). online/idle/offline come from
-// last_seen; documenting/consulting layer on top only when the agent is online.
-function computeAgentStatus(id, gw) {
-  const base = statusFromLastSeen(gw && gw.last_seen);   // online | idle | offline
-  if (base !== 'online') return base;                    // stale → ignore any activity label
-  const a = activityState.get(id);
-  if (a && (a.label === 'documenting' || a.label === 'consulting')) return a.label;
-  return 'online';
-}
 function taskRow(r) {
   return {
     id: r.id, title: r.title, status: r.status, assignee: r.assignee,
@@ -511,29 +544,65 @@ function taskRow(r) {
 // dashboard). One endpoint serves both, so the ingress can route /api/agents here.
 async function agentRoster() {
   const gw = await gatewayMap();
+  const pm = profileModelMap();
   return [...agents.values()].map(a => {
     const h = gw.get(a.id) || {};
     const u = usage.get(a.id) || {};
+    const pcfg = pm.get(a.id);
     const lastSeen = h.last_seen ?? (lastPush.has(a.id) ? new Date(lastPush.get(a.id)).toISOString() : null);
-    const model = h.model ?? u.modelName ?? null;
-    const provider = h.provider ?? u.modelProvider ?? null;
+    // Authoritative model: Hermes profile config > gateway report > usage data
+    const model = pcfg?.model ?? h.model ?? u.modelName ?? null;
+    const provider = pcfg?.provider ?? h.provider ?? u.modelProvider ?? null;
     return {
       id: a.id, name: a.name ?? a.id, color: a.color ?? null,
       role: a.role ?? null, group: agentGroupLabel(a),
-      status: computeAgentStatus(a.id, h),
+      status: h.status || (h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(a.id)),
       lastSeen,
       anchor: a.anchor ?? null,
-      model, provider, reportedModel: model, reportedProvider: provider,
+      model, provider,
+      // Gateway raw data preserved for debugging — shows what the gateway last saw
+      reportedModel: h.model ?? u.modelName ?? null,
+      reportedProvider: h.provider ?? u.modelProvider ?? null,
     };
   });
 }
 
 // ------------------------------------------------------------------ agent detail (Phase 7b - /api/agents/:id)
+// Cache for session stats per agent (60s TTL) to avoid hitting state.db every request
+let _sessionStats = { at: 0, map: new Map() };  // agentId -> { sessions24h, tokensToday, costUsd }
+function readSessionStats(agentId) {
+  if (Date.now() - _sessionStats.at < 60000) return _sessionStats.map.get(agentId) ?? null;
+  // Refresh all agents in one pass
+  const m = new Map();
+  for (const id of agents.keys()) {
+    const stateDbPath = path.join(HERMES_PROFILES_DIR, 'profiles', id, 'state.db');
+    try {
+      if (!fs.existsSync(stateDbPath)) continue;
+      const sdb = new DatabaseSync(stateDbPath, { readOnly: true });
+      try {
+        const cut = (Date.now() - 24 * 3600 * 1000) / 1000;  // state.db uses Unix seconds
+        const sess = sdb.prepare(
+          'SELECT COUNT(*) AS cnt, COALESCE(SUM(input_tokens),0) + COALESCE(SUM(output_tokens),0) AS totalTokens, COALESCE(SUM(estimated_cost_usd),0) AS totalCost FROM sessions WHERE started_at >= ?'
+        ).get(cut);
+        m.set(id, {
+          sessions24h: sess ? Number(sess.cnt) : 0,
+          tokensToday: sess ? Number(sess.totalTokens) : 0,
+          costUsd: sess ? Number(sess.totalCost) : 0,
+        });
+      } finally { sdb.close(); }
+    } catch (e) { /* ignore — no state.db or can't read */ }
+  }
+  _sessionStats = { at: Date.now(), map: m };
+  return m.get(agentId) ?? null;
+}
+
 async function agentDetail(id) {
   const a = agents.get(id);
   if (!a) return null;
   const u = usage.get(id) ?? {};
   const h = (await gatewayMap()).get(id) || {};
+  const pcfg = profileModelMap().get(id);
+  const ss = readSessionStats(id);
   const cut = Date.now() - 24 * 3600 * 1000;
   let tasks = [];
   try {
@@ -541,15 +610,23 @@ async function agentDetail(id) {
       .all(id, a.name ?? id)
       .map(r => ({ cardId: String(r.id), title: r.title, status: colKey(r.status) }));
   } catch (e) { log('agent detail task query failed:', e.message); }
+  // Model: Hermes profile config > gateway report > usage data
+  const model = pcfg?.model ?? h.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null));
+  const provider = pcfg?.provider ?? h.provider ?? u.modelProvider ?? null;
+  // Session stats: state.db > usage push data > pushHist fallback
+  const sessions24h = ss?.sessions24h ?? (pushHist.get(id) ?? []).filter(t => t >= cut).length;
+  const tokensToday = ss?.tokensToday ?? u.tokens ?? null;
+  const costUsd = ss?.costUsd ?? u.costUsd ?? null;
   return {
     ok: true,
     id, name: a.name ?? id, color: a.color ?? null,
     role: a.role ?? null, group: agentGroupLabel(a), parent: a.parent ?? null,
-    status: computeAgentStatus(id, h), runtime: runtime.get(id) ?? 'ok',
-    model: h.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null)),
-    provider: h.provider ?? u.modelProvider ?? null, fallbackActive: u.fallbackActive ?? false,
-    sessions24h: (pushHist.get(id) ?? []).filter(t => t >= cut).length,
-    tokensToday: u.tokens ?? null, costUsd: u.costUsd ?? null,
+    status: h.status || (h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(id)), runtime: runtime.get(id) ?? 'ok',
+    model, provider, fallbackActive: u.fallbackActive ?? false,
+    // Gateway raw data preserved for debugging
+    reportedModel: h.model ?? null,
+    reportedProvider: h.provider ?? null,
+    sessions24h, tokensToday, costUsd,
     cacheHitRate: u.cacheHitRate ?? null,
     lastSeen: h.last_seen ?? (lastPush.has(id) ? new Date(lastPush.get(id)).toISOString() : null),
     tasks,
@@ -614,12 +691,19 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
   try {
     if (req.method === 'GET' && (p === '/agents/usage' || p === '/api/agents/usage')) {
+      const pm = profileModelMap();
       const out = [...agents.keys()].map(id => {
         const u = usage.get(id) ?? {};
+        const ss = readSessionStats(id);
+        const pcfg = pm.get(id);
         const hb = lastPush.has(id) ? Math.floor((Date.now() - lastPush.get(id)) / 1000) : null;
         return {
-          agentId: id, tokens: u.tokens ?? null, costUsd: u.costUsd ?? null,
-          modelName: u.modelName ?? null, modelProvider: u.modelProvider ?? null,
+          agentId: id,
+          tokens: ss?.tokensToday ?? u.tokens ?? null,
+          costUsd: ss?.costUsd ?? u.costUsd ?? null,
+          sessions24h: ss?.sessions24h ?? null,
+          modelName: pcfg?.model ?? u.modelName ?? null,
+          modelProvider: pcfg?.provider ?? u.modelProvider ?? null,
           cacheHitRate: u.cacheHitRate ?? null, fallbackActive: u.fallbackActive ?? false,
           fallbackModel: u.fallbackModel ?? null, heartbeatAge: hb, windowStart: u.windowStart ?? null,
         };
@@ -660,15 +744,6 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
     if (req.method === 'GET' && p === '/api/agents') return json(res, 200, await agentRoster());           // Phase 6
-    const aact = p.match(/^\/api\/agents\/([\w.\-]+)\/activity$/);                                         // activity label (consulting/documenting)
-    if (req.method === 'POST' && aact) {
-      const { activity } = await readBody(req);
-      const id = aact[1];
-      if (activity === 'consulting') activityState.set(id, { label: 'consulting', expires: Date.now() + ACTIVITY_TTL });
-      else if (activity === 'documenting') activityState.set(id, { label: 'documenting' });
-      else activityState.delete(id);   // null / anything else clears it
-      return json(res, 200, { ok: true, id, activity: activityState.get(id)?.label ?? null });
-    }
     const adet = p.match(/^\/api\/agents\/([\w.\-]+)$/);                                                   // Phase 7b
     if (req.method === 'GET' && adet) {
       const d = await agentDetail(adet[1]);
@@ -680,6 +755,18 @@ const server = http.createServer(async (req, res) => {
       const df = candidates.find(f => { try { return fs.existsSync(f); } catch { return false; } });
       if (df) { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(fs.readFileSync(df, 'utf8')); }
       return json(res, 404, { error: 'dex-state.json not found' });
+    }
+    if (req.method === 'POST' && p === '/api/admin/log-login') {          // Phase 2 — ForwardAuth login logging
+      const candidates = [path.join(CONFIG_DIR, 'dex-state.json'), '/root/.hermes/dex-state.json'];
+      const df = candidates.find(f => { try { return fs.existsSync(f); } catch { return false; } });
+      if (!df) return json(res, 404, { error: 'dex-state.json not found' });
+      const entry = await readBody(req);
+      if (!entry.email) return json(res, 400, { error: 'email required' });
+      const data = JSON.parse(fs.readFileSync(df, 'utf8'));
+      data.loginActivity.push(entry);
+      if (data.loginActivity.length > 100) data.loginActivity = data.loginActivity.slice(-100);
+      fs.writeFileSync(df, JSON.stringify(data, null, 2));
+      return json(res, 200, { ok: true });
     }
     if (req.method === 'GET' && p === '/api/docs/file') return docsFile(res, url.searchParams.get('path'));
     if (req.method === 'GET' && p === '/mapping.json') {
