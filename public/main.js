@@ -716,10 +716,12 @@ class Agent {
     this.animate(dt);
   }
   animate(dt) {                             // Phase 8: humanoid pose driver
-    // aY = floor offset. Anchors sit at Y=0 (floor), but the avatar's seated
-    // hip position (0.46*S) puts the butt at ~0.46 — way above the chair seat
-    // (~0.15-0.20 in the GLB). Negative offset drops them onto the chair.
-    const SEAT_OFFSET = -0.08;
+    // aY = floor offset. Seat anchors sit at Y=0 (floor); animateHumanoid's
+    // foot-lift then raises the rig so the lowest foot rests on the floor, which
+    // also seats the hips (~0.51) onto the procedural chair/couch (seat top
+    // ~0.50-0.53). The old -0.08 was tuned for the LOW seats of the retired GLB
+    // and now sinks agents into the seat + buries their feet. Procedural era: 0.
+    const SEAT_OFFSET = 0.0;
     animateHumanoid(this, this.seated ? anchors.get(this.seated).pos.y + SEAT_OFFSET : 0, dt);
   }
 }
