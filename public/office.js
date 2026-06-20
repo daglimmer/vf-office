@@ -108,7 +108,7 @@ export function buildOffice(report) {
   };
   const M = {
     // floors: polished, slight clearcoat reflection (Phase 8b)
-    concrete:  phys('dark_concrete', { map: T.concrete, bumpMap: T.concrete, bumpScale: BUMP.concrete, color: 0xcfd2d8, roughness: 0.42, metalness: 0.05, clearcoat: 0.45, clearcoatRoughness: 0.35 }),
+    concrete:  phys('dark_concrete', { map: T.concrete, bumpMap: T.concrete, bumpScale: BUMP.concrete, color: 0xcfd2d8, roughness: 0.34, metalness: 0.05, clearcoat: 0.6, clearcoatRoughness: 0.12 }),   // Pass B: sharper clearcoat = polished-concrete sheen (was rough 0.42 / cc 0.45 / ccRough 0.35)
     woodDark:  phys('dark_wood',     { map: T.woodDark, bumpMap: T.woodDark, bumpScale: BUMP.woodDark, color: 0xffffff, roughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.4 }),
     oak:       std('warm_oak',      { map: T.oak, bumpMap: T.oak, bumpScale: BUMP.oak, color: 0xffffff, roughness: 0.5 }),
     woodLight: std('light_wood',    { map: T.woodLight, bumpMap: T.woodLight, bumpScale: BUMP.woodLight, color: 0xffffff, roughness: 0.55 }),
