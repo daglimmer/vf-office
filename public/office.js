@@ -545,28 +545,66 @@ export function buildOffice(report) {
     cyl('prop_holopuck', 31.5, 0.78, 3.0, 0.12, 0.04, M.neon, 16);
   }
 
-  // ---------------------------------------------------------------- control
+  // ---------------------------------------------------------------- control (command center)
+  // Render-matched (control room 2): one thick curved console with a smooth
+  // rainbow under-glow, operator monitors + chairs, and a glowing cloud-logo +
+  // amber circuit shield on the back wall, with an LED server rack to the side.
   {
-    const cx = 31.5, cz = 8.75, R = 1.7, segs = 7;
-    for (let i = 0; i < segs; i++) {
-      const ang = -150 + i * 300 / segs;
-      if (ang > -80 && ang < 80) continue;              // opening behind Ollie
-      const rad = ang * D2R;
+    const cx = 31.5, cz = 8.75, R = 1.9;
+    const N = 16, a0 = 80, a1 = 280;                       // wraps the back ~200°, opens toward the room
+    const deskMat = std('cmd_console', { color: 0x14171d, roughness: 0.42, metalness: 0.35 });
+    const spec = ['#2e6bff', '#19c8ff', '#3dff7a', '#ffe32c', '#ff9e2c', '#ff4d4d'];
+    for (let i = 0; i < N; i++) {
+      const frac = i / (N - 1);
+      const ang = a0 + frac * (a1 - a0), rad = ang * D2R;
       const px = cx + Math.sin(rad) * R, pz = cz + Math.cos(rad) * R;
-      rbox(`prop_cmd_${i}`, px, 0.72, pz, 1.55, 0.07, 0.7, M.prop, -ang, 0.03);
-      box(`hot_costs_front_${i}`, px + Math.sin(rad) * 0.36, 0.38, pz + Math.cos(rad) * 0.36,
-          1.55, 0.7, 0.05, zoneMats[i % 6], -ang);
-      box(`prop_cmdmon_${i}`, px - Math.sin(rad) * 0.1, 1.1, pz - Math.cos(rad) * 0.1,
-          0.8, 0.5, 0.04, M.screenDash, -ang + 180);
+      const segW = 0.42;
+      box(`prop_cmdbase_${i}`, px, 0.37, pz, segW, 0.74, 0.7, deskMat, -ang);
+      rbox(`prop_cmdtop_${i}`, px, 0.75, pz, segW + 0.04, 0.06, 0.82, M.metal, -ang, 0.02);
+      // rainbow under-glow on the operator-facing (inner) face
+      const t = frac * (spec.length - 1), col = new THREE.Color(spec[Math.floor(t)]).lerp(new THREE.Color(spec[Math.min(spec.length - 1, Math.ceil(t))]), t - Math.floor(t));
+      const gm = new THREE.Mesh(new THREE.BoxGeometry(segW + 0.03, 0.52, 0.05),
+        new THREE.MeshStandardMaterial({ color: 0x04050a, emissive: col, emissiveIntensity: 1.4 }));
+      gm.position.set(px - Math.sin(rad) * 0.36, 0.33, pz - Math.cos(rad) * 0.36);
+      gm.rotation.y = -ang * D2R; add(gm, `prop_cmdglow_${i}`);
     }
-    [[-0.55, 0.28], [0, 0.4], [0.55, 0.3], [-0.28, 0.33], [0.28, 0.35]].forEach(([dx, r], j) =>
-      sphere(`prop_ncloud_${j}`, 30.0 + dx, 2.25 + (j % 2 ? 0.08 : 0), 5.95, r, M.neon, 0.6, 10, 6));
-    textPanel('prop_logo_ctl', '110lymph.nl', 2.0, 0.5, 30.0, 1.62, 6.05, 180, '#bfeaff');
-    const sh = cyl('prop_shield_ctl', 33.6, 2.2, 5.95, 0.55, 0.08, M.amber, 6);
-    sh.rotation.set(Math.PI / 2, 0, Math.PI / 2);
-    torus('prop_shieldring_ctl', 33.6, 2.2, 6.0, 0.62, 0.03, M.amber, 24, 0);
-    box('prop_ctlrack', 36.9, 0.9, 7.0, 0.7, 1.8, 0.8, M.rack);
-    box('prop_ctlrack_led', 36.62, 0.9, 7.0, 0.04, 1.6, 0.06, zoneMats[0]);
+    // operator monitors (keep prop_cmdmon_ naming for the live cost dashboards)
+    [104, 142, 180, 218, 256].forEach((ang, k) => {
+      const rad = ang * D2R;
+      const px = cx + Math.sin(rad) * (R - 0.18), pz = cz + Math.cos(rad) * (R - 0.18);
+      box(`prop_cmdmon_${k}`, px - Math.sin(rad) * 0.04, 1.22, pz - Math.cos(rad) * 0.04, 1.0, 0.58, 0.04, M.screenDash, -ang + 180);
+      box(`prop_cmdmonstand_${k}`, px, 0.86, pz, 0.09, 0.24, 0.06, M.prop, -ang);
+    });
+    // clickable cost surface (hot_ route target, kept for interactive.js)
+    { const rad = 180 * D2R; box('hot_costs_front_0', cx + Math.sin(rad) * (R + 0.36), 0.4, cz + Math.cos(rad) * (R + 0.36), 2.4, 0.66, 0.04, zoneMats[2], 0); }
+    // two operator chairs (also gives the control-room agent a seat)
+    chair(1, cx - 0.85, cz + 0.35, 180, 'cmd', M.prop);
+    chair(2, cx + 0.85, cz + 0.35, 180, 'cmd', M.prop);
+
+    // ---- back wall: glowing cyan cloud-logo + amber circuit shield
+    [[-0.62, 0.30], [-0.2, 0.42], [0.25, 0.36], [0.62, 0.28], [0.0, 0.22]].forEach(([dx, r], j) =>
+      sphere(`prop_ncloud_${j}`, 30.0 + dx, 2.34 + (j % 2 ? 0.06 : 0), 5.95, r, M.neon, 0.55, 12, 8));
+    textPanel('prop_logo_ctl', '110lymph.nl', 1.7, 0.4, 30.0, 2.3, 5.88, 180, '#e6f8ff', 'bold 52px sans-serif');
+    {                                                     // amber circuit shield drawn on a canvas
+      const cv = document.createElement('canvas'); cv.width = 220; cv.height = 270;
+      const c = cv.getContext('2d');
+      c.strokeStyle = '#ffb347'; c.fillStyle = 'rgba(255,160,50,0.14)'; c.lineWidth = 9; c.lineJoin = 'round';
+      c.beginPath(); c.moveTo(110, 12); c.lineTo(200, 48); c.lineTo(200, 150);
+      c.quadraticCurveTo(200, 232, 110, 262); c.quadraticCurveTo(20, 232, 20, 150);
+      c.lineTo(20, 48); c.closePath(); c.fill(); c.stroke();
+      c.lineWidth = 3; c.strokeStyle = '#ffcd80'; c.fillStyle = '#ffcd80';
+      const node = (x, y) => { c.beginPath(); c.arc(x, y, 4, 0, 7); c.fill(); };
+      for (const [a, b, cc, d] of [[110, 58, 110, 118], [110, 118, 68, 152], [110, 118, 152, 152], [68, 152, 68, 205], [152, 152, 152, 200], [110, 88, 150, 88], [110, 88, 70, 88]]) {
+        c.beginPath(); c.moveTo(a, b); c.lineTo(cc, d); c.stroke(); node(a, b); node(cc, d);
+      }
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.65), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+      m.position.set(33.9, 2.35, 5.9); m.rotation.y = 180 * D2R; add(m, 'prop_shield_ctl');
+    }
+    // server rack to the side, with colored LED rows
+    box('prop_ctlrack', 36.95, 1.1, 7.2, 0.7, 2.2, 1.0, M.rack);
+    for (let r = 0; r < 9; r++)
+      box(`prop_ctlrack_led_${r}`, 36.58, 0.45 + r * 0.22, 7.2, 0.04, 0.14, 0.72, zoneMats[r % 6]);
   }
 
   // ---------------------------------------------------------------- ceo
