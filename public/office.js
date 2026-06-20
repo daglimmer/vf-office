@@ -573,9 +573,10 @@ export function buildOffice(report) {
     });
     // clickable cost surface inset on the desk top (hot_ route, for interactive.js)
     box('hot_costs_front_0', cx, 0.79, cz - 0.06, 2.2, 0.02, 0.5, zoneMats[2]);
-    // two operator chairs in front (operators face the desk/screens)
-    chair(1, cx - 1.0, cz + 1.5, 180, 'cmd', M.prop);
-    chair(2, cx + 1.0, cz + 1.5, 180, 'cmd', M.prop);
+    // operator chairs — chair 1 sits ON the ollie_station seat (Sentinel/Ollie),
+    // chair 2 is a spare beside it; both face the desk/screens (south).
+    chair(1, cx, cz + 0.85, 180, 'cmd', M.prop);          // == ollie_station (31.5, 8.75)
+    chair(2, cx - 1.9, cz + 0.85, 180, 'cmd', M.prop);
 
     // ---- back wall: glowing cyan cloud-logo + dense amber circuit shield
     [[-0.62, 0.30], [-0.2, 0.42], [0.25, 0.36], [0.62, 0.28], [0.0, 0.22]].forEach(([dx, r], j) =>
