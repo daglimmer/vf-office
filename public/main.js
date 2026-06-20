@@ -692,8 +692,16 @@ class Agent {
         if (!this.path.length) { this.pose = 'idle'; if (this.onArrive) { const f = this.onArrive; this.onArrive = null; f(); } }
       } else {
         this.group.position.addScaledVector(d.normalize(), Math.min(WALK_SPEED * dt, dist));
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(-d.x, -d.z));
-        this.group.quaternion.slerp(q, Math.min(TURN_SPEED * dt, 1));
+        // Turn toward travel by easing the YAW in clean Euler space (x and z stay
+        // 0). Slerping the quaternion let Three decompose a ~180deg heading to
+        // Euler (pi, 0, pi); animateHumanoid then eased rotation.x -> 0 with z still
+        // pi, pitching the rig face-down so the head sank through the floor (only
+        // for agents heading near +/-z). Same clean-yaw fix sitAt() already uses.
+        const targetYaw = Math.atan2(-d.x, -d.z);
+        let dy = targetYaw - this.group.rotation.y;
+        while (dy > Math.PI) dy -= 2 * Math.PI;
+        while (dy < -Math.PI) dy += 2 * Math.PI;
+        this.group.rotation.set(0, this.group.rotation.y + dy * Math.min(TURN_SPEED * dt, 1), 0);
       }
     }
     if (this.timer != null && !this.blocked && this.overlay === 'ok' && this.seated) {
