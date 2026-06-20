@@ -765,13 +765,18 @@ export function buildOffice(report) {
       box(`env_towertop_${i}`, x, h + 0.2, z, w * 0.6, 0.5, d * 0.6, M.prop);
       if (i % 3 === 0) box(`env_antenna_${i}`, x, h + 1.6, z, 0.15, 2.4, 0.15, M.prop);
     });
-    // plaza trees (south + west approach)
-    const treeSpots = [[-2, -4], [8, -5], [18, -4.5], [28, -5], [38, -4], [-6, 6], [-6, 14], [44, 10]];
+    // plaza trees (south + west approach). Fuller, layered canopies of varied
+    // leaf puffs instead of 3 blobs on a stick — reads as a tree, not a roadblock.
+    // (moved the x=18 tree off the entrance.)
+    const treeSpots = [[-2, -4], [9, -6], [12, -3], [29, -5.5], [38, -4], [-6, 6], [-6, 14], [44, 10]];
     treeSpots.forEach(([x, z], i) => {
-      cyl(`env_trunk_${i}`, x, 0.9, z, 0.12, 1.8, M.woodDark, 8);
-      for (let j = 0; j < 3; j++)
-        sphere(`env_crown_${i}_${j}`, x + Math.cos(j * 2.3 + i) * 0.45, 2.0 + j * 0.4,
-               z + Math.sin(j * 2.3 + i) * 0.45, 0.7 - j * 0.12, M.leaf[(i + j) % 3], 0.8, 8, 6);
+      const th = 1.7 + rnd() * 0.5;
+      cyl(`env_trunk_${i}`, x, th / 2, z, 0.13, th, M.woodDark, 8, 0.09);   // gently tapered trunk
+      for (let j = 0; j < 8; j++) {
+        const a = rnd() * Math.PI * 2, rad = 0.6 * Math.sqrt(rnd());
+        sphere(`env_crown_${i}_${j}`, x + Math.cos(a) * rad, th + 0.2 + rnd() * 0.85,
+               z + Math.sin(a) * rad, 0.4 + rnd() * 0.32, M.leaf[(i + j) % 3], 0.95, 12, 9);
+      }
     });
     // street lamps along the south walk (flank the entrance — none at x=20)
     [3, 11, 29, 37].forEach((x, i) => {
