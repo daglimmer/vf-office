@@ -546,61 +546,67 @@ export function buildOffice(report) {
   }
 
   // ---------------------------------------------------------------- control (command center)
-  // Render-matched (control room 2): one thick curved console with a smooth
-  // rainbow under-glow, operator monitors + chairs, and a glowing cloud-logo +
-  // amber circuit shield on the back wall, with an LED server rack to the side.
+  // Straight-line philosophy (Ray): a clean STRAIGHT command desk with three
+  // proportional wide screens + a straight rainbow under-glow strip, the cyan
+  // cloud-logo + a dense amber circuit shield on the back wall, and an LED rack.
   {
-    const cx = 31.5, cz = 8.75, R = 1.9;
-    const N = 16, a0 = 80, a1 = 280;                       // wraps the back ~200°, opens toward the room
+    const cx = 31.5, cz = 7.9, W = 6.4;
     const deskMat = std('cmd_console', { color: 0x14171d, roughness: 0.42, metalness: 0.35 });
     const spec = ['#2e6bff', '#19c8ff', '#3dff7a', '#ffe32c', '#ff9e2c', '#ff4d4d'];
-    for (let i = 0; i < N; i++) {
-      const frac = i / (N - 1);
-      const ang = a0 + frac * (a1 - a0), rad = ang * D2R;
-      const px = cx + Math.sin(rad) * R, pz = cz + Math.cos(rad) * R;
-      const segW = 0.42;
-      box(`prop_cmdbase_${i}`, px, 0.37, pz, segW, 0.74, 0.7, deskMat, -ang);
-      rbox(`prop_cmdtop_${i}`, px, 0.75, pz, segW + 0.04, 0.06, 0.82, M.metal, -ang, 0.02);
-      // rainbow under-glow on the operator-facing (inner) face
-      const t = frac * (spec.length - 1), col = new THREE.Color(spec[Math.floor(t)]).lerp(new THREE.Color(spec[Math.min(spec.length - 1, Math.ceil(t))]), t - Math.floor(t));
-      const gm = new THREE.Mesh(new THREE.BoxGeometry(segW + 0.03, 0.52, 0.05),
+    // straight desk: body + top
+    box('prop_cmddesk', cx, 0.37, cz, W, 0.74, 0.9, deskMat);
+    rbox('prop_cmddesk_top', cx, 0.75, cz, W + 0.12, 0.06, 1.02, M.metal, 0, 0.03);
+    // straight rainbow under-glow strip across the operator-facing (front) face
+    const NG = 30;
+    for (let i = 0; i < NG; i++) {
+      const frac = i / (NG - 1), t = frac * (spec.length - 1);
+      const col = new THREE.Color(spec[Math.floor(t)]).lerp(new THREE.Color(spec[Math.min(spec.length - 1, Math.ceil(t))]), t - Math.floor(t));
+      const gm = new THREE.Mesh(new THREE.BoxGeometry(W / NG + 0.02, 0.5, 0.05),
         new THREE.MeshStandardMaterial({ color: 0x04050a, emissive: col, emissiveIntensity: 1.4 }));
-      gm.position.set(px - Math.sin(rad) * 0.36, 0.33, pz - Math.cos(rad) * 0.36);
-      gm.rotation.y = -ang * D2R; add(gm, `prop_cmdglow_${i}`);
+      gm.position.set(cx - W / 2 + (i + 0.5) / NG * W, 0.33, cz + 0.47); add(gm, `prop_cmdglow_${i}`);
     }
-    // three BIG WIDE command screens, angled to follow the curve (panoramic wall)
-    [124, 180, 236].forEach((ang, k) => {
-      const rad = ang * D2R;
-      const px = cx + Math.sin(rad) * (R + 0.12), pz = cz + Math.cos(rad) * (R + 0.12);
-      box(`prop_cmdbezel_${k}`, px - Math.sin(rad) * 0.07, 1.52, pz - Math.cos(rad) * 0.07, 2.0, 1.08, 0.04, M.prop, -ang + 180);
-      box(`prop_cmdmon_${k}`, px - Math.sin(rad) * 0.05, 1.52, pz - Math.cos(rad) * 0.05, 1.86, 0.94, 0.05, M.screenDash, -ang + 180);
-      box(`prop_cmdmonfoot_${k}`, px, 0.86, pz, 0.55, 0.42, 0.06, M.metal, -ang);
+    // three proportional wide screens in a straight row, facing the operators (+z)
+    [-2.1, 0, 2.1].forEach((dx, k) => {
+      box(`prop_cmdbezel_${k}`, cx + dx, 1.34, cz + 0.4, 1.84, 0.92, 0.04, M.prop);
+      box(`prop_cmdmon_${k}`, cx + dx, 1.34, cz + 0.42, 1.7, 0.8, 0.04, M.screenDash);
+      box(`prop_cmdmonfoot_${k}`, cx + dx, 0.86, cz + 0.34, 0.5, 0.42, 0.06, M.metal);
     });
-    // clickable cost surface (hot_ route target, kept for interactive.js)
-    { const rad = 180 * D2R; box('hot_costs_front_0', cx + Math.sin(rad) * (R + 0.36), 0.4, cz + Math.cos(rad) * (R + 0.36), 2.4, 0.66, 0.04, zoneMats[2], 0); }
-    // two operator chairs (also gives the control-room agent a seat)
-    chair(1, cx - 0.85, cz + 0.35, 180, 'cmd', M.prop);
-    chair(2, cx + 0.85, cz + 0.35, 180, 'cmd', M.prop);
+    // clickable cost surface inset on the desk top (hot_ route, for interactive.js)
+    box('hot_costs_front_0', cx, 0.79, cz - 0.06, 2.2, 0.02, 0.5, zoneMats[2]);
+    // two operator chairs in front (operators face the desk/screens)
+    chair(1, cx - 1.0, cz + 1.5, 180, 'cmd', M.prop);
+    chair(2, cx + 1.0, cz + 1.5, 180, 'cmd', M.prop);
 
-    // ---- back wall: glowing cyan cloud-logo + amber circuit shield
+    // ---- back wall: glowing cyan cloud-logo + dense amber circuit shield
     [[-0.62, 0.30], [-0.2, 0.42], [0.25, 0.36], [0.62, 0.28], [0.0, 0.22]].forEach(([dx, r], j) =>
-      sphere(`prop_ncloud_${j}`, 30.0 + dx, 2.34 + (j % 2 ? 0.06 : 0), 5.95, r, M.neon, 0.55, 12, 8));
-    textPanel('prop_logo_ctl', '110lymph.nl', 1.7, 0.4, 30.0, 2.3, 5.88, 180, '#e6f8ff', 'bold 52px sans-serif');
-    {                                                     // amber circuit shield drawn on a canvas
-      const cv = document.createElement('canvas'); cv.width = 220; cv.height = 270;
-      const c = cv.getContext('2d');
-      c.strokeStyle = '#ffb347'; c.fillStyle = 'rgba(255,160,50,0.14)'; c.lineWidth = 9; c.lineJoin = 'round';
-      c.beginPath(); c.moveTo(110, 12); c.lineTo(200, 48); c.lineTo(200, 150);
-      c.quadraticCurveTo(200, 232, 110, 262); c.quadraticCurveTo(20, 232, 20, 150);
-      c.lineTo(20, 48); c.closePath(); c.fill(); c.stroke();
-      c.lineWidth = 3; c.strokeStyle = '#ffcd80'; c.fillStyle = '#ffcd80';
-      const node = (x, y) => { c.beginPath(); c.arc(x, y, 4, 0, 7); c.fill(); };
-      for (const [a, b, cc, d] of [[110, 58, 110, 118], [110, 118, 68, 152], [110, 118, 152, 152], [68, 152, 68, 205], [152, 152, 152, 200], [110, 88, 150, 88], [110, 88, 70, 88]]) {
-        c.beginPath(); c.moveTo(a, b); c.lineTo(cc, d); c.stroke(); node(a, b); node(cc, d);
+      sphere(`prop_ncloud_${j}`, 29.6 + dx, 2.62 + (j % 2 ? 0.06 : 0), 5.95, r, M.neon, 0.55, 12, 8));
+    textPanel('prop_logo_ctl', '110lymph.nl', 1.7, 0.4, 29.6, 2.58, 5.88, 180, '#e6f8ff', 'bold 52px sans-serif');
+    {                                                     // dense amber circuit shield (canvas)
+      const cv = document.createElement('canvas'); cv.width = 240; cv.height = 290;
+      const c = cv.getContext('2d'); c.lineJoin = 'round';
+      const path = () => { c.beginPath(); c.moveTo(120, 10); c.lineTo(218, 50); c.lineTo(218, 160); c.quadraticCurveTo(218, 250, 120, 282); c.quadraticCurveTo(22, 250, 22, 160); c.lineTo(22, 50); c.closePath(); };
+      path(); c.fillStyle = 'rgba(255,160,50,0.12)'; c.fill();
+      c.save(); path(); c.clip();                        // dense traces clipped to the shield
+      c.strokeStyle = '#ffcd80'; c.fillStyle = '#ffcd80'; c.lineWidth = 2.3;
+      let s = 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+      const node = (x, y, rr = 3) => { c.beginPath(); c.arc(x, y, rr, 0, 7); c.fill(); };
+      c.beginPath(); c.moveTo(120, 26); c.lineTo(120, 256); c.stroke();   // central spine
+      for (let y = 50; y < 252; y += 18) {                // horizontal rungs + nodes + stubs
+        const w = 32 + r() * 60;
+        c.beginPath(); c.moveTo(120 - w, y); c.lineTo(120 + w, y); c.stroke();
+        node(120 - w, y); node(120 + w, y); node(120, y, 2.2);
+        if (r() < 0.7) { c.beginPath(); c.moveTo(120 - w, y); c.lineTo(120 - w, y + (r() < 0.5 ? 11 : -11)); c.stroke(); }
+        if (r() < 0.7) { c.beginPath(); c.moveTo(120 + w, y); c.lineTo(120 + w, y + (r() < 0.5 ? 11 : -11)); c.stroke(); }
       }
+      for (let i = 0; i < 14; i++) {                      // secondary diagonal traces
+        const x = 45 + r() * 150, y = 45 + r() * 200, dx = (r() - 0.5) * 46, dy = (r() - 0.5) * 46;
+        c.beginPath(); c.moveTo(x, y); c.lineTo(x + dx, y + dy); c.stroke(); node(x, y, 2);
+      }
+      c.restore();
+      path(); c.strokeStyle = '#ffb347'; c.lineWidth = 8; c.stroke();     // shield outline
       const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.35, 1.65), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
-      m.position.set(33.9, 2.35, 5.9); m.rotation.y = 180 * D2R; add(m, 'prop_shield_ctl');
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.7), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+      m.position.set(34.2, 2.62, 5.9); m.rotation.y = 180 * D2R; add(m, 'prop_shield_ctl');
     }
     // server rack to the side, with colored LED rows
     box('prop_ctlrack', 36.95, 1.1, 7.2, 0.7, 2.2, 1.0, M.rack);
