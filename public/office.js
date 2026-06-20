@@ -768,7 +768,8 @@ export function buildOffice(report) {
     // plaza trees (south + west approach). Fuller, layered canopies of varied
     // leaf puffs instead of 3 blobs on a stick — reads as a tree, not a roadblock.
     // (moved the x=18 tree off the entrance.)
-    const treeSpots = [[-2, -4], [9, -6], [12, -3], [29, -5.5], [38, -4], [-6, 6], [-6, 14], [44, 10]];
+    // framed around the forecourt reflecting pools (outer flanks + by the walk)
+    const treeSpots = [[2, -3], [3, -9], [37, -3], [38, -9], [16.5, -1.5], [23.5, -1.5], [-6, 8], [44, 8]];
     treeSpots.forEach(([x, z], i) => {
       const th = 1.7 + rnd() * 0.5;
       cyl(`env_trunk_${i}`, x, th / 2, z, 0.13, th, M.woodDark, 8, 0.09);   // gently tapered trunk
@@ -827,6 +828,39 @@ export function buildOffice(report) {
         box(`env_benchleg_${i}_${sx}`, bx2 + sx, 0.2, -1.4, 0.08, 0.4, 0.45, M.metal);
     }
 
+    // ---- Pass E forecourt "wow": Apple-campus approach — two reflecting pools
+    // flanking the walk, warm uplight fixtures, and a glowing logo monolith.
+    {
+      const water = std('pool_water', { color: 0x0a141a, emissive: 0x0a2630, emissiveIntensity: 0.22, roughness: 0.06, metalness: 0.75 });
+      const pool = (name, x, z, w, d) => {
+        if (!LOWQ) {
+          try {
+            const r = new Reflector(new THREE.PlaneGeometry(w, d), { textureWidth: 256, textureHeight: 256, color: 0x10171c });
+            r.rotation.x = -Math.PI / 2; r.position.set(x, -0.02, z); add(r, name);
+          } catch (e) { box(name, x, -0.03, z, w, 0.02, d, water); }
+        } else { box(name, x, -0.03, z, w, 0.02, d, water); }
+        const cw = 0.22;                                   // stone coping rim
+        const cope = (cx, cz, csx, csz, k) => box(`${name}_cope_${k}`, cx, 0.03, cz, csx, 0.12, csz, M.metal);
+        cope(x, z - d / 2 - cw / 2, w + cw * 2, cw, 'n'); cope(x, z + d / 2 + cw / 2, w + cw * 2, cw, 's');
+        cope(x - w / 2 - cw / 2, z, cw, d, 'w'); cope(x + w / 2 + cw / 2, z, cw, d, 'e');
+      };
+      pool('prop_pool_l', 10.5, -5.5, 7, 6);
+      pool('prop_pool_r', 29.5, -5.5, 7, 6);
+
+      // warm uplight fixtures (emissive — tier-safe) at tree bases + portico columns
+      const up = std('uplight', { color: 0x1a1206, emissive: 0xffb259, emissiveIntensity: 1.5 });
+      [[2, -3], [3, -9], [37, -3], [38, -9], [16.5, -1.5], [23.5, -1.5], [17.1, -3.9], [22.9, -3.9]]
+        .forEach(([x, z], i) => cyl(`prop_uplight_${i}`, x, 0.05, z, 0.14, 0.05, up, 12));
+
+      // logo monolith at the street end of the walk — the HQ marker
+      const mx = 20, mz = -13.6;
+      box('prop_monolith', mx, 1.35, mz, 1.3, 2.7, 0.32, M.glassDC);
+      box('prop_monolith_core', mx, 1.45, mz, 0.95, 2.2, 0.1, std('monolith_core', { color: 0x05080c, emissive: 0x223a52, emissiveIntensity: 0.55 }));
+      box('prop_monolith_base', mx, 0.13, mz, 1.6, 0.26, 0.74, M.metal);
+      box('prop_monolith_glow', mx, 0.28, mz, 1.4, 0.04, 0.55, std('mono_glow', { color: 0x0b0d12, emissive: 0x4dd8ff, emissiveIntensity: 0.7 }));
+      textPanel('prop_monolith_logo', '110lymph.nl', 1.05, 0.42, mx, 1.85, mz - 0.18, 180, '#d6efff', 'bold 38px sans-serif');
+    }
+
     // ---- Pass E: a real front entrance at the corridor face (x=20, z=Z0).
     // The corridor wall now has a 3.4m doorway; dress it as a grand entrance:
     // glass doors, a cantilevered portico with a downlight soffit, columns, a
@@ -840,12 +874,16 @@ export function buildOffice(report) {
         rbox(`prop_entrance_door_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 0.82, 1.1, ez, 1.58, 2.18, 0.05, M.glassDC, 0, 0.02);
         box(`prop_entrance_handle_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 0.16, 1.1, ez - 0.06, 0.04, 0.5, 0.04, M.metal);
       }
-      // lit threshold mat just outside the doors
-      box('prop_entrance_sill', 20, 0.015, ez - 1.0, 3.5, 0.03, 1.9, sillMat);
-      // cantilevered portico/canopy projecting over the walk
+      // raised plinth + lit threshold mat just outside the doors (entrance gravitas)
+      box('prop_entrance_plinth', 20, -0.02, ez - 0.7, 8.6, 0.12, 1.7, M.metal);
+      box('prop_entrance_step', 20, -0.07, ez - 1.85, 7.6, 0.1, 0.6, M.metal);
+      box('prop_entrance_sill', 20, 0.055, ez - 0.7, 3.5, 0.03, 1.5, sillMat);
+      // cantilevered GLASS portico/canopy projecting over the walk
       const cz = ez - 2.1;
-      rbox('prop_canopy', 20, 3.02, cz, 6.4, 0.22, 4.6, M.prop, 0, 0.06);
-      box('prop_canopy_soffit', 20, 2.88, cz, 5.8, 0.03, 4.0, soffitMat);   // recessed downlight panel
+      rbox('prop_canopy', 20, 3.04, cz, 6.4, 0.1, 4.6, M.glassDC, 0, 0.04);   // glass roof panel
+      for (const [n, fx, fz, fsx, fsz] of [['s', 0, 2.3, 6.4, 0.1], ['w', -3.2, 0, 0.1, 4.6], ['e', 3.2, 0, 0.1, 4.6]])
+        box(`prop_canopy_frame_${n}`, 20 + fx, 3.04, cz + fz, fsx, 0.14, fsz, M.metal);   // slim edge frame (front edge = fascia)
+      box('prop_canopy_soffit', 20, 2.92, cz, 5.8, 0.03, 4.0, soffitMat);   // recessed downlight panel
       box('prop_canopy_fascia', 20, 3.02, cz - 2.34, 6.4, 0.72, 0.08, M.prop);
       textPanel('prop_entrance_sign', '110lymph.nl', 4.4, 0.62, 20, 3.02, cz - 2.4, 180, '#dff0ff', 'bold 58px sans-serif');
       for (const sx of [-1, 1]) {                         // support columns at the canopy's outer corners
