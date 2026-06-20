@@ -272,7 +272,7 @@ export function buildOffice(report) {
   // ---------------------------------------------------------------- architecture
   glazeX(Z0, WX0, WX1, H_LOUNGE);                       // south glazing: lounge
   glazeX(Z0, EX0, EX1, H_MEET);                         // south glazing: meeting
-  wallRunX(Z0, CX0, CX1, H_CORR);                       // corridor entrance wall
+  wallRunX(Z0, CX0, CX1, H_CORR, [[20, 3.4]]);          // corridor entrance wall — now with a real doorway (Pass E)
   wallRunZ(WX0, Z0, 5.75, H_LOUNGE);                    // west: lounge solid (green wall)
   glazeZ(WX0, 5.75, 11.25, H_OFFICE);                   // west: staff window
   glazeZ(WX0, 11.25, ZW1, H_OFFICE);                    // west: devops window
@@ -773,14 +773,13 @@ export function buildOffice(report) {
         sphere(`env_crown_${i}_${j}`, x + Math.cos(j * 2.3 + i) * 0.45, 2.0 + j * 0.4,
                z + Math.sin(j * 2.3 + i) * 0.45, 0.7 - j * 0.12, M.leaf[(i + j) % 3], 0.8, 8, 6);
     });
-    // street lamps along the south walk
-    for (let i = 0; i < 5; i++) {
-      const x = 2 + i * 9;
+    // street lamps along the south walk (flank the entrance — none at x=20)
+    [3, 11, 29, 37].forEach((x, i) => {
       cyl(`env_lamppost_${i}`, x, 1.6, -2.5, 0.05, 3.2, M.metal, 8);
       const head = sphere(`env_lamphead_${i}`, x, 3.3, -2.5, 0.12, M.ringWarm.clone(), 0.8, 8, 6);
       head.material.emissiveIntensity = 1.3;
       head.material.name = 'lamp_glow';
-    }
+    });
 
     // ---- 8e (Ray): finish the grounds - lawns, palms, path, parking, benches
     const grassMat = std('grass', { map: speckleTex('#1c3a1e', '90,160,80', 1400, 6, 6),
@@ -821,6 +820,36 @@ export function buildOffice(report) {
       rbox(`env_bench_${i}`, bx2, 0.42, -1.4, 1.7, 0.07, 0.5, M.oak, 0, 0.03);
       for (const sx of [-0.7, 0.7])
         box(`env_benchleg_${i}_${sx}`, bx2 + sx, 0.2, -1.4, 0.08, 0.4, 0.45, M.metal);
+    }
+
+    // ---- Pass E: a real front entrance at the corridor face (x=20, z=Z0).
+    // The corridor wall now has a 3.4m doorway; dress it as a grand entrance:
+    // glass doors, a cantilevered portico with a downlight soffit, columns, a
+    // glowing sign on the fascia, and bollard lights flanking the approach.
+    {
+      const ez = Z0;                                      // building front line (0.3)
+      const sillMat = std('entrance_sill', { color: 0x0b0d12, emissive: 0x4dd8ff, emissiveIntensity: 0.5 });
+      const soffitMat = std('canopy_soffit', { color: 0x0b0d12, emissive: 0xbfe0ff, emissiveIntensity: 0.55 });
+      // glass double doors set into the opening + slim handles
+      for (const sx of [-1, 1]) {
+        rbox(`prop_entrance_door_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 0.82, 1.1, ez, 1.58, 2.18, 0.05, M.glassDC, 0, 0.02);
+        box(`prop_entrance_handle_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 0.16, 1.1, ez - 0.06, 0.04, 0.5, 0.04, M.metal);
+      }
+      // lit threshold mat just outside the doors
+      box('prop_entrance_sill', 20, 0.015, ez - 1.0, 3.5, 0.03, 1.9, sillMat);
+      // cantilevered portico/canopy projecting over the walk
+      const cz = ez - 2.1;
+      rbox('prop_canopy', 20, 3.02, cz, 6.4, 0.22, 4.6, M.prop, 0, 0.06);
+      box('prop_canopy_soffit', 20, 2.88, cz, 5.8, 0.03, 4.0, soffitMat);   // recessed downlight panel
+      box('prop_canopy_fascia', 20, 3.02, cz - 2.34, 6.4, 0.72, 0.08, M.prop);
+      textPanel('prop_entrance_sign', '110lymph.nl', 4.4, 0.62, 20, 3.02, cz - 2.4, 180, '#dff0ff', 'bold 58px sans-serif');
+      for (const sx of [-1, 1]) {                         // support columns at the canopy's outer corners
+        cyl(`prop_canopy_col_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 2.9, 1.5, cz - 2.1, 0.13, 3.0, M.metal, 16);
+        // bollard lights flanking the door
+        cyl(`prop_bollard_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 2.9, 0.45, ez - 0.9, 0.08, 0.9, M.metal, 10);
+        const bl = sphere(`prop_bollard_glow_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 2.9, 0.93, ez - 0.9, 0.1, M.ringWarm.clone(), 0.7, 8, 6);
+        bl.material = bl.material.clone(); bl.material.emissiveIntensity = 1.2; bl.material.name = 'bollard_glow';
+      }
     }
     // hedges + entrance planters
     for (let i = 0; i < 10; i++) {
