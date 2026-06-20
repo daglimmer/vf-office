@@ -237,8 +237,7 @@ export function initScreens({ officeGroup, bus, sim: simRef }) {
     if (m) makeScreen(m, 384, 240, paintCosts, 8);                   // command monitors (1.6)
   }
   for (let d = 1; d <= 8; d++)
-    for (let mi = 0; mi < 3; mi++)
-      makeScreen(get(`prop_mon_dv${d}_${mi}`), 320, 200, paintDesk(d), 2.5);   // desk monitors (square-ish or ultrawide)
+    makeScreen(get(`prop_mon_dv${d}_0`), 560, 168, paintDesk(d), 2.5);   // one ultrawide per DevOps desk (3.3 aspect)
   makeScreen(get('hot_docs_screen'), 420, 232, paintCeo, 10);        // CEO screen (was 224x224 SQUARE on a 1.8 screen)
   makeScreen(get('hot_peak_table'), 440, 210, paintLounge, 1.5);     // lounge table (2.1)
 

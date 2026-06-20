@@ -422,18 +422,26 @@ export function buildOffice(report) {
     sphere(`prop_palm_${j}`, 14.8 + Math.cos(j) * 0.3, 1.0 + j * 0.12, 1.0 + Math.sin(j) * 0.3, 0.22, M.leaf[1], 0.5, 7, 5);
 
   // ---------------------------------------------------------------- desks & co
-  function desk(idx, x, z, faceDeg, w, monitors, room) {
+  function desk(idx, x, z, faceDeg, w, monitors, room, ultrawide) {
     rbox(`prop_desk_${room}${idx}`, x, 0.72, z, w, 0.06, 0.7, M.woodDark, faceDeg, 0.025);
     const a = faceDeg * D2R, fx = Math.sin(a), fz = Math.cos(a);
     for (const sx of [-1, 1])
       box(`prop_dleg_${room}${idx}${sx}`, x + Math.cos(a) * sx * (w / 2 - 0.08), 0.35,
           z - Math.sin(a) * sx * (w / 2 - 0.08), 0.06, 0.7, 0.6, M.metal, faceDeg);
-    for (let mi = 0; mi < monitors; mi++) {
-      const off = (mi - (monitors - 1) / 2) * 0.5;
-      const mx = x + Math.cos(a) * off + fx * 0.22, mz = z - Math.sin(a) * off + fz * 0.22;
-      const rot = faceDeg + (monitors === 1 || mi === 1 ? 0 : mi === 0 ? -14 : 14);
-      rbox(`prop_mon_${room}${idx}_${mi}`, mx, 1.02, mz, 0.48, 0.3, 0.035, M.screen, rot + 180, 0.012);
-      box(`prop_monstand_${room}${idx}_${mi}`, mx, 0.78, mz, 0.06, 0.14, 0.05, M.prop, rot);
+    if (ultrawide) {
+      // one big "59-inch" ultrawide panel instead of a cluster of small monitors
+      const mx = x + fx * 0.24, mz = z + fz * 0.24;
+      box(`prop_monbezel_${room}${idx}`, mx, 1.12, mz + fz * 0.005, 1.5, 0.5, 0.03, M.prop, faceDeg + 180);
+      rbox(`prop_mon_${room}${idx}_0`, mx, 1.12, mz, 1.42, 0.42, 0.05, M.screen, faceDeg + 180, 0.02);
+      box(`prop_monstand_${room}${idx}_0`, mx, 0.84, mz, 0.5, 0.18, 0.05, M.metal, faceDeg);
+    } else {
+      for (let mi = 0; mi < monitors; mi++) {
+        const off = (mi - (monitors - 1) / 2) * 0.5;
+        const mx = x + Math.cos(a) * off + fx * 0.22, mz = z - Math.sin(a) * off + fz * 0.22;
+        const rot = faceDeg + (monitors === 1 || mi === 1 ? 0 : mi === 0 ? -14 : 14);
+        rbox(`prop_mon_${room}${idx}_${mi}`, mx, 1.02, mz, 0.48, 0.3, 0.035, M.screen, rot + 180, 0.012);
+        box(`prop_monstand_${room}${idx}_${mi}`, mx, 0.78, mz, 0.06, 0.14, 0.05, M.prop, rot);
+      }
     }
     // Phase 8c set dressing: keyboard + mouse, sometimes a mug or papers
     rbox(`prop_kbd_${room}${idx}`, x - fx * 0.02, 0.755, z - fz * 0.02, 0.42, 0.025, 0.15, M.prop, faceDeg, 0.01);
@@ -487,7 +495,7 @@ export function buildOffice(report) {
   for (let i = 1; i <= 8; i++) {
     const p = A(`work_desk_${String(i).padStart(2, '0')}`);
     const face = i <= 4 ? 180 : 0, dz = i <= 4 ? -0.55 : 0.55;   // 8f: face the desks
-    desk(i, p.x, p.z + dz, face, 1.8, 3, 'dv');
+    desk(i, p.x, p.z + dz, face, 1.8, 1, 'dv', true);     // Pass C: one big ultrawide per desk (was 3 monitors)
     chair(i, p.x, p.z, face, 'dv');
     cableBundle(`prop_cable_dv${i}`, p.x, p.z + dz, face);
     if (i % 2 === 1) ringPendant(`prop_ringp_dv${i}`, p.x + 1.4, 2.5, p.z + dz);
