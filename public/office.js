@@ -36,6 +36,16 @@ export function buildOffice(report) {
       quat: new THREE.Quaternion(...(a.quat ?? [0, 0, 0, 1])),
     });
   }
+  // Seating fix: the lounge couch cushion sits higher (~0.53) and deeper than the
+  // desk chairs, so agents on floor-level seat anchors sank into it and their shins
+  // clipped through the cushion front. Lift the 8 couch seats and slide them toward
+  // the coffee table (z=3) so they sit ON the cushion with legs off the front edge.
+  for (let i = 1; i <= 8; i++) {
+    const a = anchors.get(`lounge_seat_${String(i).padStart(2, '0')}`);
+    if (!a) continue;
+    a.pos.y += 0.05;
+    a.pos.z += a.pos.z < 3 ? 0.26 : -0.26;
+  }
   const A = n => anchors.get(n).pos;
 
   // ---------------------------------------------------------------- procedural textures (Phase 8b)
