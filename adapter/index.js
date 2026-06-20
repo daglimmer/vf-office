@@ -166,7 +166,10 @@ function wsFrame(str) {
 function wsSend(sock, obj) { try { sock.write(wsFrame(JSON.stringify(obj))); } catch {} }
 function broadcast(obj) {
   const frame = wsFrame(JSON.stringify(obj));
-  for (const c of clients) { try { c.write(frame); } catch {} }
+  for (const c of clients) {
+    try { c.write(frame); }
+    catch { clients.delete(c); try { c.destroy(); } catch {} }   // dead socket: prune, don't just swallow
+  }
   notify(obj);
 }
 
@@ -216,6 +219,26 @@ function openDb() {
     log('WARNING: kanban.db write connection failed — task creation disabled:', e.message);
   }
 }
+// ---- code-quality pass: health + error propagation. Silent catch blocks used to
+// leave the 3D Office showing stale/empty data with no signal — track failures
+// here, expose them on /health, and surface a `degraded` flag on the snapshot.
+const health = { errors: new Map(), lastSnapshotAt: 0, lastCardCount: 0 };
+function reportErr(key, msg) {
+  health.errors.set(key, { msg: String(msg ?? 'error'), at: Date.now(), count: (health.errors.get(key)?.count ?? 0) + 1 });
+}
+function clearErr(key) { health.errors.delete(key); }
+function healthReport() {
+  return {
+    ok: health.errors.size === 0,
+    errors: [...health.errors.entries()].map(([k, e]) => `${k}: ${e.msg}`),
+    gatewayOk: !health.errors.has('gateway'),
+    gatewayAgeMs: _gw.at ? Date.now() - _gw.at : null,
+    lastSnapshotMs: health.lastSnapshotAt ? Date.now() - health.lastSnapshotAt : null,
+    agents: agents.size,
+    cards: health.lastCardCount,
+  };
+}
+
 function snapshot() {
   const cards = [];
   try {
@@ -229,7 +252,8 @@ function snapshot() {
           : null,
       });
     }
-  } catch (e) { log('snapshot query failed:', e.message); }
+    clearErr('snapshot.tasks');
+  } catch (e) { reportErr('snapshot.tasks', e.message); log('snapshot query failed:', e.message); }
   // Task dependency links with the linked task TITLES resolved — task_links has
   // only parent_id/child_id, so JOIN tasks so the Kanban UI can show what a
   // connection means. (Guarded: empty if the table is absent.)
@@ -238,7 +262,8 @@ function snapshot() {
     for (const r of db.prepare('SELECT l.parent_id AS parentId, l.child_id AS childId, p.title AS parentTitle, c.title AS childTitle FROM task_links l LEFT JOIN tasks p ON p.id = l.parent_id LEFT JOIN tasks c ON c.id = l.child_id').all()) {
       links.push({ parentId: String(r.parentId), childId: String(r.childId), parentTitle: r.parentTitle ?? null, childTitle: r.childTitle ?? null });
     }
-  } catch (e) { log('snapshot links query failed:', e.message); }
+    clearErr('snapshot.links');
+  } catch (e) { reportErr('snapshot.links', e.message); log('snapshot links query failed:', e.message); }
   // Count blocked cards for the frontend
   let blockedCount = 0;
   try {
@@ -253,10 +278,14 @@ function snapshot() {
     if (lp != null && lp >= activeThreshold) activeCount++;
     else if (runtime.get(id) === 'ok' && lp == null) activeCount++; // never pushed but runtime says ok
   }
+  const pmap = profileModelMap();                  // hoisted: was rebuilt per-agent inside the loop
+  health.lastSnapshotAt = Date.now(); health.lastCardCount = cards.length;
   return {
     event: 'snapshot', ts: now(), cards, links, blockedCount, activeCount,
+    degraded: health.errors.size > 0,              // error propagation: let the office show "data stale"
+    staleSources: [...health.errors.keys()],
     agents: [...agents.values()].map(a => {
-      const pcfg = profileModelMap().get(a.id);
+      const pcfg = pmap.get(a.id);
       return {
         id: a.id, name: a.name ?? a.id, color: a.color, parent: a.parent ?? null,
         type: a.type ?? 'agent',                     // 'infrastructure' for VMs (VF #1)
@@ -519,8 +548,15 @@ async function gatewayMap() {
       const m = new Map();
       for (const h of (Array.isArray(arr) ? arr : [])) m.set(h.id, h);
       _gw = { at: Date.now(), map: m };
+      clearErr('gateway');                           // recovered → /health goes green
+    } else {
+      reportErr('gateway', `heartbeats HTTP ${r.status}`);   // non-OK was silent before
     }
-  } catch (e) { log('gateway heartbeats fetch failed:', e.message); }
+  } catch (e) {
+    // stale-while-revalidate: keep serving the last good map, but SURFACE that it's stale
+    reportErr('gateway', e.message);
+    log('gateway heartbeats fetch failed:', e.message);
+  }
   return _gw.map;
 }
 function statusFromLastSeen(iso) {
@@ -739,6 +775,10 @@ const server = http.createServer(async (req, res) => {
         log('kanban task created:', id, '→', task.assignee);
         return json(res, 201, { ok: true, task });
       } catch (e) { log('kanban create failed:', e.message); return json(res, 502, { ok: false, error: e.message }); }
+    }
+    if (req.method === 'GET' && p === '/health') {                                       // code-quality pass: surface silent failures
+      const h = healthReport();
+      return json(res, h.ok ? 200 : 503, { status: h.ok ? 'ok' : 'degraded', ...h });
     }
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
