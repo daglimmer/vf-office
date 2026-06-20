@@ -592,7 +592,9 @@ async function agentRoster() {
     return {
       id: a.id, name: a.name ?? a.id, color: a.color ?? null,
       role: a.role ?? null, group: agentGroupLabel(a),
-      status: h.status || (h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(a.id)),
+      // Status from last_seen only — the gateway's `status` is junk ("online" for all,
+      // even agents unseen for days). last_seen is the real ~3s heartbeat.
+      status: h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(a.id),
       lastSeen,
       anchor: a.anchor ?? null,
       model, provider,
@@ -657,7 +659,7 @@ async function agentDetail(id) {
     ok: true,
     id, name: a.name ?? id, color: a.color ?? null,
     role: a.role ?? null, group: agentGroupLabel(a), parent: a.parent ?? null,
-    status: h.status || (h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(id)), runtime: runtime.get(id) ?? 'ok',
+    status: h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(id), runtime: runtime.get(id) ?? 'ok',
     model, provider, fallbackActive: u.fallbackActive ?? false,
     // Gateway raw data preserved for debugging
     reportedModel: h.model ?? null,
