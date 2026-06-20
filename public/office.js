@@ -568,12 +568,13 @@ export function buildOffice(report) {
       gm.position.set(px - Math.sin(rad) * 0.36, 0.33, pz - Math.cos(rad) * 0.36);
       gm.rotation.y = -ang * D2R; add(gm, `prop_cmdglow_${i}`);
     }
-    // operator monitors (keep prop_cmdmon_ naming for the live cost dashboards)
-    [104, 142, 180, 218, 256].forEach((ang, k) => {
+    // three BIG WIDE command screens, angled to follow the curve (panoramic wall)
+    [124, 180, 236].forEach((ang, k) => {
       const rad = ang * D2R;
-      const px = cx + Math.sin(rad) * (R - 0.18), pz = cz + Math.cos(rad) * (R - 0.18);
-      box(`prop_cmdmon_${k}`, px - Math.sin(rad) * 0.04, 1.22, pz - Math.cos(rad) * 0.04, 1.0, 0.58, 0.04, M.screenDash, -ang + 180);
-      box(`prop_cmdmonstand_${k}`, px, 0.86, pz, 0.09, 0.24, 0.06, M.prop, -ang);
+      const px = cx + Math.sin(rad) * (R + 0.12), pz = cz + Math.cos(rad) * (R + 0.12);
+      box(`prop_cmdbezel_${k}`, px - Math.sin(rad) * 0.07, 1.52, pz - Math.cos(rad) * 0.07, 2.0, 1.08, 0.04, M.prop, -ang + 180);
+      box(`prop_cmdmon_${k}`, px - Math.sin(rad) * 0.05, 1.52, pz - Math.cos(rad) * 0.05, 1.86, 0.94, 0.05, M.screenDash, -ang + 180);
+      box(`prop_cmdmonfoot_${k}`, px, 0.86, pz, 0.55, 0.42, 0.06, M.metal, -ang);
     });
     // clickable cost surface (hot_ route target, kept for interactive.js)
     { const rad = 180 * D2R; box('hot_costs_front_0', cx + Math.sin(rad) * (R + 0.36), 0.4, cz + Math.cos(rad) * (R + 0.36), 2.4, 0.66, 0.04, zoneMats[2], 0); }

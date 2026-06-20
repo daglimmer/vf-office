@@ -232,9 +232,11 @@ export function initScreens({ officeGroup, bus, sim: simRef }) {
   const get = n => officeGroup.getObjectByName(n);
   // Phase C: higher-res + aspect-correct canvases so the displays read sharp.
   makeScreen(get('hot_kanban_media'), 640, 340, paintKanban, 4);     // meeting wall (3.2x1.7)
-  for (let i = 0; i < 7; i++) {
+  // 3 big wide command-wall screens, each a different live dashboard
+  const cmdPainters = [paintKanban, paintCosts, paintCeo];
+  for (let i = 0; i < 3; i++) {
     const m = get(`prop_cmdmon_${i}`);
-    if (m) makeScreen(m, 384, 240, paintCosts, 8);                   // command monitors (1.6)
+    if (m) makeScreen(m, 600, 304, cmdPainters[i], 6);              // big wide (1.86x0.94 ~= 1.98)
   }
   for (let d = 1; d <= 8; d++)
     makeScreen(get(`prop_mon_dv${d}_0`), 560, 168, paintDesk(d), 2.5);   // one ultrawide per DevOps desk (3.3 aspect)
