@@ -579,8 +579,8 @@ export function buildOffice(report) {
 
     // ---- back wall: glowing cyan cloud-logo + dense amber circuit shield
     [[-0.62, 0.30], [-0.2, 0.42], [0.25, 0.36], [0.62, 0.28], [0.0, 0.22]].forEach(([dx, r], j) =>
-      sphere(`prop_ncloud_${j}`, 29.6 + dx, 2.62 + (j % 2 ? 0.06 : 0), 5.95, r, M.neon, 0.55, 12, 8));
-    textPanel('prop_logo_ctl', '110lymph.nl', 1.7, 0.4, 29.6, 2.58, 5.88, 180, '#e6f8ff', 'bold 52px sans-serif');
+      sphere(`prop_ncloud_${j}`, 29.6 + dx, 2.26 + (j % 2 ? 0.06 : 0), 5.95, r, M.neon, 0.55, 12, 8));
+    textPanel('prop_logo_ctl', '110lymph.nl', 1.7, 0.4, 29.6, 2.22, 5.88, 180, '#e6f8ff', 'bold 52px sans-serif');
     {                                                     // dense amber circuit shield (canvas)
       const cv = document.createElement('canvas'); cv.width = 240; cv.height = 290;
       const c = cv.getContext('2d'); c.lineJoin = 'round';
@@ -606,7 +606,7 @@ export function buildOffice(report) {
       path(); c.strokeStyle = '#ffb347'; c.lineWidth = 8; c.stroke();     // shield outline
       const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
       const m = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.7), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
-      m.position.set(34.2, 2.62, 5.9); m.rotation.y = 180 * D2R; add(m, 'prop_shield_ctl');
+      m.position.set(34.2, 2.4, 5.9); m.rotation.y = 180 * D2R; add(m, 'prop_shield_ctl');
     }
     // server rack to the side, with colored LED rows
     box('prop_ctlrack', 36.95, 1.1, 7.2, 0.7, 2.2, 1.0, M.rack);
@@ -681,12 +681,31 @@ export function buildOffice(report) {
         const health = (i * 7 + u) % 11 === 0 ? srvRed : (i + u) % 5 === 0 ? srvAmber : srvOk;
         const [l2x, l2z] = lat(-0.175);
         box(`prop_rhp_${i}_${u}`, l2x, uy + 0.045, l2z, 0.018, 0.018, 0.012, health, face);
+        // activity LED — green-dominant (blinkMats[2]=green), a few blue/amber
+        const actMat = blinkMats[[2, 2, 2, 0, 2, 2, 4, 2][(i + u) % 8]];
         const [l3x, l3z] = lat(-0.1925);
-        box(`prop_ract_${i}_${u}`, l3x, uy - 0.04, l3z, 0.032, 0.014, 0.012, blinkMats[(i * 3 + u) % 6], face);
+        box(`prop_ract_${i}_${u}`, l3x, uy - 0.04, l3z, 0.032, 0.014, 0.012, actMat, face);
+        // two of the units are NETWORK SWITCHES: a dense row of green port link LEDs
+        if (u === 3 || u === 6) {
+          for (let p = 0; p < 12; p++) {
+            const [ppx, ppz] = lat(-0.22 + p * 0.039);
+            const pm = blinkMats[(i + u + p) % 11 === 0 ? 0 : (i + u + p) % 13 === 0 ? 4 : 2];   // mostly green
+            box(`prop_rport_${i}_${u}_${p}`, ppx, uy + 0.018, ppz, 0.024, 0.02, 0.012, pm, face);
+          }
+        }
       }
-      // zone indicator: thin strip across the rack top (keeps the blue->red ring readable)
+      // zone indicator strip — green-dominant (occasional blue/amber), not a rainbow ring
       const [ztx, ztz] = lat(0);
-      box(`rack_led_${i}`, ztx, 2.04, ztz, 0.5, 0.035, 0.014, zone, face);
+      box(`rack_led_${i}`, ztx, 2.04, ztz, 0.5, 0.035, 0.014, zoneMats[[2, 2, 0, 2, 2, 4, 2][i % 7]], face);
+      // cable management lying along the rack top (muted network colours, runs front-to-back)
+      const [ctx, ctz] = lat(0);
+      box(`prop_rcabletray_${i}`, ctx, 2.11, ctz, 0.5, 0.05, 0.55, M.prop, face);
+      const dcCableCol = ['#365a7e', '#3a6a4c', '#54565e', '#3a5e7a', '#436a4a'];   // blues/greens/grey
+      for (let cb = 0; cb < 5; cb++) {
+        const [cbx, cbz] = lat(-0.18 + cb * 0.09);
+        const cm = std(`dc_cable_${i}_${cb}`, { color: parseInt(dcCableCol[cb].slice(1), 16), roughness: 0.55 });
+        box(`prop_rcable_${i}_${cb}`, cbx, 2.15, ctz, 0.024, 0.024, 0.52, cm, face);
+      }
     }
     const hotDC = cyl('hot_infra_ring', cx, 1.1, cz, 3.9, 2.3, M.glassDC.clone(), 24);
     hotDC.material.opacity = 0.04; hotDC.material.name = 'dc_hot';
