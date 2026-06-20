@@ -120,7 +120,10 @@ export function buildOffice(report) {
     sofa:      std('sofa_gray',     { map: T.fabric, bumpMap: T.fabric, bumpScale: BUMP.fabric, color: 0xffffff, roughness: 0.95 }),
     leather:   phys('leather_brown', { map: T.leather, bumpMap: T.leather, bumpScale: BUMP.leather, color: 0xffffff, roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.5 }),
     white:     std('white_panel',   { color: 0xdfe1e5, roughness: 0.6, emissive: 0xfff8e8, emissiveIntensity: 0.15 }),   // glare pass: was 0.45
-    whiteCeil: std('white_ceiling', { color: 0xc9ccd2, roughness: 0.7, emissive: 0xfff6e6, emissiveIntensity: 0.08 }),
+    // Pass B: was bright white (#c9ccd2) - from the overhead/peak view the staff &
+    // CEO ceiling tops read as glaring white slabs. Darkened to charcoal so roofs
+    // are consistent with the other ceilings and the moody renders.
+    whiteCeil: std('white_ceiling', { color: 0x262a30, roughness: 0.7 }),
     screen:    std('screen_code',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x73c0ff, emissiveIntensity: 0.9 }),
     screenDash:std('screen_dash',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x5ce6b8, emissiveIntensity: 0.85 }),
     cloudFrost:std('cloud_frost',   { color: 0xdde2e8, roughness: 0.4, transparent: true, opacity: 0.85 }),
