@@ -1120,6 +1120,22 @@ catch (e) { console.error('[moments] init failed:', e); }
 initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents });
 initTimeline({ sim, demo: () => demoMode });
 
+// ----------------------------------------------------------------- security guard
+// A non-roster avatar that patrols the forecourt (reuses the walk system + the
+// face-down/foot-plant fixes). No agentId, so pollRoster never touches it.
+try {
+  const guard = new Agent({ name: 'Security', color: '#ff9e2c', role: 'sentinel', scale: 1.05, startAnchor: 'nav_door_lounge' });
+  guard.isGuard = true; guard.lastNode = null;
+  guard.group.position.set(15, 0, -10);
+  const route = [[15, -9.5], [25, -9.5], [25, -12.6], [15, -12.6]];   // forecourt loop, clear of pools/monolith
+  let gi = 0;
+  const patrol = () => {
+    const p = route[gi++ % route.length];
+    guard.gotoPoint(new THREE.Vector3(p[0], 0, p[1]), () => setTimeout(patrol, 900));
+  };
+  patrol();
+} catch (e) { console.warn('[guard] init failed:', e); }
+
 // ----------------------------------------------------------------- loop
 const clock = new THREE.Clock();
 // ---- Phase 9: idle cinematic - after 3 min without input the camera drifts
