@@ -661,7 +661,7 @@ class Agent {
     if (sim.followed === this) sim.followAgent(null);
   }
   update(dt) {
-    this.t += dt;
+    this.t += dt * (this.speedMul ?? 1);                  // gait clock scales with walk speed
     if (this.fx) {
       this.fx.t += dt; const k = Math.min(this.fx.t / TIMINGS.fx, 1);
       if (this.fx.kind === 'spawn') {            // 8d: pure fade, zero scale tricks
@@ -691,7 +691,7 @@ class Agent {
         this.path.shift();
         if (!this.path.length) { this.pose = 'idle'; if (this.onArrive) { const f = this.onArrive; this.onArrive = null; f(); } }
       } else {
-        this.group.position.addScaledVector(d.normalize(), Math.min(WALK_SPEED * dt, dist));
+        this.group.position.addScaledVector(d.normalize(), Math.min(WALK_SPEED * (this.speedMul ?? 1) * dt, dist));
         // Turn toward travel by easing the YAW in clean Euler space (x and z stay
         // 0). Slerping the quaternion let Three decompose a ~180deg heading to
         // Euler (pi, 0, pi); animateHumanoid then eased rotation.x -> 0 with z still
@@ -1125,7 +1125,7 @@ initTimeline({ sim, demo: () => demoMode });
 // face-down/foot-plant fixes). No agentId, so pollRoster never touches it.
 try {
   const guard = new Agent({ name: 'Security', color: '#ff9e2c', role: 'sentinel', scale: 1.05, startAnchor: 'nav_door_lounge' });
-  guard.isGuard = true; guard.lastNode = null;
+  guard.isGuard = true; guard.lastNode = null; guard.speedMul = 0.5;   // relaxed patrol amble, not a rush
   guard.group.position.set(15, 0, -10);
   const route = [[15, -9.5], [25, -9.5], [25, -12.6], [15, -12.6]];   // forecourt loop, clear of pools/monolith
   let gi = 0;
