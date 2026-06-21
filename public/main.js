@@ -534,7 +534,7 @@ class Agent {
     this.group.position.copy(anchors.get(startAnchor).pos);
     this.state = 'idle'; this.pose = 'idle'; this.t = Math.random() * 9; this.timer = null;
     this.path = []; this.onArrive = null; this.seated = null;
-    this.heldSlot = null; this.heldPool = null;
+    this.heldSlot = null; this.heldPool = null; this.placedFor = null;  // last roster status we seated for (anti-churn)
     this.blocked = false; this.overlay = 'ok';      // ok|paused|down|killed
     this.fx = null; this.glowT = 0;
     scene.add(this.group); agents.push(this);
@@ -998,11 +998,19 @@ async function pollRoster() {
         if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, active ? 'type' : 'sit'));
       } else {
         const want = rosterPool(st, a.role);
-        if (a.heldPool === want) {                        // already in the right place → just adjust the desk glow
+        if (a.heldPool === want) {                        // already in the ideal pool → keep the desk glow honest
           const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = active ? 1.4 : 0.05;
-        } else if (!a.waitingPool && !a.path.length) {    // status changed → release current seat and WALK to the new pool
+          a.placedFor = st;
+        } else if (a.placedFor !== st && !a.waitingPool && !a.path.length) {
+          // Status genuinely CHANGED → release the seat and walk to the new pool. Gate on
+          // placedFor, NOT just "not in the ideal pool": when the ideal pool is full the agent
+          // settles for a fallback seat (heldPool !== want forever), and re-checking that every
+          // 30s poll would make it stand up and re-walk endlessly — the "can't sit still for
+          // five minutes" bug. Only move when the real status actually changes.
           a.releaseSlot();
-          seatAgent(a, rosterOrder(want), st === 'consulting' ? 'talk' : active ? 'type' : 'sit', active);
+          if (seatAgent(a, rosterOrder(want), st === 'consulting' ? 'talk' : active ? 'type' : 'sit', active)) a.placedFor = st;
+        } else if (a.seated && a.heldSlot) {              // settled (maybe in a fallback seat) → keep the glow honest
+          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = active ? 1.4 : 0.05;
         }
       }
     } else {

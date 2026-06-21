@@ -33,8 +33,7 @@ const DB_PATH = ENV('HERMES_DB', '/root/.hermes/kanban.db');
 const HOST = ENV('HOST', '127.0.0.1');
 const PORT = parseInt(ENV('PORT', '3000'), 10);
 const GATEWAY_URL = ENV('GATEWAY_URL', 'http://10.11.1.120:7100');   // live agent telemetry (status/model/provider)
-const WORKSPACE_URL = ENV('WORKSPACE_URL', 'http://10.11.1.120:8766'); // Hermes "VF Olympus API" — single source for per-agent COST (/api/costs)
-const FABLE_API_URL = ENV('FABLE_API_URL', 'http://cost-cache-proxy.mission-control.svc.cluster.local'); // agent-truth: status/state from state.db
+const FABLE_API_URL = ENV('FABLE_API_URL', 'http://cost-cache-proxy.mission-control.svc.cluster.local'); // fable-api via cache-proxy — single source for agent-truth (/api/agents) AND cost (/api/cost/detail)
 const CONFIG_DIR = ENV('CONFIG_DIR', path.join(ROOT, 'config'));
 const PUBLIC_DIR = ENV('PUBLIC_DIR', path.join(ROOT, 'public'));
 const STATE_FILE = ENV('STATE_FILE', path.join(ROOT, 'state.json'));
@@ -582,35 +581,38 @@ async function gatewayMap() {
   return _gw.map;
 }
 
-// Per-agent COST — single source of truth is Hermes (/api/costs on the workspace-server).
-// Replaces direct per-agent state.db reads so the drill-down shows the SAME numbers as the
-// dashboard Cost page (one source per kind of data). Cached 60s.
+// Per-agent COST — single source of truth is fable-api (/api/cost/detail), reached via the
+// in-cluster cost-cache-proxy (same FABLE_API_URL the agent-truth overlay uses). fable-api
+// reads the profile state.db files LOCALLY on the Hermes VM, so this is the SAME number the
+// dashboard Cost page shows (one source per kind of data). The adapter runs in K3s and cannot
+// read state.db directly — that's why the old direct-read / workspace-server paths went blank.
+// Keyed by profile id (== fable-api agent.id). Cached 60s.
 let _hcost = { at: 0, map: new Map() };
 async function hermesCostMap() {
   if (Date.now() - _hcost.at < 60000) return _hcost.map;
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 4000);
-    const r = await fetch(`${WORKSPACE_URL}/api/costs`, { signal: ctrl.signal });
+    const r = await fetch(`${FABLE_API_URL}/api/cost/detail?days=1`, { signal: ctrl.signal });
     clearTimeout(timer);
     if (r.ok) {
       const j = await r.json();
       const m = new Map();
       for (const a of (j.agents || [])) {
-        m.set(String(a.name).toLowerCase(), {
-          sessions24h: a.sessions_24h ?? 0,
-          tokensToday: a.tokens_24h ?? 0,
-          costUsd: a.cost_24h ?? 0,
+        m.set(String(a.id).toLowerCase(), {
+          sessions24h: a.sessions ?? 0,
+          tokensToday: a.tokens ?? 0,
+          costUsd: a.cost ?? 0,
         });
       }
       _hcost = { at: Date.now(), map: m };
       clearErr('hermes-cost');
     } else {
-      reportErr('hermes-cost', `costs HTTP ${r.status}`);
+      reportErr('hermes-cost', `cost HTTP ${r.status}`);
     }
   } catch (e) {
     reportErr('hermes-cost', e.message);
-    log('hermes /api/costs fetch failed:', e.message);
+    log('fable-api /api/cost/detail fetch failed:', e.message);
   }
   return _hcost.map;
 }
@@ -665,33 +667,9 @@ async function agentRoster() {
 }
 
 // ------------------------------------------------------------------ agent detail (Phase 7b - /api/agents/:id)
-// Cache for session stats per agent (60s TTL) to avoid hitting state.db every request
-let _sessionStats = { at: 0, map: new Map() };  // agentId -> { sessions24h, tokensToday, costUsd }
-function readSessionStats(agentId) {
-  if (Date.now() - _sessionStats.at < 60000) return _sessionStats.map.get(agentId) ?? null;
-  // Refresh all agents in one pass
-  const m = new Map();
-  for (const id of agents.keys()) {
-    const stateDbPath = path.join(HERMES_PROFILES_DIR, 'profiles', id, 'state.db');
-    try {
-      if (!fs.existsSync(stateDbPath)) continue;
-      const sdb = new DatabaseSync(stateDbPath, { readOnly: true });
-      try {
-        const cut = (Date.now() - 24 * 3600 * 1000) / 1000;  // state.db uses Unix seconds
-        const sess = sdb.prepare(
-          'SELECT COUNT(*) AS cnt, COALESCE(SUM(input_tokens),0) + COALESCE(SUM(output_tokens),0) AS totalTokens, COALESCE(SUM(estimated_cost_usd),0) AS totalCost FROM sessions WHERE started_at >= ?'
-        ).get(cut);
-        m.set(id, {
-          sessions24h: sess ? Number(sess.cnt) : 0,
-          tokensToday: sess ? Number(sess.totalTokens) : 0,
-          costUsd: sess ? Number(sess.totalCost) : 0,
-        });
-      } finally { sdb.close(); }
-    } catch (e) { /* ignore — no state.db or can't read */ }
-  }
-  _sessionStats = { at: Date.now(), map: m };
-  return m.get(agentId) ?? null;
-}
+// (Removed readSessionStats — the old direct per-agent state.db reader. The adapter runs in
+//  K3s and can't reach the Hermes VM's state.db, so it always returned blank. Cost/tokens now
+//  come from fable-api via hermesCostMap() — one source per kind of data.)
 
 async function agentDetail(id) {
   const a = agents.get(id);
@@ -797,9 +775,10 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && (p === '/agents/usage' || p === '/api/agents/usage')) {
       const pm = profileModelMap();
+      const cost = await hermesCostMap();   // single source = fable-api (drives the HUD total + per-agent cards)
       const out = [...agents.keys()].map(id => {
         const u = usage.get(id) ?? {};
-        const ss = readSessionStats(id);
+        const ss = cost.get(id.toLowerCase()) ?? null;
         const pcfg = pm.get(id);
         const hb = lastPush.has(id) ? Math.floor((Date.now() - lastPush.get(id)) / 1000) : null;
         return {
