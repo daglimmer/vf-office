@@ -507,6 +507,7 @@ function makeLabel(name, sub) {
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 72;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false, transparent: true }));
   sprite.scale.set(1.25, 0.36, 1); sprite.position.y = 1.5;
+  sprite.userData.name = name;   // mutable so a body made as a card-worker can adopt its roster name
   sprite.userData.draw = (color, text) => {
     const x = cv.getContext('2d');
     x.clearRect(0, 0, 256, 72);
@@ -514,7 +515,7 @@ function makeLabel(name, sub) {
     const w = text ? 240 : 170;
     x.beginPath(); x.roundRect((256 - w) / 2, text ? 2 : 14, w, text ? 68 : 44, 10); x.fill();
     x.fillStyle = color ?? '#dfe3ea'; x.font = 'bold 27px sans-serif'; x.textAlign = 'center';
-    x.fillText(name, 128, text ? 30 : 44);
+    x.fillText(sprite.userData.name, 128, text ? 30 : 44);
     if (text) { x.font = '21px sans-serif'; x.fillStyle = color ?? '#8a8f98'; x.fillText(text, 128, 60); }
     sprite.material.map.needsUpdate = true;
   };
@@ -895,9 +896,13 @@ function syncWorkers() {
     let w = workers.get(name);
     if (!w) {
       if (workers.size >= MAX_WORKERS) continue;
-      // reuse the roster body for this agent if one exists
-      w = byId.get(name) ?? agents.find(a => a.name === name && !a.cardId) ?? null;
-      if (!w) w = new Agent({ name, sub: '', color: SPECTRUM[colorIdx++ % 6], role: 'devops' });
+      // Reuse the existing body for this agent (a roster body OR a worker already made),
+      // matched by agentId or display name. CRITICAL: a freshly-made worker MUST take an
+      // agentId so it registers in byId — otherwise pollRoster can't see it and spawns a
+      // SECOND body for the same agent (the "double agent": one placed by the roster, one
+      // stranded at the DC spawn = the clustering). Keyed by assignee (== the agent id).
+      w = byId.get(name) ?? agents.find(a => !a.cardId && (a.agentId === name || a.name === name)) ?? null;
+      if (!w) w = new Agent({ name, agentId: name, sub: '', color: SPECTRUM[colorIdx++ % 6], role: 'devops' });
       workers.set(name, w);
     }
     // top card: highest priority; prefer the current one within the same tier
@@ -1004,6 +1009,12 @@ async function pollRoster() {
                       agentId: r.id, role: rosterRole(r.group) });
       a.fx = { kind: 'spawn', t: 0 };
       a.materials.forEach(m => { m.transparent = true; m.opacity = 0; });
+    }
+    // Adopt the proper roster name if this body was first created as a card-worker (id-named).
+    // Guarded on no active override so we never wipe a BLOCKED/PAUSED label.
+    const nice = r.name ?? r.id;
+    if (a.label.userData.name !== nice && a.overlay === 'ok' && !a.blocked) {
+      a.name = nice; a.label.userData.name = nice; a.label.userData.draw(null);
     }
     a.rosterStatus = r.status;
     if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok' && !a.blocked) {
