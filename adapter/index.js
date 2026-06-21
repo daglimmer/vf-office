@@ -33,6 +33,7 @@ const DB_PATH = ENV('HERMES_DB', '/root/.hermes/kanban.db');
 const HOST = ENV('HOST', '127.0.0.1');
 const PORT = parseInt(ENV('PORT', '3000'), 10);
 const GATEWAY_URL = ENV('GATEWAY_URL', 'http://10.11.1.120:7100');   // live agent telemetry (status/model/provider)
+const WORKSPACE_URL = ENV('WORKSPACE_URL', 'http://10.11.1.120:8766'); // Hermes "VF Olympus API" — single source for per-agent COST (/api/costs)
 const CONFIG_DIR = ENV('CONFIG_DIR', path.join(ROOT, 'config'));
 const PUBLIC_DIR = ENV('PUBLIC_DIR', path.join(ROOT, 'public'));
 const STATE_FILE = ENV('STATE_FILE', path.join(ROOT, 'state.json'));
@@ -559,6 +560,39 @@ async function gatewayMap() {
   }
   return _gw.map;
 }
+
+// Per-agent COST — single source of truth is Hermes (/api/costs on the workspace-server).
+// Replaces direct per-agent state.db reads so the drill-down shows the SAME numbers as the
+// dashboard Cost page (one source per kind of data). Cached 60s.
+let _hcost = { at: 0, map: new Map() };
+async function hermesCostMap() {
+  if (Date.now() - _hcost.at < 60000) return _hcost.map;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(`${WORKSPACE_URL}/api/costs`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (r.ok) {
+      const j = await r.json();
+      const m = new Map();
+      for (const a of (j.agents || [])) {
+        m.set(String(a.name).toLowerCase(), {
+          sessions24h: a.sessions_24h ?? 0,
+          tokensToday: a.tokens_24h ?? 0,
+          costUsd: a.cost_24h ?? 0,
+        });
+      }
+      _hcost = { at: Date.now(), map: m };
+      clearErr('hermes-cost');
+    } else {
+      reportErr('hermes-cost', `costs HTTP ${r.status}`);
+    }
+  } catch (e) {
+    reportErr('hermes-cost', e.message);
+    log('hermes /api/costs fetch failed:', e.message);
+  }
+  return _hcost.map;
+}
 function statusFromLastSeen(iso) {
   if (!iso) return 'offline';
   const age = Date.now() - new Date(iso).getTime();
@@ -640,7 +674,7 @@ async function agentDetail(id) {
   const u = usage.get(id) ?? {};
   const h = (await gatewayMap()).get(id) || {};
   const pcfg = profileModelMap().get(id);
-  const ss = readSessionStats(id);
+  const ss = (await hermesCostMap()).get(id.toLowerCase()) ?? null; // cost: single source = Hermes /api/costs
   const cut = Date.now() - 24 * 3600 * 1000;
   let tasks = [];
   try {
@@ -651,7 +685,7 @@ async function agentDetail(id) {
   // Model: Hermes profile config > gateway report > usage data
   const model = pcfg?.model ?? h.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null));
   const provider = pcfg?.provider ?? h.provider ?? u.modelProvider ?? null;
-  // Session stats: state.db > usage push data > pushHist fallback
+  // Sessions/tokens/cost from Hermes /api/costs (single source); pushHist only as a last resort.
   const sessions24h = ss?.sessions24h ?? (pushHist.get(id) ?? []).filter(t => t >= cut).length;
   const tokensToday = ss?.tokensToday ?? u.tokens ?? null;
   const costUsd = ss?.costUsd ?? u.costUsd ?? null;
