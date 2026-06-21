@@ -303,8 +303,14 @@ for (const [r, info] of Object.entries(wp.rooms)) {
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
   const x = cv.getContext('2d');
   x.fillStyle = 'rgba(13,15,19,.55)'; x.fillRect(0, 0, 256, 64);
-  x.fillStyle = '#e8eaee'; x.font = 'bold 34px sans-serif'; x.textAlign = 'center';
-  x.fillText(((topology && topology.rooms && topology.rooms[r] && topology.rooms[r].label) ?? info.label ?? r).toUpperCase(), 128, 43);
+  const text = ((topology && topology.rooms && topology.rooms[r] && topology.rooms[r].label) ?? info.label ?? r).toUpperCase();
+  // Auto-fit: shrink the letters until the longest names (COMMAND CENTER, DEVOPS OFFICE,
+  // MEETING ROOM) fit INSIDE the label box. Shrinking text beats growing the box — a bigger
+  // plate would overlap the room. Start at 34px, step down to a 15px floor, 20px padding.
+  let fontPx = 34;
+  do { x.font = `bold ${fontPx}px sans-serif`; } while (x.measureText(text).width > 256 - 20 && --fontPx > 15);
+  x.fillStyle = '#e8eaee'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(text, 128, 34);
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, opacity: 0, depthTest: false }));
   sp.scale.set(4.2, 1.05, 1);
   sp.position.set(info.center[0], 4.6, info.center[2]);
