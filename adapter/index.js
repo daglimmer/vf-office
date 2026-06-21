@@ -849,6 +849,28 @@ const server = http.createServer(async (req, res) => {
         return json(res, 201, { ok: true, task });
       } catch (e) { log('kanban create failed:', e.message); return json(res, 502, { ok: false, error: e.message }); }
     }
+    // Card actions (Ray's board controls): comment + unblock / reassign / route. Direct DB
+    // write — SAME mechanism as create — then the 2s poller broadcasts the change and the
+    // Hermes dispatcher re-picks any task moved back to 'ready'. This is the bridge that lets
+    // a human nudge a stuck card (key added / drive swapped) back into the agent's queue.
+    const kact = p.match(/^\/api\/kanban\/([\w.\-]+)\/action$/);
+    if (req.method === 'POST' && kact) {
+      const id = kact[1];
+      const b = await readBody(req);   // { status?, assignee?, comment?, author? }
+      if (!writeDb) return json(res, 503, { ok: false, error: 'kanban.db not writable' });
+      const existing = writeDb.prepare('SELECT id FROM tasks WHERE id = ?').get(id);
+      if (!existing) return json(res, 404, { ok: false, error: 'unknown task' });
+      try {
+        const sets = [], vals = [];
+        if (b.status)   { sets.push('status = ?');   vals.push(String(b.status)); }
+        if (b.assignee) { sets.push('assignee = ?'); vals.push(String(b.assignee)); }
+        if (sets.length) writeDb.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...vals, id);
+        if (b.comment) writeDb.prepare('INSERT INTO task_comments (task_id, author, body, created_at) VALUES (?, ?, ?, ?)')
+          .run(id, String(b.author ?? 'Ray'), String(b.comment), Date.now());
+        log(`kanban action ${id}: status=${b.status ?? '-'} assignee=${b.assignee ?? '-'} comment=${b.comment ? 'yes' : 'no'}`);
+        return json(res, 200, { ok: true, id, status: b.status ?? null, assignee: b.assignee ?? null });
+      } catch (e) { log('kanban action failed:', e.message); return json(res, 502, { ok: false, error: e.message }); }
+    }
     if (req.method === 'GET' && p === '/health') {                                       // code-quality pass: surface silent failures
       const h = healthReport();
       return json(res, h.ok ? 200 : 503, { status: h.ok ? 'ok' : 'degraded', ...h });
