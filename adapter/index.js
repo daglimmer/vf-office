@@ -866,7 +866,7 @@ const server = http.createServer(async (req, res) => {
         if (b.assignee) { sets.push('assignee = ?'); vals.push(String(b.assignee)); }
         if (sets.length) writeDb.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`).run(...vals, id);
         if (b.comment) writeDb.prepare('INSERT INTO task_comments (task_id, author, body, created_at) VALUES (?, ?, ?, ?)')
-          .run(id, String(b.author ?? 'Ray'), String(b.comment), Date.now());
+          .run(id, String(b.author ?? 'Ray'), String(b.comment), Math.floor(Date.now() / 1000)); // Unix SECONDS (per Marcus) — schema is INTEGER seconds, not ms
         log(`kanban action ${id}: status=${b.status ?? '-'} assignee=${b.assignee ?? '-'} comment=${b.comment ? 'yes' : 'no'}`);
         return json(res, 200, { ok: true, id, status: b.status ?? null, assignee: b.assignee ?? null });
       } catch (e) { log('kanban action failed:', e.message); return json(res, 502, { ok: false, error: e.message }); }
