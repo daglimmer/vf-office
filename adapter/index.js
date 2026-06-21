@@ -96,6 +96,24 @@ function profileModelMap() {
   return m;
 }
 
+// Display labels for raw model ids. state.db / config carry ids like "glm-5.2";
+// the dashboard wants a human label + the real provider. Idempotent + case-insensitive
+// (so a value that's already a pretty label passes through unchanged). Extend as the
+// fleet adds models. Fleet today: 11 execution agents on GLM-5.2 (Ollama), 3 leadership
+// on DeepSeek Pro.
+const MODEL_LABELS = {
+  'glm-5.2':         { model: 'GLM-5.2',      provider: 'Ollama' },
+  'deepseek-v4-pro': { model: 'DeepSeek Pro',  provider: 'DeepSeek' },
+  'deepseek-chat':   { model: 'DeepSeek Chat', provider: 'DeepSeek' },
+};
+function labelModel(model, provider) {
+  const hit = model ? MODEL_LABELS[String(model).toLowerCase()] : null;
+  return {
+    model: hit?.model ?? model ?? null,
+    provider: hit?.provider ?? provider ?? null,
+  };
+}
+
 // Phase 6: StoreKeeper backup source + docs portal roots
 const { readBackups } = require('./sources/storekeeper');
 const BACKUPS_FILE = path.resolve(ROOT, mapping.backupsSource ?? 'data/storekeeper-report.json');
@@ -644,9 +662,11 @@ async function agentRoster() {
     const u = usage.get(a.id) || {};
     const pcfg = pm.get(a.id);
     const lastSeen = f.lastSeen ?? h.last_seen ?? (lastPush.has(a.id) ? new Date(lastPush.get(a.id)).toISOString() : null);
-    // Authoritative model: Hermes profile config > fable > gateway > usage
-    const model = pcfg?.model ?? f.model ?? h.model ?? u.modelName ?? null;
-    const provider = pcfg?.provider ?? f.provider ?? h.provider ?? u.modelProvider ?? null;
+    // Authoritative model: Hermes profile config > fable (state.db) > gateway > usage,
+    // then mapped to a display label (glm-5.2 → "GLM-5.2"/Ollama, etc.).
+    const rawModel = pcfg?.model ?? f.model ?? h.model ?? u.modelName ?? null;
+    const rawProvider = pcfg?.provider ?? f.provider ?? h.provider ?? u.modelProvider ?? null;
+    const { model, provider } = labelModel(rawModel, rawProvider);
     return {
       id: a.id, name: a.name ?? a.id, color: a.color ?? null,
       role: a.role ?? null, group: agentGroupLabel(a),
@@ -687,9 +707,10 @@ async function agentDetail(id) {
       .all(id, a.name ?? id)
       .map(r => ({ cardId: String(r.id), title: r.title, status: colKey(r.status) }));
   } catch (e) { log('agent detail task query failed:', e.message); }
-  // Model: Hermes profile config > fable > gateway > usage
-  const model = pcfg?.model ?? f.model ?? h.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null));
-  const provider = pcfg?.provider ?? f.provider ?? h.provider ?? u.modelProvider ?? null;
+  // Model: Hermes profile config > fable (state.db) > gateway > usage, then display-labeled.
+  const rawModel = pcfg?.model ?? f.model ?? h.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null));
+  const rawProvider = pcfg?.provider ?? f.provider ?? h.provider ?? u.modelProvider ?? null;
+  const { model, provider } = labelModel(rawModel, rawProvider);
   // Sessions/tokens/cost from Hermes /api/costs (single source); pushHist only as a last resort.
   const sessions24h = ss?.sessions24h ?? (pushHist.get(id) ?? []).filter(t => t >= cut).length;
   const tokensToday = ss?.tokensToday ?? u.tokens ?? null;
