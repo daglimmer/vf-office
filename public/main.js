@@ -896,13 +896,17 @@ function syncWorkers() {
     let w = workers.get(name);
     if (!w) {
       if (workers.size >= MAX_WORKERS) continue;
-      // Reuse the existing body for this agent (a roster body OR a worker already made),
-      // matched by agentId or display name. CRITICAL: a freshly-made worker MUST take an
-      // agentId so it registers in byId — otherwise pollRoster can't see it and spawns a
-      // SECOND body for the same agent (the "double agent": one placed by the roster, one
-      // stranded at the DC spawn = the clustering). Keyed by assignee (== the agent id).
-      w = byId.get(name) ?? agents.find(a => !a.cardId && (a.agentId === name || a.name === name)) ?? null;
-      if (!w) w = new Agent({ name, agentId: name, sub: '', color: SPECTRUM[colorIdx++ % 6], role: 'devops' });
+      // ONE body per agent. The roster (pollRoster) is the SOLE owner of every avatar,
+      // keyed by agent id. A card only ANNOTATES an existing roster body — it NEVER creates
+      // a second body. The old dual pipeline (roster spawns one body, cards spawn another)
+      // is exactly the "double agent" / clustering bug: two systems placing the same agent.
+      // Resolve the assignee to its roster body by id or name (case-insensitive); if there
+      // is no roster body for it, skip — do NOT spawn a duplicate.
+      const key = String(name).toLowerCase();
+      w = byId.get(name)
+        ?? agents.find(a => !a.cardId && ((a.agentId && a.agentId.toLowerCase() === key) || (a.name && a.name.toLowerCase() === key)))
+        ?? null;
+      if (!w) continue;   // no roster body → don't render a card-only phantom
       workers.set(name, w);
     }
     // top card: highest priority; prefer the current one within the same tier
@@ -1049,6 +1053,10 @@ async function pollRoster() {
     }
     a.refreshStatus();
   }
+  // The roster just (re)created/owns every body; re-run the card pass so any active task
+  // lands on its agent's single body. Cards never create bodies (see syncWorkers), so this
+  // can only annotate — never duplicate.
+  queueSync();
 }
 setTimeout(pollRoster, 3000);
 setInterval(pollRoster, 30000);
