@@ -108,9 +108,12 @@ const MODEL_LABELS = {
   'deepseek-chat':   { model: 'DeepSeek Chat', provider: 'DeepSeek' },
 };
 function labelModel(model, provider) {
-  const hit = model ? MODEL_LABELS[String(model).toLowerCase()] : null;
+  if (!model) return { model: model ?? null, provider: provider ?? null };
+  const key = String(model).toLowerCase();
+  // exact match first, then strip a :variant suffix (state.db carries ids like "glm-5.2:cloud")
+  const hit = MODEL_LABELS[key] ?? MODEL_LABELS[key.split(':')[0]];
   return {
-    model: hit?.model ?? model ?? null,
+    model: hit?.model ?? model,
     provider: hit?.provider ?? provider ?? null,
   };
 }
