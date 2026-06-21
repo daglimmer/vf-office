@@ -33,9 +33,35 @@ const DB_PATH = ENV('HERMES_DB', '/root/.hermes/kanban.db');
 const HOST = ENV('HOST', '127.0.0.1');
 const PORT = parseInt(ENV('PORT', '3000'), 10);
 const CONFIG_DIR = ENV('CONFIG_DIR', path.join(ROOT, 'config'));
+const FABLE_API_URL = ENV('FABLE_API_URL', 'http://cost-cache-proxy.mission-control.svc.cluster.local');
 const PUBLIC_DIR = ENV('PUBLIC_DIR', path.join(ROOT, 'public'));
 const STATE_FILE = ENV('STATE_FILE', path.join(ROOT, 'state.json'));
 const SIGNALD_SOCK = ENV('SIGNALD_SOCK', '/run/hermes-office/signald.sock');
+
+// ------------------------------------------------------------------ fable-api agent-truth overlay (B2 deploy spec)
+let _fableCache = null;
+let _fableCacheAt = 0;
+const FABLE_CACHE_TTL = 30000; // 30s — snappier than cost (60s) for working/idle
+
+function fetchFableAgents() {
+  return new Promise((resolve) => {
+    if (_fableCache && Date.now() - _fableCacheAt < FABLE_CACHE_TTL) return resolve(_fableCache);
+    const req = http.get(FABLE_API_URL + '/api/agents', { timeout: 5000 }, (res) => {
+      let body = '';
+      res.on('data', (c) => body += c);
+      res.on('end', () => {
+        try {
+          const arr = JSON.parse(body);
+          const m = new Map(arr.map(a => [a.id, a]));
+          _fableCache = m; _fableCacheAt = Date.now();
+          resolve(m);
+        } catch { resolve(_fableCache || new Map()); }
+      });
+    });
+    req.on('error', () => resolve(_fableCache || new Map()));
+    req.setTimeout(5000, () => { req.destroy(); resolve(_fableCache || new Map()); });
+  });
+}
 
 const log = (...a) => console.log(new Date().toISOString(), '[adapter]', ...a);
 
@@ -425,20 +451,32 @@ function agentStatus(id) {
   if (lp != null && Date.now() - lp > 24 * 3600 * 1000) return 'offline';
   return 'idle';
 }
-function agentRoster() {
-  return [...agents.values()].map(a => ({
-    id: a.id, name: a.name ?? a.id, color: a.color ?? null,
-    role: a.role ?? null, group: agentGroupLabel(a),
-    status: agentStatus(a.id),
-    lastSeen: lastPush.has(a.id) ? Math.floor(lastPush.get(a.id) / 1000) : null,
-    anchor: a.anchor ?? null,
-  }));
+async function agentRoster() {
+  const fable = await fetchFableAgents();
+  return [...agents.values()].map(a => {
+    const f = fable.get(a.id) || {};
+    return {
+      id: a.id, name: a.name ?? a.id, color: a.color ?? null,
+      role: a.role ?? null, group: agentGroupLabel(a),
+      status: f.status ?? agentStatus(a.id),
+      state: f.state ?? null,
+      taskId: f.taskId ?? null,
+      taskTitle: f.taskTitle ?? null,
+      lastSeen: f.lastSeen ?? (lastPush.has(a.id) ? new Date(Math.floor(lastPush.get(a.id) / 1000) * 1000).toISOString() : null),
+      lastActive: f.lastActive ?? null,
+      model: f.model ?? null,
+      provider: f.provider ?? null,
+      anchor: a.anchor ?? null,
+    };
+  });
 }
 
 // ------------------------------------------------------------------ agent detail (Phase 7b - /api/agents/:id)
-function agentDetail(id) {
+async function agentDetail(id) {
   const a = agents.get(id);
   if (!a) return null;
+  const fable = await fetchFableAgents();
+  const f = fable.get(id) || {};
   const u = usage.get(id) ?? {};
   const cut = Date.now() - 24 * 3600 * 1000;
   let tasks = [];
@@ -451,13 +489,16 @@ function agentDetail(id) {
     ok: true,
     id, name: a.name ?? id, color: a.color ?? null,
     role: a.role ?? null, group: agentGroupLabel(a), parent: a.parent ?? null,
-    status: agentStatus(id), runtime: runtime.get(id) ?? 'ok',
-    model: u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null),
-    provider: u.modelProvider ?? null, fallbackActive: u.fallbackActive ?? false,
+    status: f.status ?? agentStatus(id), state: f.state ?? null,
+    taskId: f.taskId ?? null, taskTitle: f.taskTitle ?? null,
+    runtime: runtime.get(id) ?? 'ok',
+    model: f.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null)),
+    provider: f.provider ?? (u.modelProvider ?? null), fallbackActive: u.fallbackActive ?? false,
     sessions24h: (pushHist.get(id) ?? []).filter(t => t >= cut).length,
     tokensToday: u.tokens ?? null, costUsd: u.costUsd ?? null,
     cacheHitRate: u.cacheHitRate ?? null,
-    lastSeen: lastPush.has(id) ? Math.floor(lastPush.get(id) / 1000) : null,
+    lastSeen: f.lastSeen ?? (lastPush.has(id) ? new Date(Math.floor(lastPush.get(id) / 1000) * 1000).toISOString() : null),
+    lastActive: f.lastActive ?? null,
     tasks,
   };
 }
@@ -540,10 +581,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
-    if (req.method === 'GET' && p === '/api/agents') return json(res, 200, agentRoster());                // Phase 6
-    const adet = p.match(/^\/api\/agents\/([\w.\-]+)$/);                                                   // Phase 7b
+    if (req.method === 'GET' && p === '/api/agents') return json(res, 200, await agentRoster());                // Phase 6 + agent-truth
+    const adet = p.match(/^\/api\/agents\/([\w.\-]+)$/);                                                   // Phase 7b + agent-truth
     if (req.method === 'GET' && adet) {
-      const d = agentDetail(adet[1]);
+      const d = await agentDetail(adet[1]);
       return d ? json(res, 200, d) : json(res, 404, { ok: false, error: 'unknown agent' });
     }
     if (req.method === 'GET' && p === '/api/docs/tree') return json(res, 200, docsTree());                // Phase 6
