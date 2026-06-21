@@ -843,14 +843,28 @@ function walkUpdate(dt) {
 }
 
 // ----------------------------------------------------------------- bridge events
-const COLUMN_STATE = { backlog: 'spawning', todo: 'briefing', in_progress: 'working', review: 'debrief' };
+// Column → office animation state. Accept EVERY column-name variant the board/adapter use
+// (the live Hermes board speaks ready/running/blocked/done, older flows used todo/in_progress/
+// review), so a card drives motion no matter which name flows through. This was the bug: the
+// office only knew in_progress/review/todo, so real cards (running/blocked/…) were all skipped
+// and the board went dead.
+const COLUMN_STATE = {
+  // queued / assigned, about to start → walk to the meeting to pick it up
+  ready: 'briefing', todo: 'briefing', queued: 'briefing', open: 'briefing', backlog: 'spawning',
+  // actively running → sit at a desk and work it
+  running: 'working', in_progress: 'working', active: 'working', pending: 'working',
+  // stalled
+  review: 'debrief', waiting: 'debrief', blocked: 'working',
+};
 let colorIdx = 0;
 // ---- Phase 10b: ONE avatar per ASSIGNEE (Ray). A real board has many cards
 // per worker - sentinel exists once and works its top-priority card. All of an
 // assignee's active cards map to the same body; when the top card changes the
 // worker switches tasks instead of a clone spawning. Roster bodies are reused.
-const ACTIVE_COLS = ['in_progress', 'review', 'todo'];
-const PRIO = { in_progress: 0, review: 1, todo: 2 };
+// Columns where the assignee is actively engaged (gets a working body). 'done'/'completed'/
+// archived are excluded — a finished card releases its worker back to idle.
+const ACTIVE_COLS = ['running', 'in_progress', 'active', 'pending', 'blocked', 'review', 'waiting', 'ready', 'todo', 'queued', 'open'];
+const PRIO = { running: 0, in_progress: 0, active: 0, pending: 0, blocked: 1, review: 1, waiting: 1, ready: 2, todo: 2, queued: 2, open: 2 };
 const MAX_WORKERS = 22;
 const cardsAll = new Map();             // cardId -> {cardId,title,column,assignee,blocked}
 const workers = new Map();              // assignee -> Agent
@@ -899,7 +913,7 @@ function syncWorkers() {
     w.taskTitle = top.title ?? top.cardId;
     const desired = COLUMN_STATE[top.column];
     if (switched || w.lifecycle !== desired) w.setLifecycle(desired);
-    const blk = !!top.blocked;
+    const blk = !!top.blocked || top.column === 'blocked' || top.column === 'waiting';
     if (blk !== w.blocked) w.setBlocked(blk, top.reason);
   }
 }
