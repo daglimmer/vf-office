@@ -36,6 +36,16 @@ export function buildOffice(report) {
       quat: new THREE.Quaternion(...(a.quat ?? [0, 0, 0, 1])),
     });
   }
+  // Seating fix: the lounge couch cushion sits higher (~0.53) and deeper than the
+  // desk chairs, so agents on floor-level seat anchors sank into it and their shins
+  // clipped through the cushion front. Lift the 8 couch seats and slide them toward
+  // the coffee table (z=3) so they sit ON the cushion with legs off the front edge.
+  for (let i = 1; i <= 8; i++) {
+    const a = anchors.get(`lounge_seat_${String(i).padStart(2, '0')}`);
+    if (!a) continue;
+    a.pos.y += 0.05;
+    a.pos.z += a.pos.z < 3 ? 0.26 : -0.26;
+  }
   const A = n => anchors.get(n).pos;
 
   // ---------------------------------------------------------------- procedural textures (Phase 8b)
@@ -108,7 +118,7 @@ export function buildOffice(report) {
   };
   const M = {
     // floors: polished, slight clearcoat reflection (Phase 8b)
-    concrete:  phys('dark_concrete', { map: T.concrete, bumpMap: T.concrete, bumpScale: BUMP.concrete, color: 0xcfd2d8, roughness: 0.42, metalness: 0.05, clearcoat: 0.45, clearcoatRoughness: 0.35 }),
+    concrete:  phys('dark_concrete', { map: T.concrete, bumpMap: T.concrete, bumpScale: BUMP.concrete, color: 0xcfd2d8, roughness: 0.34, metalness: 0.05, clearcoat: 0.6, clearcoatRoughness: 0.12 }),   // Pass B: sharper clearcoat = polished-concrete sheen (was rough 0.42 / cc 0.45 / ccRough 0.35)
     woodDark:  phys('dark_wood',     { map: T.woodDark, bumpMap: T.woodDark, bumpScale: BUMP.woodDark, color: 0xffffff, roughness: 0.5, clearcoat: 0.25, clearcoatRoughness: 0.4 }),
     oak:       std('warm_oak',      { map: T.oak, bumpMap: T.oak, bumpScale: BUMP.oak, color: 0xffffff, roughness: 0.5 }),
     woodLight: std('light_wood',    { map: T.woodLight, bumpMap: T.woodLight, bumpScale: BUMP.woodLight, color: 0xffffff, roughness: 0.55 }),
@@ -120,7 +130,10 @@ export function buildOffice(report) {
     sofa:      std('sofa_gray',     { map: T.fabric, bumpMap: T.fabric, bumpScale: BUMP.fabric, color: 0xffffff, roughness: 0.95 }),
     leather:   phys('leather_brown', { map: T.leather, bumpMap: T.leather, bumpScale: BUMP.leather, color: 0xffffff, roughness: 0.45, clearcoat: 0.3, clearcoatRoughness: 0.5 }),
     white:     std('white_panel',   { color: 0xdfe1e5, roughness: 0.6, emissive: 0xfff8e8, emissiveIntensity: 0.15 }),   // glare pass: was 0.45
-    whiteCeil: std('white_ceiling', { color: 0xc9ccd2, roughness: 0.7, emissive: 0xfff6e6, emissiveIntensity: 0.08 }),
+    // Pass B: was bright white (#c9ccd2) - from the overhead/peak view the staff &
+    // CEO ceiling tops read as glaring white slabs. Darkened to charcoal so roofs
+    // are consistent with the other ceilings and the moody renders.
+    whiteCeil: std('white_ceiling', { color: 0x262a30, roughness: 0.7 }),
     screen:    std('screen_code',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x73c0ff, emissiveIntensity: 0.9 }),
     screenDash:std('screen_dash',   { color: 0x0a0f14, roughness: 0.3, emissive: 0x5ce6b8, emissiveIntensity: 0.85 }),
     cloudFrost:std('cloud_frost',   { color: 0xdde2e8, roughness: 0.4, transparent: true, opacity: 0.85 }),
@@ -259,7 +272,7 @@ export function buildOffice(report) {
   // ---------------------------------------------------------------- architecture
   glazeX(Z0, WX0, WX1, H_LOUNGE);                       // south glazing: lounge
   glazeX(Z0, EX0, EX1, H_MEET);                         // south glazing: meeting
-  wallRunX(Z0, CX0, CX1, H_CORR);                       // corridor entrance wall
+  wallRunX(Z0, CX0, CX1, H_CORR, [[20, 3.4]]);          // corridor entrance wall — now with a real doorway (Pass E)
   wallRunZ(WX0, Z0, 5.75, H_LOUNGE);                    // west: lounge solid (green wall)
   glazeZ(WX0, 5.75, 11.25, H_OFFICE);                   // west: staff window
   glazeZ(WX0, 11.25, ZW1, H_OFFICE);                    // west: devops window
@@ -419,18 +432,26 @@ export function buildOffice(report) {
     sphere(`prop_palm_${j}`, 14.8 + Math.cos(j) * 0.3, 1.0 + j * 0.12, 1.0 + Math.sin(j) * 0.3, 0.22, M.leaf[1], 0.5, 7, 5);
 
   // ---------------------------------------------------------------- desks & co
-  function desk(idx, x, z, faceDeg, w, monitors, room) {
+  function desk(idx, x, z, faceDeg, w, monitors, room, ultrawide) {
     rbox(`prop_desk_${room}${idx}`, x, 0.72, z, w, 0.06, 0.7, M.woodDark, faceDeg, 0.025);
     const a = faceDeg * D2R, fx = Math.sin(a), fz = Math.cos(a);
     for (const sx of [-1, 1])
       box(`prop_dleg_${room}${idx}${sx}`, x + Math.cos(a) * sx * (w / 2 - 0.08), 0.35,
           z - Math.sin(a) * sx * (w / 2 - 0.08), 0.06, 0.7, 0.6, M.metal, faceDeg);
-    for (let mi = 0; mi < monitors; mi++) {
-      const off = (mi - (monitors - 1) / 2) * 0.5;
-      const mx = x + Math.cos(a) * off + fx * 0.22, mz = z - Math.sin(a) * off + fz * 0.22;
-      const rot = faceDeg + (monitors === 1 || mi === 1 ? 0 : mi === 0 ? -14 : 14);
-      rbox(`prop_mon_${room}${idx}_${mi}`, mx, 1.02, mz, 0.48, 0.3, 0.035, M.screen, rot + 180, 0.012);
-      box(`prop_monstand_${room}${idx}_${mi}`, mx, 0.78, mz, 0.06, 0.14, 0.05, M.prop, rot);
+    if (ultrawide) {
+      // one big "59-inch" ultrawide panel instead of a cluster of small monitors
+      const mx = x + fx * 0.24, mz = z + fz * 0.24;
+      box(`prop_monbezel_${room}${idx}`, mx, 1.12, mz + fz * 0.005, 1.5, 0.5, 0.03, M.prop, faceDeg + 180);
+      rbox(`prop_mon_${room}${idx}_0`, mx, 1.12, mz, 1.42, 0.42, 0.05, M.screen, faceDeg + 180, 0.02);
+      box(`prop_monstand_${room}${idx}_0`, mx, 0.84, mz, 0.5, 0.18, 0.05, M.metal, faceDeg);
+    } else {
+      for (let mi = 0; mi < monitors; mi++) {
+        const off = (mi - (monitors - 1) / 2) * 0.5;
+        const mx = x + Math.cos(a) * off + fx * 0.22, mz = z - Math.sin(a) * off + fz * 0.22;
+        const rot = faceDeg + (monitors === 1 || mi === 1 ? 0 : mi === 0 ? -14 : 14);
+        rbox(`prop_mon_${room}${idx}_${mi}`, mx, 1.02, mz, 0.48, 0.3, 0.035, M.screen, rot + 180, 0.012);
+        box(`prop_monstand_${room}${idx}_${mi}`, mx, 0.78, mz, 0.06, 0.14, 0.05, M.prop, rot);
+      }
     }
     // Phase 8c set dressing: keyboard + mouse, sometimes a mug or papers
     rbox(`prop_kbd_${room}${idx}`, x - fx * 0.02, 0.755, z - fz * 0.02, 0.42, 0.025, 0.15, M.prop, faceDeg, 0.01);
@@ -484,7 +505,7 @@ export function buildOffice(report) {
   for (let i = 1; i <= 8; i++) {
     const p = A(`work_desk_${String(i).padStart(2, '0')}`);
     const face = i <= 4 ? 180 : 0, dz = i <= 4 ? -0.55 : 0.55;   // 8f: face the desks
-    desk(i, p.x, p.z + dz, face, 1.8, 3, 'dv');
+    desk(i, p.x, p.z + dz, face, 1.8, 1, 'dv', true);     // Pass C: one big ultrawide per desk (was 3 monitors)
     chair(i, p.x, p.z, face, 'dv');
     cableBundle(`prop_cable_dv${i}`, p.x, p.z + dz, face);
     if (i % 2 === 1) ringPendant(`prop_ringp_dv${i}`, p.x + 1.4, 2.5, p.z + dz);
@@ -524,28 +545,74 @@ export function buildOffice(report) {
     cyl('prop_holopuck', 31.5, 0.78, 3.0, 0.12, 0.04, M.neon, 16);
   }
 
-  // ---------------------------------------------------------------- control
+  // ---------------------------------------------------------------- control (command center)
+  // Straight-line philosophy (Ray): a clean STRAIGHT command desk with three
+  // proportional wide screens + a straight rainbow under-glow strip, the cyan
+  // cloud-logo + a dense amber circuit shield on the back wall, and an LED rack.
   {
-    const cx = 31.5, cz = 8.75, R = 1.7, segs = 7;
-    for (let i = 0; i < segs; i++) {
-      const ang = -150 + i * 300 / segs;
-      if (ang > -80 && ang < 80) continue;              // opening behind Ollie
-      const rad = ang * D2R;
-      const px = cx + Math.sin(rad) * R, pz = cz + Math.cos(rad) * R;
-      rbox(`prop_cmd_${i}`, px, 0.72, pz, 1.55, 0.07, 0.7, M.prop, -ang, 0.03);
-      box(`hot_costs_front_${i}`, px + Math.sin(rad) * 0.36, 0.38, pz + Math.cos(rad) * 0.36,
-          1.55, 0.7, 0.05, zoneMats[i % 6], -ang);
-      box(`prop_cmdmon_${i}`, px - Math.sin(rad) * 0.1, 1.1, pz - Math.cos(rad) * 0.1,
-          0.8, 0.5, 0.04, M.screenDash, -ang + 180);
+    const cx = 31.5, cz = 7.9, W = 6.4;
+    const deskMat = std('cmd_console', { color: 0x14171d, roughness: 0.42, metalness: 0.35 });
+    const spec = ['#2e6bff', '#19c8ff', '#3dff7a', '#ffe32c', '#ff9e2c', '#ff4d4d'];
+    // straight desk: body + top
+    box('prop_cmddesk', cx, 0.37, cz, W, 0.74, 0.9, deskMat);
+    rbox('prop_cmddesk_top', cx, 0.75, cz, W + 0.12, 0.06, 1.02, M.metal, 0, 0.03);
+    // straight rainbow under-glow strip across the operator-facing (front) face
+    const NG = 30;
+    for (let i = 0; i < NG; i++) {
+      const frac = i / (NG - 1), t = frac * (spec.length - 1);
+      const col = new THREE.Color(spec[Math.floor(t)]).lerp(new THREE.Color(spec[Math.min(spec.length - 1, Math.ceil(t))]), t - Math.floor(t));
+      const gm = new THREE.Mesh(new THREE.BoxGeometry(W / NG + 0.02, 0.5, 0.05),
+        new THREE.MeshStandardMaterial({ color: 0x04050a, emissive: col, emissiveIntensity: 1.4 }));
+      gm.position.set(cx - W / 2 + (i + 0.5) / NG * W, 0.33, cz + 0.47); add(gm, `prop_cmdglow_${i}`);
     }
-    [[-0.55, 0.28], [0, 0.4], [0.55, 0.3], [-0.28, 0.33], [0.28, 0.35]].forEach(([dx, r], j) =>
-      sphere(`prop_ncloud_${j}`, 30.0 + dx, 2.25 + (j % 2 ? 0.08 : 0), 5.95, r, M.neon, 0.6, 10, 6));
-    textPanel('prop_logo_ctl', '110lymph.nl', 2.0, 0.5, 30.0, 1.62, 6.05, 180, '#bfeaff');
-    const sh = cyl('prop_shield_ctl', 33.6, 2.2, 5.95, 0.55, 0.08, M.amber, 6);
-    sh.rotation.set(Math.PI / 2, 0, Math.PI / 2);
-    torus('prop_shieldring_ctl', 33.6, 2.2, 6.0, 0.62, 0.03, M.amber, 24, 0);
-    box('prop_ctlrack', 36.9, 0.9, 7.0, 0.7, 1.8, 0.8, M.rack);
-    box('prop_ctlrack_led', 36.62, 0.9, 7.0, 0.04, 1.6, 0.06, zoneMats[0]);
+    // three proportional wide screens in a straight row, facing the operators (+z)
+    [-2.1, 0, 2.1].forEach((dx, k) => {
+      box(`prop_cmdbezel_${k}`, cx + dx, 1.34, cz + 0.4, 1.84, 0.92, 0.04, M.prop);
+      box(`prop_cmdmon_${k}`, cx + dx, 1.34, cz + 0.42, 1.7, 0.8, 0.04, M.screenDash);
+      box(`prop_cmdmonfoot_${k}`, cx + dx, 0.86, cz + 0.34, 0.5, 0.42, 0.06, M.metal);
+    });
+    // clickable cost surface inset on the desk top (hot_ route, for interactive.js)
+    box('hot_costs_front_0', cx, 0.79, cz - 0.06, 2.2, 0.02, 0.5, zoneMats[2]);
+    // operator chairs — chair 1 sits ON the ollie_station seat (Sentinel/Ollie),
+    // chair 2 is a spare beside it; both face the desk/screens (south).
+    chair(1, cx, cz + 0.85, 180, 'cmd', M.prop);          // == ollie_station (31.5, 8.75)
+    chair(2, cx - 1.9, cz + 0.85, 180, 'cmd', M.prop);
+
+    // ---- back wall: glowing cyan cloud-logo + dense amber circuit shield
+    [[-0.62, 0.30], [-0.2, 0.42], [0.25, 0.36], [0.62, 0.28], [0.0, 0.22]].forEach(([dx, r], j) =>
+      sphere(`prop_ncloud_${j}`, 29.6 + dx, 2.26 + (j % 2 ? 0.06 : 0), 5.95, r, M.neon, 0.55, 12, 8));
+    textPanel('prop_logo_ctl', '110lymph.nl', 1.7, 0.4, 29.6, 2.22, 5.88, 180, '#e6f8ff', 'bold 52px sans-serif');
+    {                                                     // dense amber circuit shield (canvas)
+      const cv = document.createElement('canvas'); cv.width = 240; cv.height = 290;
+      const c = cv.getContext('2d'); c.lineJoin = 'round';
+      const path = () => { c.beginPath(); c.moveTo(120, 10); c.lineTo(218, 50); c.lineTo(218, 160); c.quadraticCurveTo(218, 250, 120, 282); c.quadraticCurveTo(22, 250, 22, 160); c.lineTo(22, 50); c.closePath(); };
+      path(); c.fillStyle = 'rgba(255,160,50,0.12)'; c.fill();
+      c.save(); path(); c.clip();                        // dense traces clipped to the shield
+      c.strokeStyle = '#ffcd80'; c.fillStyle = '#ffcd80'; c.lineWidth = 2.3;
+      let s = 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+      const node = (x, y, rr = 3) => { c.beginPath(); c.arc(x, y, rr, 0, 7); c.fill(); };
+      c.beginPath(); c.moveTo(120, 26); c.lineTo(120, 256); c.stroke();   // central spine
+      for (let y = 50; y < 252; y += 18) {                // horizontal rungs + nodes + stubs
+        const w = 32 + r() * 60;
+        c.beginPath(); c.moveTo(120 - w, y); c.lineTo(120 + w, y); c.stroke();
+        node(120 - w, y); node(120 + w, y); node(120, y, 2.2);
+        if (r() < 0.7) { c.beginPath(); c.moveTo(120 - w, y); c.lineTo(120 - w, y + (r() < 0.5 ? 11 : -11)); c.stroke(); }
+        if (r() < 0.7) { c.beginPath(); c.moveTo(120 + w, y); c.lineTo(120 + w, y + (r() < 0.5 ? 11 : -11)); c.stroke(); }
+      }
+      for (let i = 0; i < 14; i++) {                      // secondary diagonal traces
+        const x = 45 + r() * 150, y = 45 + r() * 200, dx = (r() - 0.5) * 46, dy = (r() - 0.5) * 46;
+        c.beginPath(); c.moveTo(x, y); c.lineTo(x + dx, y + dy); c.stroke(); node(x, y, 2);
+      }
+      c.restore();
+      path(); c.strokeStyle = '#ffb347'; c.lineWidth = 8; c.stroke();     // shield outline
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.7), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide }));
+      m.position.set(34.2, 2.4, 5.9); m.rotation.y = 180 * D2R; add(m, 'prop_shield_ctl');
+    }
+    // server rack to the side, with colored LED rows
+    box('prop_ctlrack', 36.95, 1.1, 7.2, 0.7, 2.2, 1.0, M.rack);
+    for (let r = 0; r < 9; r++)
+      box(`prop_ctlrack_led_${r}`, 36.58, 0.45 + r * 0.22, 7.2, 0.04, 0.14, 0.72, zoneMats[r % 6]);
   }
 
   // ---------------------------------------------------------------- ceo
@@ -615,12 +682,31 @@ export function buildOffice(report) {
         const health = (i * 7 + u) % 11 === 0 ? srvRed : (i + u) % 5 === 0 ? srvAmber : srvOk;
         const [l2x, l2z] = lat(-0.175);
         box(`prop_rhp_${i}_${u}`, l2x, uy + 0.045, l2z, 0.018, 0.018, 0.012, health, face);
+        // activity LED — green-dominant (blinkMats[2]=green), a few blue/amber
+        const actMat = blinkMats[[2, 2, 2, 0, 2, 2, 4, 2][(i + u) % 8]];
         const [l3x, l3z] = lat(-0.1925);
-        box(`prop_ract_${i}_${u}`, l3x, uy - 0.04, l3z, 0.032, 0.014, 0.012, blinkMats[(i * 3 + u) % 6], face);
+        box(`prop_ract_${i}_${u}`, l3x, uy - 0.04, l3z, 0.032, 0.014, 0.012, actMat, face);
+        // two of the units are NETWORK SWITCHES: a dense row of green port link LEDs
+        if (u === 3 || u === 6) {
+          for (let p = 0; p < 12; p++) {
+            const [ppx, ppz] = lat(-0.22 + p * 0.039);
+            const pm = blinkMats[(i + u + p) % 11 === 0 ? 0 : (i + u + p) % 13 === 0 ? 4 : 2];   // mostly green
+            box(`prop_rport_${i}_${u}_${p}`, ppx, uy + 0.018, ppz, 0.024, 0.02, 0.012, pm, face);
+          }
+        }
       }
-      // zone indicator: thin strip across the rack top (keeps the blue->red ring readable)
+      // zone indicator strip — green-dominant (occasional blue/amber), not a rainbow ring
       const [ztx, ztz] = lat(0);
-      box(`rack_led_${i}`, ztx, 2.04, ztz, 0.5, 0.035, 0.014, zone, face);
+      box(`rack_led_${i}`, ztx, 2.04, ztz, 0.5, 0.035, 0.014, zoneMats[[2, 2, 0, 2, 2, 4, 2][i % 7]], face);
+      // cable management lying along the rack top (muted network colours, runs front-to-back)
+      const [ctx, ctz] = lat(0);
+      box(`prop_rcabletray_${i}`, ctx, 2.11, ctz, 0.5, 0.05, 0.55, M.prop, face);
+      const dcCableCol = ['#365a7e', '#3a6a4c', '#54565e', '#3a5e7a', '#436a4a'];   // blues/greens/grey
+      for (let cb = 0; cb < 5; cb++) {
+        const [cbx, cbz] = lat(-0.18 + cb * 0.09);
+        const cm = std(`dc_cable_${i}_${cb}`, { color: parseInt(dcCableCol[cb].slice(1), 16), roughness: 0.55 });
+        box(`prop_rcable_${i}_${cb}`, cbx, 2.15, ctz, 0.024, 0.024, 0.52, cm, face);
+      }
     }
     const hotDC = cyl('hot_infra_ring', cx, 1.1, cz, 3.9, 2.3, M.glassDC.clone(), 24);
     hotDC.material.opacity = 0.04; hotDC.material.name = 'dc_hot';
@@ -726,7 +812,9 @@ export function buildOffice(report) {
       for (let wy = 8; wy < h - 8; wy += 14)
         for (let wx = 6; wx < w - 6; wx += 11) {
           const r = rnd();
-          if (r < 0.30) { c.fillStyle = r < 0.07 ? 'rgba(150,200,255,.85)' : 'rgba(255,205,125,.8)'; c.fillRect(wx, wy, 6, 8); }
+          // tall/narrow windows (was 6x8 wide → read as a "row of cars"); the
+          // small per-cell height jitter stops them lining up into uniform rows.
+          if (r < 0.30) { c.fillStyle = r < 0.07 ? 'rgba(150,200,255,.85)' : 'rgba(255,205,125,.8)'; c.fillRect(wx, wy, 4, 9 + ((wx + wy) % 3)); }
         }
     }, 128, 256, 1, 1);
     const towers = [
@@ -742,22 +830,27 @@ export function buildOffice(report) {
       box(`env_towertop_${i}`, x, h + 0.2, z, w * 0.6, 0.5, d * 0.6, M.prop);
       if (i % 3 === 0) box(`env_antenna_${i}`, x, h + 1.6, z, 0.15, 2.4, 0.15, M.prop);
     });
-    // plaza trees (south + west approach)
-    const treeSpots = [[-2, -4], [8, -5], [18, -4.5], [28, -5], [38, -4], [-6, 6], [-6, 14], [44, 10]];
+    // plaza trees (south + west approach). Fuller, layered canopies of varied
+    // leaf puffs instead of 3 blobs on a stick — reads as a tree, not a roadblock.
+    // (moved the x=18 tree off the entrance.)
+    // framed around the forecourt reflecting pools (outer flanks + by the walk)
+    const treeSpots = [[2, -3], [3, -9], [37, -3], [38, -9], [16.5, -1.5], [23.5, -1.5], [-6, 8], [44, 8]];
     treeSpots.forEach(([x, z], i) => {
-      cyl(`env_trunk_${i}`, x, 0.9, z, 0.12, 1.8, M.woodDark, 8);
-      for (let j = 0; j < 3; j++)
-        sphere(`env_crown_${i}_${j}`, x + Math.cos(j * 2.3 + i) * 0.45, 2.0 + j * 0.4,
-               z + Math.sin(j * 2.3 + i) * 0.45, 0.7 - j * 0.12, M.leaf[(i + j) % 3], 0.8, 8, 6);
+      const th = 1.7 + rnd() * 0.5;
+      cyl(`env_trunk_${i}`, x, th / 2, z, 0.13, th, M.woodDark, 8, 0.09);   // gently tapered trunk
+      for (let j = 0; j < 8; j++) {
+        const a = rnd() * Math.PI * 2, rad = 0.6 * Math.sqrt(rnd());
+        sphere(`env_crown_${i}_${j}`, x + Math.cos(a) * rad, th + 0.2 + rnd() * 0.85,
+               z + Math.sin(a) * rad, 0.4 + rnd() * 0.32, M.leaf[(i + j) % 3], 0.95, 12, 9);
+      }
     });
-    // street lamps along the south walk
-    for (let i = 0; i < 5; i++) {
-      const x = 2 + i * 9;
+    // street lamps along the south walk (flank the entrance — none at x=20)
+    [3, 11, 29, 37].forEach((x, i) => {
       cyl(`env_lamppost_${i}`, x, 1.6, -2.5, 0.05, 3.2, M.metal, 8);
       const head = sphere(`env_lamphead_${i}`, x, 3.3, -2.5, 0.12, M.ringWarm.clone(), 0.8, 8, 6);
       head.material.emissiveIntensity = 1.3;
       head.material.name = 'lamp_glow';
-    }
+    });
 
     // ---- 8e (Ray): finish the grounds - lawns, palms, path, parking, benches
     const grassMat = std('grass', { map: speckleTex('#1c3a1e', '90,160,80', 1400, 6, 6),
@@ -789,20 +882,8 @@ export function buildOffice(report) {
       }
       sphere(`env_palmtop_${i}`, px, 3.95, pz, 0.16, M.woodDark, 1, 7, 5);
     });
-    // small parking row, west side
-    const carColors = [0x2b2f38, 0x3a2024, 0x20303a, 0x33312a, 0x23262c, 0x2f2335];
-    for (let i = 0; i < 6; i++) {
-      const cx2 = -13, cz2 = 4 + i * 3.1;
-      const paint = phys(`car_${i}`, { color: carColors[i], roughness: 0.25, clearcoat: 0.8, clearcoatRoughness: 0.15 });
-      rbox(`env_car_${i}`, cx2, 0.34, cz2, 3.9, 0.55, 1.75, paint, 4 * ((i % 3) - 1), 0.12);
-      rbox(`env_carcab_${i}`, cx2 - 0.25, 0.78, cz2, 1.9, 0.45, 1.55,
-           phys(`carglass_${i}`, { color: 0x0e1216, roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.08 }),
-           4 * ((i % 3) - 1), 0.16);
-      for (const [dx, dz] of [[-1.3, -0.85], [1.3, -0.85], [-1.3, 0.85], [1.3, 0.85]]) {
-        const wheel = cyl(`env_wheel_${i}_${dx}_${dz}`, cx2 + dx, 0.3, cz2 + dz, 0.3, 0.22, M.prop, 12);
-        wheel.rotation.z = Math.PI / 2;
-      }
-    }
+    // parking row removed (Ray): the low-poly cars clipped the building and read
+    // poorly. Keep the empty lot only.
     box('floor_parking', -13, -0.065, 12, 6.5, 0.02, 22, pathMat);
     // benches along the facade walk
     for (let i = 0; i < 4; i++) {
@@ -810,6 +891,73 @@ export function buildOffice(report) {
       rbox(`env_bench_${i}`, bx2, 0.42, -1.4, 1.7, 0.07, 0.5, M.oak, 0, 0.03);
       for (const sx of [-0.7, 0.7])
         box(`env_benchleg_${i}_${sx}`, bx2 + sx, 0.2, -1.4, 0.08, 0.4, 0.45, M.metal);
+    }
+
+    // ---- Pass E forecourt "wow": Apple-campus approach — two reflecting pools
+    // flanking the walk, warm uplight fixtures, and a glowing logo monolith.
+    {
+      const water = std('pool_water', { color: 0x0a141a, emissive: 0x0a2630, emissiveIntensity: 0.22, roughness: 0.06, metalness: 0.75 });
+      const pool = (name, x, z, w, d) => {
+        if (!LOWQ) {
+          try {
+            const r = new Reflector(new THREE.PlaneGeometry(w, d), { textureWidth: 256, textureHeight: 256, color: 0x10171c });
+            r.rotation.x = -Math.PI / 2; r.position.set(x, -0.02, z); add(r, name);
+          } catch (e) { box(name, x, -0.03, z, w, 0.02, d, water); }
+        } else { box(name, x, -0.03, z, w, 0.02, d, water); }
+        const cw = 0.22;                                   // stone coping rim
+        const cope = (cx, cz, csx, csz, k) => box(`${name}_cope_${k}`, cx, 0.03, cz, csx, 0.12, csz, M.metal);
+        cope(x, z - d / 2 - cw / 2, w + cw * 2, cw, 'n'); cope(x, z + d / 2 + cw / 2, w + cw * 2, cw, 's');
+        cope(x - w / 2 - cw / 2, z, cw, d, 'w'); cope(x + w / 2 + cw / 2, z, cw, d, 'e');
+      };
+      pool('prop_pool_l', 10.5, -5.5, 7, 6);
+      pool('prop_pool_r', 29.5, -5.5, 7, 6);
+
+      // warm uplight fixtures (emissive — tier-safe) at tree bases + portico columns
+      const up = std('uplight', { color: 0x1a1206, emissive: 0xffb259, emissiveIntensity: 1.5 });
+      [[2, -3], [3, -9], [37, -3], [38, -9], [16.5, -1.5], [23.5, -1.5], [17.1, -3.9], [22.9, -3.9]]
+        .forEach(([x, z], i) => cyl(`prop_uplight_${i}`, x, 0.05, z, 0.14, 0.05, up, 12));
+
+      // logo monolith at the street end of the walk — the HQ marker
+      const mx = 20, mz = -13.6;
+      box('prop_monolith', mx, 1.35, mz, 1.3, 2.7, 0.32, M.glassDC);
+      box('prop_monolith_core', mx, 1.45, mz, 0.95, 2.2, 0.1, std('monolith_core', { color: 0x05080c, emissive: 0x223a52, emissiveIntensity: 0.55 }));
+      box('prop_monolith_base', mx, 0.13, mz, 1.6, 0.26, 0.74, M.metal);
+      box('prop_monolith_glow', mx, 0.28, mz, 1.4, 0.04, 0.55, std('mono_glow', { color: 0x0b0d12, emissive: 0x4dd8ff, emissiveIntensity: 0.7 }));
+      textPanel('prop_monolith_logo', '110lymph.nl', 1.05, 0.42, mx, 1.85, mz - 0.18, 180, '#d6efff', 'bold 38px sans-serif');
+    }
+
+    // ---- Pass E: a real front entrance at the corridor face (x=20, z=Z0).
+    // The corridor wall now has a 3.4m doorway; dress it as a grand entrance:
+    // glass doors, a cantilevered portico with a downlight soffit, columns, a
+    // glowing sign on the fascia, and bollard lights flanking the approach.
+    {
+      const ez = Z0;                                      // building front line (0.3)
+      const sillMat = std('entrance_sill', { color: 0x0b0d12, emissive: 0x4dd8ff, emissiveIntensity: 0.5 });
+      const soffitMat = std('canopy_soffit', { color: 0x0b0d12, emissive: 0xbfe0ff, emissiveIntensity: 0.55 });
+      // glass double doors set into the opening + slim handles
+      for (const sx of [-1, 1]) {
+        rbox(`prop_entrance_door_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 0.82, 1.1, ez, 1.58, 2.18, 0.05, M.glassDC, 0, 0.02);
+        box(`prop_entrance_handle_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 0.16, 1.1, ez - 0.06, 0.04, 0.5, 0.04, M.metal);
+      }
+      // raised plinth + lit threshold mat just outside the doors (entrance gravitas)
+      box('prop_entrance_plinth', 20, -0.02, ez - 0.7, 8.6, 0.12, 1.7, M.metal);
+      box('prop_entrance_step', 20, -0.07, ez - 1.85, 7.6, 0.1, 0.6, M.metal);
+      box('prop_entrance_sill', 20, 0.055, ez - 0.7, 3.5, 0.03, 1.5, sillMat);
+      // cantilevered GLASS portico/canopy projecting over the walk
+      const cz = ez - 2.1;
+      rbox('prop_canopy', 20, 3.04, cz, 6.4, 0.1, 4.6, M.glassDC, 0, 0.04);   // glass roof panel
+      for (const [n, fx, fz, fsx, fsz] of [['s', 0, 2.3, 6.4, 0.1], ['w', -3.2, 0, 0.1, 4.6], ['e', 3.2, 0, 0.1, 4.6]])
+        box(`prop_canopy_frame_${n}`, 20 + fx, 3.04, cz + fz, fsx, 0.14, fsz, M.metal);   // slim edge frame (front edge = fascia)
+      box('prop_canopy_soffit', 20, 2.92, cz, 5.8, 0.03, 4.0, soffitMat);   // recessed downlight panel
+      box('prop_canopy_fascia', 20, 3.02, cz - 2.34, 6.4, 0.72, 0.08, M.prop);
+      textPanel('prop_entrance_sign', '110lymph.nl', 4.4, 0.62, 20, 3.02, cz - 2.4, 180, '#dff0ff', 'bold 58px sans-serif');
+      for (const sx of [-1, 1]) {                         // support columns at the canopy's outer corners
+        cyl(`prop_canopy_col_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 2.9, 1.5, cz - 2.1, 0.13, 3.0, M.metal, 16);
+        // bollard lights flanking the door
+        cyl(`prop_bollard_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 2.9, 0.45, ez - 0.9, 0.08, 0.9, M.metal, 10);
+        const bl = sphere(`prop_bollard_glow_${sx > 0 ? 'r' : 'l'}`, 20 + sx * 2.9, 0.93, ez - 0.9, 0.1, M.ringWarm.clone(), 0.7, 8, 6);
+        bl.material = bl.material.clone(); bl.material.emissiveIntensity = 1.2; bl.material.name = 'bollard_glow';
+      }
     }
     // hedges + entrance planters
     for (let i = 0; i < 10; i++) {

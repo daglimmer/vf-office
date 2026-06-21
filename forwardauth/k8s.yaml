@@ -1,0 +1,81 @@
+# ForwardAuth — deploy reference (apply by Ray/Marcus). namespace: mission-control
+# Order of middlewares on a protected IngressRoute: [strip-auth-headers, forwardauth]
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: forwardauth-keys
+  namespace: mission-control
+type: Opaque
+stringData:
+  # Preferred: pre-hashed, no raw keys at rest. Map sha256(key) -> agent-id.
+  # Generate a hash:  printf '%s' "<raw-key>" | sha256sum
+  AGENT_KEY_HASHES: |
+    {
+      "REPLACE_sha256hex_for_marcus": "marcus",
+      "REPLACE_sha256hex_for_oly": "oly"
+    }
+  # (Alternative for convenience — raw keys, hashed at startup; do NOT use both for the same agent)
+  # AGENT_KEYS: '{"netwatch":"<raw-key>"}'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forwardauth
+  namespace: mission-control
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: forwardauth } }
+  template:
+    metadata: { labels: { app: forwardauth } }
+    spec:
+      containers:
+        - name: forwardauth
+          image: 10.75.1.211:30500/forwardauth:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - { name: PORT, value: "8080" }
+            - { name: ENFORCE, value: "false" }          # Phase 0 = permissive; flip to "true" at Phase 2
+            - { name: ORG_DEFAULT, value: "110lymph" }
+            - { name: DEX_ISSUER, value: "https://olympus.110lymph.nl/dex" }
+          envFrom:
+            - secretRef: { name: forwardauth-keys }
+          readinessProbe: { httpGet: { path: /healthz, port: 8080 }, initialDelaySeconds: 3 }
+          livenessProbe:  { httpGet: { path: /healthz, port: 8080 }, periodSeconds: 30 }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forwardauth
+  namespace: mission-control
+spec:
+  selector: { app: forwardauth }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+# Anti-spoof (v2-2 / v3-3): clear any client-supplied X-Auth-* BEFORE forwardauth.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-auth-headers
+  namespace: mission-control
+spec:
+  headers:
+    customRequestHeaders:
+      X-Auth-User: ""
+      X-Auth-Org: ""
+      X-Auth-Method: ""
+      X-Auth-Role: ""
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: forwardauth
+  namespace: mission-control
+spec:
+  forwardAuth:
+    address: http://forwardauth.mission-control.svc.cluster.local:8080/verify
+    authResponseHeaders:
+      - X-Auth-User
+      - X-Auth-Org
+      - X-Auth-Method
+      - X-Auth-Role

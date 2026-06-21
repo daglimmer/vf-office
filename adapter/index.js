@@ -32,36 +32,13 @@ const ENV = (k, d) => process.env[k] ?? d;
 const DB_PATH = ENV('HERMES_DB', '/root/.hermes/kanban.db');
 const HOST = ENV('HOST', '127.0.0.1');
 const PORT = parseInt(ENV('PORT', '3000'), 10);
+const GATEWAY_URL = ENV('GATEWAY_URL', 'http://10.11.1.120:7100');   // live agent telemetry (status/model/provider)
+const WORKSPACE_URL = ENV('WORKSPACE_URL', 'http://10.11.1.120:8766'); // Hermes "VF Olympus API" — single source for per-agent COST (/api/costs)
+const FABLE_API_URL = ENV('FABLE_API_URL', 'http://cost-cache-proxy.mission-control.svc.cluster.local'); // agent-truth: status/state from state.db
 const CONFIG_DIR = ENV('CONFIG_DIR', path.join(ROOT, 'config'));
-const FABLE_API_URL = ENV('FABLE_API_URL', 'http://cost-cache-proxy.mission-control.svc.cluster.local');
 const PUBLIC_DIR = ENV('PUBLIC_DIR', path.join(ROOT, 'public'));
 const STATE_FILE = ENV('STATE_FILE', path.join(ROOT, 'state.json'));
 const SIGNALD_SOCK = ENV('SIGNALD_SOCK', '/run/hermes-office/signald.sock');
-
-// ------------------------------------------------------------------ fable-api agent-truth overlay (B2 deploy spec)
-let _fableCache = null;
-let _fableCacheAt = 0;
-const FABLE_CACHE_TTL = 30000; // 30s — snappier than cost (60s) for working/idle
-
-function fetchFableAgents() {
-  return new Promise((resolve) => {
-    if (_fableCache && Date.now() - _fableCacheAt < FABLE_CACHE_TTL) return resolve(_fableCache);
-    const req = http.get(FABLE_API_URL + '/api/agents', { timeout: 5000 }, (res) => {
-      let body = '';
-      res.on('data', (c) => body += c);
-      res.on('end', () => {
-        try {
-          const arr = JSON.parse(body);
-          const m = new Map(arr.map(a => [a.id, a]));
-          _fableCache = m; _fableCacheAt = Date.now();
-          resolve(m);
-        } catch { resolve(_fableCache || new Map()); }
-      });
-    });
-    req.on('error', () => resolve(_fableCache || new Map()));
-    req.setTimeout(5000, () => { req.destroy(); resolve(_fableCache || new Map()); });
-  });
-}
 
 const log = (...a) => console.log(new Date().toISOString(), '[adapter]', ...a);
 
@@ -79,8 +56,46 @@ try {
   const found = candidates.find(f => { try { return fs.existsSync(f); } catch { return false; } });
   if (found) topology = JSON.parse(fs.readFileSync(found, 'utf8'));
 } catch (e) { /* keep topology null → legacy logic */ }
-const TOPO_GROUP = {}; // agentId -> group label
-for (const g of (topology && topology.groups) || []) for (const id of g.agents || []) TOPO_GROUP[id] = g.label;
+const TOPO_GROUP = {}; // agentId (lowercase) -> group label, from canonical topology.json
+for (const g of (topology && topology.groups) || []) for (const id of g.agents || []) TOPO_GROUP[String(id).toLowerCase()] = g.label;
+console.log(`[adapter] topology ${topology ? 'loaded' : 'NOT FOUND — legacy grouping'}: ${Object.keys(TOPO_GROUP).length} agents mapped (oly=${TOPO_GROUP['oly'] ?? '?'}, sentinel=${TOPO_GROUP['sentinel'] ?? '?'})`);
+
+// Hermes profile model resolution — authoritative source for model/provider assignments.
+// The Gateway may report stale model info; Hermes profile config.yaml is ground truth.
+const HERMES_PROFILES_DIR = path.dirname(DB_PATH);  // ~/.hermes/  — profiles live under ~/.hermes/profiles/
+let _profileModels = { at: 0, map: new Map() };  // agentId -> { model, provider, base_url }
+function readProfileModel(agentId) {
+  const configPath = path.join(HERMES_PROFILES_DIR, 'profiles', agentId, 'config.yaml');
+  try {
+    if (!fs.existsSync(configPath)) return null;
+    const lines = fs.readFileSync(configPath, 'utf8').split('\n');
+    let inModel = false;
+    let model = null, provider = null, baseUrl = null;
+    for (const line of lines) {
+      if (/^model:\s*$/.test(line)) { inModel = true; continue; }
+      if (inModel && /^\S/.test(line)) break;  // exit model section
+      if (!inModel) continue;
+      const m = line.match(/^\s+model:\s*(.+)\s*$/);
+      if (m) model = m[1].trim();
+      const p = line.match(/^\s+provider:\s*(.+)\s*$/);
+      if (p) provider = p[1].trim();
+      const b = line.match(/^\s+base_url:\s*(.+)\s*$/);
+      if (b) baseUrl = b[1].trim();
+    }
+    if (model || provider) return { model, provider, baseUrl };
+  } catch (e) { /* ignore — profile may not exist */ }
+  return null;
+}
+function profileModelMap() {
+  if (Date.now() - _profileModels.at < 60000) return _profileModels.map;  // cache 60s
+  const m = new Map();
+  for (const id of agents.keys()) {
+    const pm = readProfileModel(id);
+    if (pm) m.set(id, pm);
+  }
+  _profileModels = { at: Date.now(), map: m };
+  return m;
+}
 
 // Phase 6: StoreKeeper backup source + docs portal roots
 const { readBackups } = require('./sources/storekeeper');
@@ -99,7 +114,7 @@ const DOCS_ROOTS = {};
 const SQL = Object.assign({
   events:   "SELECT id, task_id, kind, payload, created_at FROM task_events WHERE id > ? ORDER BY id LIMIT 500",
   comments: "SELECT id, task_id, author, body, created_at FROM task_comments WHERE id > ? ORDER BY id LIMIT 200",
-  tasks:    "SELECT id, title, status, assignee, priority FROM tasks WHERE status != 'Archive'",
+  tasks:    "SELECT * FROM tasks WHERE status NOT IN ('archived','Archive')",
 }, mapping.sql || {});
 const EVENT_TYPES = Object.assign({
   created: 'card.created', status_changed: 'card.moved', deleted: 'card.deleted',
@@ -153,7 +168,10 @@ function wsFrame(str) {
 function wsSend(sock, obj) { try { sock.write(wsFrame(JSON.stringify(obj))); } catch {} }
 function broadcast(obj) {
   const frame = wsFrame(JSON.stringify(obj));
-  for (const c of clients) { try { c.write(frame); } catch {} }
+  for (const c of clients) {
+    try { c.write(frame); }
+    catch { clients.delete(c); try { c.destroy(); } catch {} }   // dead socket: prune, don't just swallow
+  }
   notify(obj);
 }
 
@@ -191,11 +209,38 @@ function handleUpgrade(req, sock) {
 }
 
 // ------------------------------------------------------------------ snapshot
-let db = null;
+let db = null;       // read-only — used by snapshot/timeline/agent queries
+let writeDb = null;  // read-write — used by POST /api/kanban/items (dir must be writable)
 function openDb() {
   db = new DatabaseSync(DB_PATH, { readOnly: true });
   db.exec('PRAGMA busy_timeout = 2000');
+  try {
+    writeDb = new DatabaseSync(DB_PATH, { readOnly: false });
+    writeDb.exec('PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL');
+  } catch (e) {
+    log('WARNING: kanban.db write connection failed — task creation disabled:', e.message);
+  }
 }
+// ---- code-quality pass: health + error propagation. Silent catch blocks used to
+// leave the 3D Office showing stale/empty data with no signal — track failures
+// here, expose them on /health, and surface a `degraded` flag on the snapshot.
+const health = { errors: new Map(), lastSnapshotAt: 0, lastCardCount: 0 };
+function reportErr(key, msg) {
+  health.errors.set(key, { msg: String(msg ?? 'error'), at: Date.now(), count: (health.errors.get(key)?.count ?? 0) + 1 });
+}
+function clearErr(key) { health.errors.delete(key); }
+function healthReport() {
+  return {
+    ok: health.errors.size === 0,
+    errors: [...health.errors.entries()].map(([k, e]) => `${k}: ${e.msg}`),
+    gatewayOk: !health.errors.has('gateway'),
+    gatewayAgeMs: _gw.at ? Date.now() - _gw.at : null,
+    lastSnapshotMs: health.lastSnapshotAt ? Date.now() - health.lastSnapshotAt : null,
+    agents: agents.size,
+    cards: health.lastCardCount,
+  };
+}
+
 function snapshot() {
   const cards = [];
   try {
@@ -203,17 +248,55 @@ function snapshot() {
       cards.push({
         cardId: String(r.id), title: r.title, column: colKey(r.status),
         assignee: r.assignee, priority: r.priority,
+        description: r.body ?? null,                              // tasks.body = the description
+        createdAt: r.created_at                                  // epoch (s or ms) -> ISO for the dashboard
+          ? new Date(r.created_at < 1e12 ? r.created_at * 1000 : r.created_at).toISOString()
+          : null,
       });
     }
-  } catch (e) { log('snapshot query failed:', e.message); }
+    clearErr('snapshot.tasks');
+  } catch (e) { reportErr('snapshot.tasks', e.message); log('snapshot query failed:', e.message); }
+  // Task dependency links with the linked task TITLES resolved — task_links has
+  // only parent_id/child_id, so JOIN tasks so the Kanban UI can show what a
+  // connection means. (Guarded: empty if the table is absent.)
+  let links = [];
+  try {
+    for (const r of db.prepare('SELECT l.parent_id AS parentId, l.child_id AS childId, p.title AS parentTitle, c.title AS childTitle FROM task_links l LEFT JOIN tasks p ON p.id = l.parent_id LEFT JOIN tasks c ON c.id = l.child_id').all()) {
+      links.push({ parentId: String(r.parentId), childId: String(r.childId), parentTitle: r.parentTitle ?? null, childTitle: r.childTitle ?? null });
+    }
+    clearErr('snapshot.links');
+  } catch (e) { reportErr('snapshot.links', e.message); log('snapshot links query failed:', e.message); }
+  // Count blocked cards for the frontend
+  let blockedCount = 0;
+  try {
+    const row = db.prepare("SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'Blocked'").get();
+    blockedCount = row ? Number(row.cnt) : 0;
+  } catch (e) { /* ignore */ }
+  // Dynamic active count: agents with recent heartbeat (last 5 minutes)
+  let activeCount = 0;
+  const activeThreshold = Date.now() - 5 * 60 * 1000;
+  for (const [id] of agents) {
+    const lp = lastPush.get(id);
+    if (lp != null && lp >= activeThreshold) activeCount++;
+    else if (runtime.get(id) === 'ok' && lp == null) activeCount++; // never pushed but runtime says ok
+  }
+  const pmap = profileModelMap();                  // hoisted: was rebuilt per-agent inside the loop
+  health.lastSnapshotAt = Date.now(); health.lastCardCount = cards.length;
   return {
-    event: 'snapshot', ts: now(), cards,
-    agents: [...agents.values()].map(a => ({
-      id: a.id, name: a.name ?? a.id, color: a.color, parent: a.parent ?? null,
-      type: a.type ?? 'agent',                     // 'infrastructure' for VMs (VF #1)
-      ephemeral: a.ephemeral, runtime: runtime.get(a.id) ?? 'ok',
-      fallbackActive: usage.get(a.id)?.fallbackActive ?? false,
-    })),
+    event: 'snapshot', ts: now(), cards, links, blockedCount, activeCount,
+    degraded: health.errors.size > 0,              // error propagation: let the office show "data stale"
+    staleSources: [...health.errors.keys()],
+    agents: [...agents.values()].map(a => {
+      const pcfg = pmap.get(a.id);
+      return {
+        id: a.id, name: a.name ?? a.id, color: a.color, parent: a.parent ?? null,
+        type: a.type ?? 'agent',                     // 'infrastructure' for VMs (VF #1)
+        ephemeral: a.ephemeral, runtime: runtime.get(a.id) ?? 'ok',
+        fallbackActive: usage.get(a.id)?.fallbackActive ?? false,
+        model: pcfg?.model ?? null,
+        provider: pcfg?.provider ?? null,
+      };
+    }),
   };
 }
 
@@ -441,7 +524,7 @@ function agentGroup(a) {
   return 'specialist';
 }
 const GROUP_LABEL = { command:'Command', devops:'DevOps', specialist:'Operations' };
-function agentGroupLabel(a) { return TOPO_GROUP[a.id] ?? GROUP_LABEL[agentGroup(a)] ?? agentGroup(a); }
+function agentGroupLabel(a) { return TOPO_GROUP[String(a.id).toLowerCase()] ?? GROUP_LABEL[agentGroup(a)] ?? agentGroup(a); }
 function agentStatus(id) {
   const rt = runtime.get(id);
   if (rt === 'down' || rt === 'killed') return 'offline';
@@ -451,33 +534,174 @@ function agentStatus(id) {
   if (lp != null && Date.now() - lp > 24 * 3600 * 1000) return 'offline';
   return 'idle';
 }
+// ===================================================================
+// fable-api agent-truth overlay (deploy spec Part B2)
+// Status/state come from per-profile state.db via fable-api → cache-proxy.
+// This is the single truthful source for is-this-agent-alive-and-what-is-it-doing.
+let _fable = { at: 0, map: new Map() };
+async function fableAgentsMap() {
+  if (Date.now() - _fable.at < 30000) return _fable.map;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const r = await fetch(`${FABLE_API_URL}/api/agents`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (r.ok) {
+      const arr = await r.json();
+      const m = new Map(arr.map(a => [a.id, a]));
+      _fable = { at: Date.now(), map: m };
+    }
+  } catch (e) { /* stale-while-revalidate */ }
+  return _fable.map;
+}
+// Live telemetry from the Hermes Gateway (authoritative for status/model/provider).
+// Cached 30s + hard 3s timeout so a slow/down gateway never hangs /api/agents
+// (this also addresses the /api/agents/:id timeout). Falls back to local data.
+let _gw = { at: 0, map: new Map() };
+async function gatewayMap() {
+  if (Date.now() - _gw.at < 30000) return _gw.map;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch(`${GATEWAY_URL}/heartbeats`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (r.ok) {
+      const arr = await r.json();
+      const m = new Map();
+      for (const h of (Array.isArray(arr) ? arr : [])) m.set(h.id, h);
+      _gw = { at: Date.now(), map: m };
+      clearErr('gateway');                           // recovered → /health goes green
+    } else {
+      reportErr('gateway', `heartbeats HTTP ${r.status}`);   // non-OK was silent before
+    }
+  } catch (e) {
+    // stale-while-revalidate: keep serving the last good map, but SURFACE that it's stale
+    reportErr('gateway', e.message);
+    log('gateway heartbeats fetch failed:', e.message);
+  }
+  return _gw.map;
+}
+
+// Per-agent COST — single source of truth is Hermes (/api/costs on the workspace-server).
+// Replaces direct per-agent state.db reads so the drill-down shows the SAME numbers as the
+// dashboard Cost page (one source per kind of data). Cached 60s.
+let _hcost = { at: 0, map: new Map() };
+async function hermesCostMap() {
+  if (Date.now() - _hcost.at < 60000) return _hcost.map;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(`${WORKSPACE_URL}/api/costs`, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (r.ok) {
+      const j = await r.json();
+      const m = new Map();
+      for (const a of (j.agents || [])) {
+        m.set(String(a.name).toLowerCase(), {
+          sessions24h: a.sessions_24h ?? 0,
+          tokensToday: a.tokens_24h ?? 0,
+          costUsd: a.cost_24h ?? 0,
+        });
+      }
+      _hcost = { at: Date.now(), map: m };
+      clearErr('hermes-cost');
+    } else {
+      reportErr('hermes-cost', `costs HTTP ${r.status}`);
+    }
+  } catch (e) {
+    reportErr('hermes-cost', e.message);
+    log('hermes /api/costs fetch failed:', e.message);
+  }
+  return _hcost.map;
+}
+function statusFromLastSeen(iso) {
+  if (!iso) return 'offline';
+  const age = Date.now() - new Date(iso).getTime();
+  if (age < 120000) return 'online';
+  if (age < 1800000) return 'idle';
+  return 'offline';
+}
+function taskRow(r) {
+  return {
+    id: r.id, title: r.title, status: r.status, assignee: r.assignee,
+    priority: r.priority, body: r.body ?? null, createdBy: r.created_by ?? null,
+    createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
+    idempotencyKey: r.idempotency_key ?? null
+  };
+}
+
+// /api/agents — a SUPERSET endpoint: anchors + identity from agents.json (for the
+// 3D office) merged with live status/model/provider from the Gateway (for the
+// dashboard). One endpoint serves both, so the ingress can route /api/agents here.
+// Status/state: fable-api (agent-truth, per-profile state.db). Model/provider: gateway.
 async function agentRoster() {
-  const fable = await fetchFableAgents();
+  const [fable, gw, pm] = await Promise.all([fableAgentsMap(), gatewayMap(), Promise.resolve(profileModelMap())]);
   return [...agents.values()].map(a => {
     const f = fable.get(a.id) || {};
+    const h = gw.get(a.id) || {};
+    const u = usage.get(a.id) || {};
+    const pcfg = pm.get(a.id);
+    const lastSeen = f.lastSeen ?? h.last_seen ?? (lastPush.has(a.id) ? new Date(lastPush.get(a.id)).toISOString() : null);
+    // Authoritative model: Hermes profile config > fable > gateway > usage
+    const model = pcfg?.model ?? f.model ?? h.model ?? u.modelName ?? null;
+    const provider = pcfg?.provider ?? f.provider ?? h.provider ?? u.modelProvider ?? null;
     return {
       id: a.id, name: a.name ?? a.id, color: a.color ?? null,
       role: a.role ?? null, group: agentGroupLabel(a),
-      status: f.status ?? agentStatus(a.id),
+      // Status/state from fable-api (the truthful source from state.db heartbeats)
+      status: f.status ?? (h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(a.id)),
       state: f.state ?? null,
       taskId: f.taskId ?? null,
       taskTitle: f.taskTitle ?? null,
-      lastSeen: f.lastSeen ?? (lastPush.has(a.id) ? new Date(Math.floor(lastPush.get(a.id) / 1000) * 1000).toISOString() : null),
       lastActive: f.lastActive ?? null,
-      model: f.model ?? null,
-      provider: f.provider ?? null,
+      lastSeen,
       anchor: a.anchor ?? null,
+      model, provider,
+      // Gateway raw data preserved for debugging — shows what the gateway last saw
+      reportedModel: h.model ?? u.modelName ?? null,
+      reportedProvider: h.provider ?? u.modelProvider ?? null,
     };
   });
 }
 
 // ------------------------------------------------------------------ agent detail (Phase 7b - /api/agents/:id)
+// Cache for session stats per agent (60s TTL) to avoid hitting state.db every request
+let _sessionStats = { at: 0, map: new Map() };  // agentId -> { sessions24h, tokensToday, costUsd }
+function readSessionStats(agentId) {
+  if (Date.now() - _sessionStats.at < 60000) return _sessionStats.map.get(agentId) ?? null;
+  // Refresh all agents in one pass
+  const m = new Map();
+  for (const id of agents.keys()) {
+    const stateDbPath = path.join(HERMES_PROFILES_DIR, 'profiles', id, 'state.db');
+    try {
+      if (!fs.existsSync(stateDbPath)) continue;
+      const sdb = new DatabaseSync(stateDbPath, { readOnly: true });
+      try {
+        const cut = (Date.now() - 24 * 3600 * 1000) / 1000;  // state.db uses Unix seconds
+        const sess = sdb.prepare(
+          'SELECT COUNT(*) AS cnt, COALESCE(SUM(input_tokens),0) + COALESCE(SUM(output_tokens),0) AS totalTokens, COALESCE(SUM(estimated_cost_usd),0) AS totalCost FROM sessions WHERE started_at >= ?'
+        ).get(cut);
+        m.set(id, {
+          sessions24h: sess ? Number(sess.cnt) : 0,
+          tokensToday: sess ? Number(sess.totalTokens) : 0,
+          costUsd: sess ? Number(sess.totalCost) : 0,
+        });
+      } finally { sdb.close(); }
+    } catch (e) { /* ignore — no state.db or can't read */ }
+  }
+  _sessionStats = { at: Date.now(), map: m };
+  return m.get(agentId) ?? null;
+}
+
 async function agentDetail(id) {
   const a = agents.get(id);
   if (!a) return null;
-  const fable = await fetchFableAgents();
-  const f = fable.get(id) || {};
   const u = usage.get(id) ?? {};
+  const [fableMap, gwMap, costMap] = await Promise.all([fableAgentsMap(), gatewayMap(), hermesCostMap()]);
+  const f = fableMap.get(id) || {};
+  const h = gwMap.get(id) || {};
+  const pcfg = profileModelMap().get(id);
+  const ss = costMap.get(id.toLowerCase()) ?? null; // cost: single source = Hermes /api/costs
   const cut = Date.now() - 24 * 3600 * 1000;
   let tasks = [];
   try {
@@ -485,20 +709,31 @@ async function agentDetail(id) {
       .all(id, a.name ?? id)
       .map(r => ({ cardId: String(r.id), title: r.title, status: colKey(r.status) }));
   } catch (e) { log('agent detail task query failed:', e.message); }
+  // Model: Hermes profile config > fable > gateway > usage
+  const model = pcfg?.model ?? f.model ?? h.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null));
+  const provider = pcfg?.provider ?? f.provider ?? h.provider ?? u.modelProvider ?? null;
+  // Sessions/tokens/cost from Hermes /api/costs (single source); pushHist only as a last resort.
+  const sessions24h = ss?.sessions24h ?? (pushHist.get(id) ?? []).filter(t => t >= cut).length;
+  const tokensToday = ss?.tokensToday ?? u.tokens ?? null;
+  const costUsd = ss?.costUsd ?? u.costUsd ?? null;
   return {
     ok: true,
     id, name: a.name ?? id, color: a.color ?? null,
     role: a.role ?? null, group: agentGroupLabel(a), parent: a.parent ?? null,
-    status: f.status ?? agentStatus(id), state: f.state ?? null,
-    taskId: f.taskId ?? null, taskTitle: f.taskTitle ?? null,
-    runtime: runtime.get(id) ?? 'ok',
-    model: f.model ?? (u.fallbackActive ? (u.fallbackModel ?? u.modelName ?? null) : (u.modelName ?? null)),
-    provider: f.provider ?? (u.modelProvider ?? null), fallbackActive: u.fallbackActive ?? false,
-    sessions24h: (pushHist.get(id) ?? []).filter(t => t >= cut).length,
-    tokensToday: u.tokens ?? null, costUsd: u.costUsd ?? null,
-    cacheHitRate: u.cacheHitRate ?? null,
-    lastSeen: f.lastSeen ?? (lastPush.has(id) ? new Date(Math.floor(lastPush.get(id) / 1000) * 1000).toISOString() : null),
+    // Status/state from fable-api (agent-truth), runtime from local state
+    status: f.status ?? (h.last_seen ? statusFromLastSeen(h.last_seen) : agentStatus(id)),
+    state: f.state ?? null,
+    taskId: f.taskId ?? null,
+    taskTitle: f.taskTitle ?? null,
     lastActive: f.lastActive ?? null,
+    runtime: runtime.get(id) ?? 'ok',
+    model, provider, fallbackActive: u.fallbackActive ?? false,
+    // Gateway raw data preserved for debugging
+    reportedModel: h.model ?? null,
+    reportedProvider: h.provider ?? null,
+    sessions24h, tokensToday, costUsd,
+    cacheHitRate: u.cacheHitRate ?? null,
+    lastSeen: f.lastSeen ?? h.last_seen ?? (lastPush.has(id) ? new Date(lastPush.get(id)).toISOString() : null),
     tasks,
   };
 }
@@ -560,34 +795,88 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
   try {
-    if (req.method === 'GET' && p === '/agents/usage') {
+    if (req.method === 'GET' && (p === '/agents/usage' || p === '/api/agents/usage')) {
+      const pm = profileModelMap();
       const out = [...agents.keys()].map(id => {
         const u = usage.get(id) ?? {};
+        const ss = readSessionStats(id);
+        const pcfg = pm.get(id);
         const hb = lastPush.has(id) ? Math.floor((Date.now() - lastPush.get(id)) / 1000) : null;
         return {
-          agentId: id, tokens: u.tokens ?? null, costUsd: u.costUsd ?? null,
-          modelName: u.modelName ?? null, modelProvider: u.modelProvider ?? null,
+          agentId: id,
+          tokens: ss?.tokensToday ?? u.tokens ?? null,
+          costUsd: ss?.costUsd ?? u.costUsd ?? null,
+          sessions24h: ss?.sessions24h ?? null,
+          modelName: pcfg?.model ?? u.modelName ?? null,
+          modelProvider: pcfg?.provider ?? u.modelProvider ?? null,
           cacheHitRate: u.cacheHitRate ?? null, fallbackActive: u.fallbackActive ?? false,
           fallbackModel: u.fallbackModel ?? null, heartbeatAge: hb, windowStart: u.windowStart ?? null,
         };
       });
       return json(res, 200, out);
     }
-    if (req.method === 'POST' && p === '/agents/usage') {
+    if (req.method === 'POST' && (p === '/agents/usage' || p === '/api/agents/usage')) {
       const body = await readBody(req);
       for (const rec of Array.isArray(body) ? body : [body]) intakeUsage(rec);
       return json(res, 200, { status: 'ok' });
     }
+    if (req.method === 'POST' && p === '/api/kanban/items') {       // direct DB insert; Hermes dispatcher auto-picks 'ready' tasks
+      const b = await readBody(req);
+      if (!b || !b.title) return json(res, 400, { ok: false, error: 'title required' });
+      if (!writeDb) return json(res, 503, { ok: false, error: 'kanban.db not writable' });
+      try {
+        // idempotency: if dispatch approval sent twice, return existing task
+        if (b.idempotencyKey) {
+          const existing = writeDb.prepare('SELECT * FROM tasks WHERE idempotency_key = ?').get(String(b.idempotencyKey));
+          if (existing) return json(res, 200, { ok: true, task: taskRow(existing), idempotent: true });
+        }
+        const id = 't_' + crypto.randomBytes(4).toString('hex');
+        const now = Date.now();
+        writeDb.prepare(`INSERT INTO tasks (id, title, body, assignee, status, priority, created_by, created_at, idempotency_key, workspace_kind)
+          VALUES (?, ?, ?, ?, 'ready', ?, ?, ?, ?, 'scratch')`)
+          .run(id, String(b.title), String(b.body ?? ''), String(b.assignee ?? 'unassigned'),
+               b.priority != null ? Number(b.priority) : 0,
+               String(b.createdBy ?? 'dashboard'), now,
+               b.idempotencyKey ? String(b.idempotencyKey) : null);
+        const task = { id, title: String(b.title), status: 'ready', assignee: String(b.assignee ?? 'unassigned'),
+                       priority: b.priority != null ? Number(b.priority) : 0, createdBy: String(b.createdBy ?? 'dashboard'),
+                       createdAt: new Date(now).toISOString() };
+        log('kanban task created:', id, '→', task.assignee);
+        return json(res, 201, { ok: true, task });
+      } catch (e) { log('kanban create failed:', e.message); return json(res, 502, { ok: false, error: e.message }); }
+    }
+    if (req.method === 'GET' && p === '/health') {                                       // code-quality pass: surface silent failures
+      const h = healthReport();
+      return json(res, h.ok ? 200 : 503, { status: h.ok ? 'ok' : 'degraded', ...h });
+    }
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
-    if (req.method === 'GET' && p === '/api/agents') return json(res, 200, await agentRoster());                // Phase 6 + agent-truth
-    const adet = p.match(/^\/api\/agents\/([\w.\-]+)$/);                                                   // Phase 7b + agent-truth
+    if (req.method === 'GET' && p === '/api/agents') return json(res, 200, await agentRoster());           // Phase 6
+    const adet = p.match(/^\/api\/agents\/([\w.\-]+)$/);                                                   // Phase 7b
     if (req.method === 'GET' && adet) {
       const d = await agentDetail(adet[1]);
       return d ? json(res, 200, d) : json(res, 404, { ok: false, error: 'unknown agent' });
     }
     if (req.method === 'GET' && p === '/api/docs/tree') return json(res, 200, docsTree());                // Phase 6
+    if (req.method === 'GET' && p === '/api/admin/accounts') {             // Phase 2 — admin visibility
+      const candidates = [path.join(CONFIG_DIR, 'dex-state.json'), '/root/.hermes/dex-state.json'];
+      const df = candidates.find(f => { try { return fs.existsSync(f); } catch { return false; } });
+      if (df) { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(fs.readFileSync(df, 'utf8')); }
+      return json(res, 404, { error: 'dex-state.json not found' });
+    }
+    if (req.method === 'POST' && p === '/api/admin/log-login') {          // Phase 2 — ForwardAuth login logging
+      const candidates = [path.join(CONFIG_DIR, 'dex-state.json'), '/root/.hermes/dex-state.json'];
+      const df = candidates.find(f => { try { return fs.existsSync(f); } catch { return false; } });
+      if (!df) return json(res, 404, { error: 'dex-state.json not found' });
+      const entry = await readBody(req);
+      if (!entry.email) return json(res, 400, { error: 'email required' });
+      const data = JSON.parse(fs.readFileSync(df, 'utf8'));
+      data.loginActivity.push(entry);
+      if (data.loginActivity.length > 100) data.loginActivity = data.loginActivity.slice(-100);
+      fs.writeFileSync(df, JSON.stringify(data, null, 2));
+      return json(res, 200, { ok: true });
+    }
     if (req.method === 'GET' && p === '/api/docs/file') return docsFile(res, url.searchParams.get('path'));
     if (req.method === 'GET' && p === '/mapping.json') {
       return json(res, 200, { models: mapping.models ?? {}, budgets: mapping.budgets ?? {}, dashboardUrl: mapping.dashboardUrl ?? '' });   // Phase 8

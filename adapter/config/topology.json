@@ -1,0 +1,48 @@
+{
+  "$comment": "CANONICAL TOPOLOGY (Phase 5 / Project E, step E1). Single source of truth for groups -> agents -> rooms/desks across the 3D office, dashboard, and docs. Group/agent assignments mirror the LIVE Hermes Gateway (https://olympus.110lymph.nl/api/agents) as of 2026-06-17 — they intentionally deviate from the illustrative example in 05-master-spec-v5.md, which did not match runtime. NOTE: this file is not yet wired into any consumer; E2 (office), E3 (dashboard), E4 (adapter) must adopt it via dual-read + live verification before old sources (waypoints.json labels, GROUP_ORDER arrays) are removed (E6).",
+  "version": 1,
+  "groups": [
+    {
+      "id": "command",
+      "label": "Command",
+      "color": "#58a6ff",
+      "order": 0,
+      "rooms": ["control"],
+      "agents": ["marcus", "oly", "sentinel"]
+    },
+    {
+      "id": "devops",
+      "label": "DevOps",
+      "color": "#3fb950",
+      "order": 1,
+      "rooms": ["devops"],
+      "agents": ["devops", "devops-api", "devops-app", "devops-infra"]
+    },
+    {
+      "id": "operations",
+      "label": "Operations",
+      "color": "#d29922",
+      "order": 2,
+      "rooms": ["staff"],
+      "agents": [
+        "deploybot",
+        "finwise",
+        "homeassistant",
+        "k8slearn",
+        "netwatch",
+        "proxguard",
+        "storekeeper"
+      ]
+    }
+  ],
+  "rooms": {
+    "control":  { "label": "Command Center",    "roomNode": "control",  "color": "#58a6ff", "deskPrefixes": ["ollie_station"] },
+    "devops":   { "label": "DevOps Office",      "roomNode": "devops",   "color": "#3fb950", "deskPrefixes": ["work_desk_"] },
+    "staff":    { "label": "Operations Office",  "roomNode": "staff",    "color": "#d29922", "deskPrefixes": ["doc_desk_"] },
+    "ceo":      { "label": "CEO Office",         "roomNode": "ceo",      "color": "#58a6ff", "deskPrefixes": ["ceo_desk"] },
+    "meeting":  { "label": "Meeting Room",       "roomNode": "meeting",  "color": "#f78166", "deskPrefixes": ["meet_seat_"] },
+    "lounge":   { "label": "Lounge",             "roomNode": "lounge",   "color": "#8b949e", "deskPrefixes": ["lounge_seat_"] },
+    "corridor": { "label": "Corridor",           "roomNode": "corridor", "color": "#8b949e", "deskPrefixes": [] },
+    "dc":       { "label": "Data Center",        "roomNode": "dc",       "color": "#8b949e", "deskPrefixes": ["spawn_dc", "despawn_dc"] }
+  }
+}

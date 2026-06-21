@@ -51,6 +51,9 @@ if (new URLSearchParams(location.search).get('blur') === '0') {
   console.log('[office] blur disabled');
 }
 const QPARAM = new URLSearchParams(location.search).get('q');
+// 9.11: ?nodegrade pins the chosen tier (skips the fps auto-degrade watchdog) -
+// lets us hold high quality on weak GPUs to compare against the offline renders.
+const NODEGRADE = new URLSearchParams(location.search).get('nodegrade') !== null;
 let Q = QPARAM ?? (() => { try { return localStorage.getItem('officeQ'); } catch { return null; } })() ?? 'high';
 if (Q !== 'low' && Q !== 'high') Q = 'high';
 // explicit ?q= choice is sticky (overrides any earlier auto-degrade decision)
@@ -125,7 +128,31 @@ renderer.toneMappingExposure = 1.3;                       // Phase 5 (1): bright
 document.getElementById('view').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d0f13);
+// Phase A (lighting): dusk sky instead of a flat-black void. An equirectangular
+// vertical gradient stays horizon-aligned from any camera angle, and its palette
+// continues office.js's dusk skyline (top #070b18 -> warm horizon -> dark ground)
+// so the city backdrop reads as haze on a real sky, not a band floating in black.
+function makeDuskSky() {
+  const cv = document.createElement('canvas');
+  cv.width = 8; cv.height = 512;
+  const g = cv.getContext('2d');
+  // NB: the skyline planes are opaque up to ~+37 deg elevation, so the band that
+  // actually shows above the city silhouette is the UPPER sky (canvas ~0.30-0.46).
+  // Keep that readably dusk-blue, not near-black, or the change is invisible.
+  const grad = g.createLinearGradient(0, 0, 0, 512);     // top = zenith, bottom = nadir
+  grad.addColorStop(0.00, '#0b1024');                    // zenith: dusk indigo (lifted off black)
+  grad.addColorStop(0.30, '#121a36');                    // high sky
+  grad.addColorStop(0.44, '#1e2444');                    // just above the skyline tops (visible band)
+  grad.addColorStop(0.50, '#3a3550');                    // horizon: subtle warm dusk (peeks at gaps)
+  grad.addColorStop(0.60, '#10131f');                    // just below horizon
+  grad.addColorStop(1.00, '#080a10');                    // nadir: dark ground side
+  g.fillStyle = grad; g.fillRect(0, 0, 8, 512);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+scene.background = makeDuskSky();
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 300);
 camera.position.set(20, 28, 44);
 
@@ -254,7 +281,7 @@ hemiLight.intensity = 1.05; hemiLight.color.set(0xcfd9ee);
 key.intensity = 0.55;
 renderer.toneMappingExposure = 1.15;                        // glare pass: was 1.22
 bloom.strength = 0.25; bloom.threshold = 0.9;               // glare pass: was 0.45 / 0.82
-scene.fog = new THREE.Fog(0x0d0f13, 30, 100);
+scene.fog = new THREE.Fog(0x141a2e, 28, 105);              // Phase A: dusk-blue haze (was flat 0x0d0f13)
 
 // (legacy 2x emissive boost removed - office.js materials are pre-tuned)
 
@@ -634,7 +661,7 @@ class Agent {
     if (sim.followed === this) sim.followAgent(null);
   }
   update(dt) {
-    this.t += dt;
+    this.t += dt * (this.speedMul ?? 1);                  // gait clock scales with walk speed
     if (this.fx) {
       this.fx.t += dt; const k = Math.min(this.fx.t / TIMINGS.fx, 1);
       if (this.fx.kind === 'spawn') {            // 8d: pure fade, zero scale tricks
@@ -664,9 +691,17 @@ class Agent {
         this.path.shift();
         if (!this.path.length) { this.pose = 'idle'; if (this.onArrive) { const f = this.onArrive; this.onArrive = null; f(); } }
       } else {
-        this.group.position.addScaledVector(d.normalize(), Math.min(WALK_SPEED * dt, dist));
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(-d.x, -d.z));
-        this.group.quaternion.slerp(q, Math.min(TURN_SPEED * dt, 1));
+        this.group.position.addScaledVector(d.normalize(), Math.min(WALK_SPEED * (this.speedMul ?? 1) * dt, dist));
+        // Turn toward travel by easing the YAW in clean Euler space (x and z stay
+        // 0). Slerping the quaternion let Three decompose a ~180deg heading to
+        // Euler (pi, 0, pi); animateHumanoid then eased rotation.x -> 0 with z still
+        // pi, pitching the rig face-down so the head sank through the floor (only
+        // for agents heading near +/-z). Same clean-yaw fix sitAt() already uses.
+        const targetYaw = Math.atan2(-d.x, -d.z);
+        let dy = targetYaw - this.group.rotation.y;
+        while (dy > Math.PI) dy -= 2 * Math.PI;
+        while (dy < -Math.PI) dy += 2 * Math.PI;
+        this.group.rotation.set(0, this.group.rotation.y + dy * Math.min(TURN_SPEED * dt, 1), 0);
       }
     }
     if (this.timer != null && !this.blocked && this.overlay === 'ok' && this.seated) {
@@ -681,10 +716,12 @@ class Agent {
     this.animate(dt);
   }
   animate(dt) {                             // Phase 8: humanoid pose driver
-    // aY = floor offset. Anchors sit at Y=0 (floor), but the avatar's seated
-    // hip position (0.46*S) puts the butt at ~0.46 — way above the chair seat
-    // (~0.15-0.20 in the GLB). Negative offset drops them onto the chair.
-    const SEAT_OFFSET = -0.08;
+    // aY = floor offset. Seat anchors sit at Y=0 (floor); animateHumanoid's
+    // foot-lift then raises the rig so the lowest foot rests on the floor, which
+    // also seats the hips (~0.51) onto the procedural chair/couch (seat top
+    // ~0.50-0.53). The old -0.08 was tuned for the LOW seats of the retired GLB
+    // and now sinks agents into the seat + buries their feet. Procedural era: 0.
+    const SEAT_OFFSET = 0.0;
     animateHumanoid(this, this.seated ? anchors.get(this.seated).pos.y + SEAT_OFFSET : 0, dt);
   }
 }
@@ -709,6 +746,7 @@ const sim = {
   flyToAgent(id) { const a = byId.get(id) ?? byCard.get(id); if (a) sim.flyToRoom(a.room()); },
   getAgents: () => agents,
   rooms, anchors, scene, byId, byCard,
+  camera, controls, renderer,                 // Phase A: exposed for visual verification / debug framing
 };
 window.sim = sim;
 
@@ -914,6 +952,20 @@ window.__inject = handleEvent;
 // offline for >24h are removed. Demo mode supplies its own roster instead.
 const ROSTER_PINNED = new Set();          // no hardcoded agents — all dynamic from API
 function rosterRole(g) { return g === 'command' ? 'command' : g === 'specialist' ? 'specialist' : 'devops'; }
+// Target pool by REAL status. NOTE: pool keys are inverted vs rooms (see `pools`):
+//   'doc' = DevOps room (work_desk) · 'work' = Staff room (doc_desk) · 'lounge' · 'meet'
+function rosterPool(st, role) {
+  if (st === 'consulting') return 'meet';
+  if (st === 'documenting') return 'work';                          // staff room
+  if (st === 'online') return role === 'devops' ? 'doc' : 'work';   // devops room : staff room
+  return 'lounge';                                                  // idle / offline → lounge
+}
+// seat order with fallbacks so an agent always gets a seat (never queued at a door)
+function rosterOrder(want) {
+  if (want === 'lounge') return ['lounge', 'work', 'doc'];
+  if (want === 'meet') return ['meet', 'work', 'doc'];
+  return want === 'doc' ? ['doc', 'work', 'lounge'] : ['work', 'doc', 'lounge'];
+}
 async function pollRoster() {
   if (demoMode) return;
   let list;
@@ -936,29 +988,21 @@ async function pollRoster() {
     a.rosterStatus = r.status;
     if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok' && !a.blocked) {
       const anchor = r.anchor && anchors.has(r.anchor) ? r.anchor : null;
-      if (r.status === 'online') {
-        a.setGhost(false);
-        a.state = 'working';
-        if (anchor) { if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, 'type')); }
-        else if (a.heldSlot) {                            // already seated -> wake the desk up
-          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = 1.4;
-        } else if (!a.waitingPool && !a.path.length) {
-          // State-based seating by role, seat-guaranteed (no door pileup):
-          // devops -> big room (work_desk via 'doc' pool), others -> staff room.
-          seatAgent(a, a.role === 'devops' ? ['doc', 'work', 'lounge'] : ['work', 'doc', 'lounge'], 'type', true);
-        }
-      } else {                                            // idle / offline <24h: ghost in place
-        a.setGhost(true);
-        a.state = 'idle';
-        if (anchor) {
-          // go to assigned anchor even when idle (ghosted at desk, not spawn)
-          if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, 'sit'));
-        } else if (a.heldSlot) {                          // stay seated, just dim the desk (resting)
-          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = 0.05;
-        } else if (!a.waitingPool && !a.path.length) {
-          // Idle agents rest at a desk (ghosted), spread across the work rooms,
-          // overflowing to the lounge -- always a seat, never queued.
-          seatAgent(a, ['doc', 'work', 'lounge'], 'sit', false);
+      const st = r.status;                                // online | idle | offline | documenting | consulting
+      const active = st === 'online' || st === 'documenting' || st === 'consulting';
+      a.setGhost(!active);                                // idle/offline → ghosted
+      a.state = active ? 'working' : 'idle';
+
+      // Fixed-anchor agents (marcus/oly/sentinel) stay at their office/station — unless consulting.
+      if (anchor && st !== 'consulting') {
+        if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, active ? 'type' : 'sit'));
+      } else {
+        const want = rosterPool(st, a.role);
+        if (a.heldPool === want) {                        // already in the right place → just adjust the desk glow
+          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = active ? 1.4 : 0.05;
+        } else if (!a.waitingPool && !a.path.length) {    // status changed → release current seat and WALK to the new pool
+          a.releaseSlot();
+          seatAgent(a, rosterOrder(want), st === 'consulting' ? 'talk' : active ? 'type' : 'sit', active);
         }
       }
     } else {
@@ -1076,6 +1120,22 @@ catch (e) { console.error('[moments] init failed:', e); }
 initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents });
 initTimeline({ sim, demo: () => demoMode });
 
+// ----------------------------------------------------------------- security guard
+// A non-roster avatar that patrols the forecourt (reuses the walk system + the
+// face-down/foot-plant fixes). No agentId, so pollRoster never touches it.
+try {
+  const guard = new Agent({ name: 'Security', color: '#ff9e2c', role: 'sentinel', scale: 1.05, startAnchor: 'nav_door_lounge' });
+  guard.isGuard = true; guard.lastNode = null; guard.speedMul = 0.5;   // relaxed patrol amble, not a rush
+  guard.group.position.set(15, 0, -10);
+  const route = [[15, -9.5], [25, -9.5], [25, -12.6], [15, -12.6]];   // forecourt loop, clear of pools/monolith
+  let gi = 0;
+  const patrol = () => {
+    const p = route[gi++ % route.length];
+    guard.gotoPoint(new THREE.Vector3(p[0], 0, p[1]), () => setTimeout(patrol, 900));
+  };
+  patrol();
+} catch (e) { console.warn('[guard] init failed:', e); }
+
 // ----------------------------------------------------------------- loop
 const clock = new THREE.Clock();
 // ---- Phase 9: idle cinematic - after 3 min without input the camera drifts
@@ -1099,7 +1159,7 @@ bootStage('first frame');
 let firstFrame = true;
 // fps watchdog: if high quality cannot hold a usable framerate, drop to low
 // once, remember it, and tell the user how to override (?q=high).
-let fpsFrames = 0, fpsT = 0, fpsChecked = Q === 'low';
+let fpsFrames = 0, fpsT = 0, fpsChecked = Q === 'low' || NODEGRADE;
 function degradeLive() {
   Q = 'low';
   try { localStorage.setItem('officeQ', 'low'); } catch {}

@@ -21,9 +21,10 @@ const HAIRS = [0x241a12, 0x3a2a18, 0x141414, 0x5a4630, 0x6e6862, 0x8a5a2e];
 const hash = s => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
 
 // Phase 8b: capsules instead of tubes - smooth, organic limbs
-const cyl = (r1, r2, h, m, seg = 8) => {
+// Pass F: more radial segments so limbs read sleek, not faceted.
+const cyl = (r1, r2, h, m, seg = 12) => {
   const r = Math.max(r1, r2) * 0.92;
-  return new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.02, h - r * 1.6), 3, Math.max(8, seg)), m);
+  return new THREE.Mesh(new THREE.CapsuleGeometry(r, Math.max(0.02, h - r * 1.6), 4, Math.max(12, seg)), m);
 };
 
 export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedName = '') {
@@ -58,8 +59,9 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedNam
   const torsoG = new THREE.Group(); torsoG.add(torso); hips.add(torsoG);
   parts.torso = torsoG;
   // shoulders (suit silhouette for command) + role trim collar + accent chest dot
-  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.34 * S, 0.09 * S, 0.16 * S), clothMat);
-  shoulders.position.y = 0.55 * S; torsoG.add(shoulders);
+  // Pass F: smooth rounded shoulder yoke (was a hard box)
+  const shoulders = new THREE.Mesh(new THREE.CapsuleGeometry(0.078 * S, 0.19 * S, 4, 14), clothMat);
+  shoulders.rotation.z = Math.PI / 2; shoulders.scale.z = 0.85; shoulders.position.y = 0.55 * S; torsoG.add(shoulders);
   const collar = new THREE.Mesh(new THREE.TorusGeometry(0.105 * S, 0.018 * S, 8, 18), tint);
   collar.rotation.x = Math.PI / 2; collar.position.y = 0.585 * S; torsoG.add(collar);
   const badge = new THREE.Mesh(new THREE.SphereGeometry(0.028 * S, 8, 6), accMat);
@@ -106,8 +108,10 @@ export function buildHumanoid(accentHex, role = 'specialist', scale = 1, seedNam
     const th = cyl(0.052 * S, 0.046 * S, 0.42 * S, clothMat); th.position.y = -0.21 * S; hip.add(th);
     const knee = new THREE.Group(); knee.position.y = -0.42 * S; hip.add(knee);
     const sh = cyl(0.042 * S, 0.036 * S, 0.40 * S, clothMat); sh.position.y = -0.20 * S; knee.add(sh);
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.085 * S, 0.05 * S, 0.17 * S), shoeMat);
-    shoe.position.set(0, -0.43 * S, -0.045 * S); knee.add(shoe);
+    // Pass F: rounded shoe (was a hard box); bottom kept at ~-0.455*S for the foot-plant
+    const shoe = new THREE.Mesh(new THREE.CapsuleGeometry(0.042 * S, 0.1 * S, 4, 10), shoeMat);
+    shoe.rotation.x = Math.PI / 2; shoe.scale.set(1.0, 1.0, 1.15);
+    shoe.position.set(0, -0.415 * S, -0.05 * S); knee.add(shoe);
     parts[sx < 0 ? 'legL' : 'legR'] = hip;
     parts[sx < 0 ? 'shinL' : 'shinR'] = knee;
   }
@@ -201,5 +205,12 @@ export function animateHumanoid(agent, aY, dt) {
   const footY = (hipG, kneeG) => p.hips.position.y
     - LT * Math.cos(hipG.rotation.x) - LF * Math.cos(hipG.rotation.x + kneeG.rotation.x);
   const lowest = Math.min(footY(p.legL, p.shinL), footY(p.legR, p.shinR));
-  agent.group.position.y = aY + bob + Math.max(0, -lowest);
+  // Walking: the lift-only correction (Math.max) left feet hovering above the
+  // floor. Plant the rig at a STEADY height (constant offset, not the per-step
+  // `lowest`, so the body doesn't bounce each stride). Other poses keep lift-only.
+  const WALK_PLANT = 0.08 * S;
+  // EASE the body to the target height (don't snap) — otherwise leaving a seat to
+  // walk reads as the agent "falling" as the height jumps in one frame.
+  const targetY = aY + bob + (agent.pose === 'walk' ? -WALK_PLANT : Math.max(0, -lowest));
+  agent.group.position.y += (targetY - agent.group.position.y) * k;
 }

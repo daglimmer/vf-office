@@ -1,0 +1,14 @@
+{
+  "name": "forwardauth",
+  "version": "1.0.0",
+  "description": "110lymph single auth decision point (Traefik forwardAuth): agent API keys + Dex sessions",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "jose": "^5.9.6"
+  }
+}
