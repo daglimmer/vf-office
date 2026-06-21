@@ -103,6 +103,7 @@ function profileModelMap() {
 // on DeepSeek Pro.
 const MODEL_LABELS = {
   'glm-5.2':         { model: 'GLM-5.2',      provider: 'Ollama' },
+  'glm-5.2:cloud':   { model: 'GLM-5.2',      provider: 'Ollama' },
   'deepseek-v4-pro': { model: 'DeepSeek Pro',  provider: 'DeepSeek' },
   'deepseek-chat':   { model: 'DeepSeek Chat', provider: 'DeepSeek' },
 };
