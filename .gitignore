@@ -6,3 +6,4 @@ Dockerfile.bak
 build.sh
 *.log
 .env
+adapter/state.json
