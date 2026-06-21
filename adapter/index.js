@@ -899,11 +899,19 @@ const server = http.createServer(async (req, res) => {
       const { code, body } = await command(cmd[1], cmd[2], req.headers['x-actor']);
       return json(res, code, body);
     }
-    // static
+    // static — fall back to parent public/ dir for files tracked in repo
     if (req.method === 'GET') {
       let f = path.normalize(path.join(PUBLIC_DIR, p === '/' ? 'index.html' : p));
       if (!f.startsWith(PUBLIC_DIR)) { res.writeHead(403); return res.end(); }
-      if (p === '/waypoints.json' && !fs.existsSync(f)) f = path.join(PUBLIC_DIR, 'waypoints.json');
+      // Check parent public/ dir (tracked in git) before 404ing
+      if (!fs.existsSync(f)) {
+        const parentPublic = path.resolve(ROOT, '..', 'public');
+        const alt = path.normalize(path.join(parentPublic, p === '/' ? 'index.html' : p));
+        if (alt.startsWith(parentPublic) && fs.existsSync(alt) && fs.statSync(alt).isFile()) {
+          res.writeHead(200, { 'Content-Type': MIME[path.extname(alt)] ?? 'application/octet-stream' });
+          return fs.createReadStream(alt).pipe(res);
+        }
+      }
       if (fs.existsSync(f) && fs.statSync(f).isFile()) {
         res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] ?? 'application/octet-stream' });
         return fs.createReadStream(f).pipe(res);
