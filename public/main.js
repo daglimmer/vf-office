@@ -1137,6 +1137,11 @@ async function pollBoardFeed() {
   try {
     const board = await fetch('/api/kanban/board').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
     const snap = boardToSnapshot(board);
+    // Serve-stale on an empty blip: the board is load-balanced across replicas that can momentarily
+    // return 0 cards (cold/empty instance). applySnapshot([]) would diff every card as deleted and
+    // empty the office. The homelab always has cards, so treat 0 as a blip — keep the last-good
+    // placement and retry. (Real cure: single-source the board so replicas can't diverge.)
+    if (snap.cards.length === 0) { setTimeout(pollBoardFeed, 2000); return; }
     boardFeedLive = !!board?.columns;
     if (!boardFeedLogged) {
       const active = [...new Set(snap.cards.filter(c => c.assignee && ACTIVE_COLS.includes(c.column)).map(c => c.assignee))];
