@@ -1114,18 +1114,52 @@ async function httpFallback() {
     wsRetryTimer = setInterval(connect, 15000);            // Phase 6 (1): keep trying to upgrade back to WS
   } catch { startDemo(); }                                 // network error: adapter truly unreachable
 }
+
+// ---------------------------------------------------------------- live card feed (Phase 11, Ray)
+// The bridge migration left the adapter's /ws + /snapshot reading the OLD local kanban.db, which
+// was emptied when its hostPath mount was removed — so the office saw `cards:[]` and froze, while
+// the dashboard board (which Marcus repointed to the bridge) stayed full. Cure = ONE source: drive
+// the office from the SAME endpoint the board uses, /api/kanban/board, and flatten its columns into
+// the {cards:[…]} snapshot the existing applySnapshot()/syncWorkers() pipeline already animates. So
+// a card moving on the board walks its agent in the office, same beat. No demo fallback here: an
+// empty board shows an empty office (truth), never fabricated motion.
+let boardFeedLive = false;
+let boardFeedLogged = false;
+function boardToSnapshot(board) {
+  const cols = board?.columns ?? {};
+  const cards = [];
+  for (const col of Object.keys(cols))
+    for (const c of (cols[col] ?? []))
+      cards.push({ cardId: c.cardId ?? c.id, title: c.title ?? c.cardId ?? c.id, assignee: c.assignee ?? null, column: col });
+  return { event: 'snapshot', cards };
+}
+async function pollBoardFeed() {
+  try {
+    const board = await fetch('/api/kanban/board').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    const snap = boardToSnapshot(board);
+    boardFeedLive = !!board?.columns;
+    if (!boardFeedLogged) {
+      const active = [...new Set(snap.cards.filter(c => c.assignee && ACTIVE_COLS.includes(c.column)).map(c => c.assignee))];
+      console.log(`[office] board feed live: ${snap.cards.length} cards, ${active.length} active assignees (${active.join(', ')})`);
+      boardFeedLogged = true;
+    }
+    applySnapshot(snap);                                    // diff → card.moved animations + populate workers
+  } catch { boardFeedLive = false; /* board endpoint blip — keep last state, retry */ }
+  setTimeout(pollBoardFeed, 2000);
+}
 function startDemo() {
   if (demoMode) return;
   demoMode = true;
   document.getElementById('demobadge').style.display = 'block';
   import('./demo.js').then(d => d.runDemo(handleEvent));
 }
-connect();
+connect();          // WS push — bonus, used the instant /ws is repointed to the bridge
+pollBoardFeed();    // reliable card feed = the live board (the /ws + /snapshot path read the emptied legacy DB)
 
 // Phase 7b (5): dashboard health sync — heartbeat every 30 s while embedded.
-// 'ok' only with a live WebSocket; polling/demo/disconnected count as degraded.
+// Healthy when the live board feed is flowing (the WS is now an optional accelerator, not required).
 if (EMBED) {
-  const beat = () => post({ type: 'heartbeat', status: wsConnected && !demoMode ? 'ok' : 'degraded' });
+  const beat = () => post({ type: 'heartbeat', status: boardFeedLive && !demoMode ? 'ok' : 'degraded' });
   setInterval(beat, 30000);
   setTimeout(beat, 2000);
 }
