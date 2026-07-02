@@ -654,13 +654,22 @@ class Agent {
   }
   enterBriefing() { this.inMeeting = true; briefingCount++; holoTarget = 1.0; }
   leaveBriefing() { if (this.inMeeting) { this.inMeeting = false; briefingCount--; holoTarget = briefingCount > 0 ? 1.0 : 0.25; } }
+  // Phase 11 (Ray): the office is the ONE operations screen — show WHAT each agent is working on
+  // right on the floor (not just on hover). Precedence: a status override (BLOCKED/PAUSED/DOWN) wins;
+  // otherwise the current task title; otherwise name-only. taskTitle is set by syncWorkers from the
+  // live board (and dispatch-approved work, which becomes board cards), so every work source shows here.
+  drawTask() {
+    if (this.blocked || this.overlay === 'paused' || this.overlay === 'down') return; // override owns the label
+    const t = this.taskTitle ? String(this.taskTitle) : null;
+    this.label.userData.draw(null, t ? (t.length > 34 ? t.slice(0, 33) + '…' : t) : undefined);
+  }
   setBlocked(on, reason) {
     if (on && !this.blocked) {
       this.blocked = true; this.savedPath = this.path; this.path = []; this.pose = 'headdown';
       this.label.userData.draw('#FF4D4D', 'BLOCKED');
       this.refreshStatus();
     } else if (!on && this.blocked) {
-      this.blocked = false; this.label.userData.draw(null);
+      this.blocked = false; this.drawTask();   // restore the task label (or name-only) after unblock
       this.setLifecycle(this.lifecycle ?? 'idle');
       this.refreshStatus();
     }
@@ -670,7 +679,7 @@ class Agent {
     if (kind === 'paused') { this.path = []; this.pose = 'sit'; this.label.userData.draw('#FFB02E', 'PAUSED'); }
     if (kind === 'down') { this.path = []; this.pose = 'collapsed'; this.label.userData.draw('#FF4D4D', 'DOWN'); }
     if (kind === 'killed') { this.tintMat.emissive = new THREE.Color('#FF4D4D'); this.fx = { kind: 'despawn', t: 0 }; }
-    if (kind === 'ok') { this.label.userData.draw(null); this.setLifecycle(this.lifecycle ?? 'idle'); }
+    if (kind === 'ok') { this.drawTask(); this.setLifecycle(this.lifecycle ?? 'idle'); }
     this.refreshStatus();
   }
   fallbackFlash() { this.glowT = 3.0; }   // §11.2 emissiveIntensity 1->3->1 over 3s
@@ -906,7 +915,7 @@ function syncWorkers() {
     if (byAss.has(name)) continue;
     workers.delete(name);
     for (const [cid, ag] of [...byCard]) if (ag === w) byCard.delete(cid);
-    w.taskTitle = null; w.cardId = null;
+    w.taskTitle = null; w.cardId = null; w.drawTask();   // released → label back to name-only
     if (w.agentId) { w.state = 'idle'; w.refreshStatus(); }   // roster body: back to roster control
     else w.setLifecycle('debrief');                           // ride the walk-out chain
   }
@@ -942,6 +951,7 @@ function syncWorkers() {
     w.taskTitle = top.title ?? top.cardId;
     const desired = COLUMN_STATE[top.column];
     if (switched || w.lifecycle !== desired) w.setLifecycle(desired);
+    w.drawTask();   // surface WHAT they're working on, on the floor (setBlocked below overrides if blocked)
     const blk = !!top.blocked || top.column === 'blocked' || top.column === 'waiting';
     if (blk !== w.blocked) w.setBlocked(blk, top.reason);
   }
