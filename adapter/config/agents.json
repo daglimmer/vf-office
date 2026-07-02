@@ -1,7 +1,7 @@
 [
   { "id": "marcus",       "name": "CEO Marcus",     "color": "#FFD24D", "anchor": "ceo_desk",        "role": "command" },
-  { "id": "oly",          "name": "COO - Oly",      "color": "#2ECC71", "anchor": "work_desk_01",    "role": "coo" },
-  { "id": "sentinel",     "name": "Sentinel",       "color": "#E74C3C", "anchor": "ollie_station",     "role": "sentinel" },
+  { "id": "oly",          "name": "COO - Oly",      "color": "#2ECC71", "anchor": "ollie_station",   "role": "coo" },
+  { "id": "sentinel",     "name": "Sentinel",       "color": "#E74C3C", "anchor": null,             "role": "sentinel" },
   { "id": "storekeeper",  "name": "Storekeeper",    "color": "#4A90D9", "anchor": null,     "role": "specialist" },
   { "id": "deploybot",    "name": "Deploybot",      "color": "#9B59B6", "anchor": null,     "role": "specialist" },
   { "id": "netwatch",     "name": "NetWatch",       "color": "#E67E22", "anchor": null,     "role": "specialist" },

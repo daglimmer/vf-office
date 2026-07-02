@@ -490,6 +490,26 @@ function queueSpot(door, i) {
   return p;
 }
 
+// ---- Ray's placement rules -------------------------------------------------
+// working → SPREAD across the DC (concrete work, never clustered) · documenting → own office ·
+// blocked/consulting → meeting room (with Oly) · idle → lounge. Marcus/Oly keep their home station.
+const DC_CENTER = new THREE.Vector3(20, 0, 21);
+const _dcIndex = new Map(); let _dcNext = 0;
+function dcSpot(a) {                          // distinct standing spot per agent — a scatter grid in the DC
+  if (!_dcIndex.has(a)) _dcIndex.set(a, _dcNext++);
+  const i = _dcIndex.get(a), cols = 4;
+  const col = i % cols, row = Math.floor(i / cols);
+  return new THREE.Vector3(DC_CENTER.x + (col - (cols - 1) / 2) * 2.5, 0, DC_CENTER.z - 2 + row * 2.2);
+}
+// Place an agent by a status-derived KEY. Returns true when a spot was granted.
+function placeAgent(a, key, glow) {
+  if (key === 'dc')      { a.goto('nav_door_dc', () => a.gotoPoint(dcSpot(a), () => { a.pose = 'idle'; })); return true; } // walk in, then spread
+  if (key === 'blocked') return seatAgent(a, ['meet', 'lounge'], 'sit', false);   // real block → meeting, wait to be unblocked
+  if (key === 'meet')    return seatAgent(a, ['meet', 'lounge'], 'talk', false);  // consulting → meeting (with Oly)
+  if (key === 'doc')     return seatAgent(a, a.role === 'devops' ? ['doc', 'work'] : ['work', 'doc'], 'type', glow); // documenting → own office
+  return seatAgent(a, ['lounge', 'work', 'doc'], 'sit', false);                   // idle → lounge
+}
+
 // ----------------------------------------------------------------- avatar
 // Phase 8 (4): humanoid avatars - jointed mannequins built in avatars.js.
 // Status = small light above the head (statusMat is exposed as headMat so the
@@ -1021,30 +1041,26 @@ async function pollRoster() {
       a.name = nice; a.label.userData.name = nice; a.label.userData.draw(null);
     }
     a.rosterStatus = r.status;
-    if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok' && !a.blocked) {
+    if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok') {
       const anchor = r.anchor && anchors.has(r.anchor) ? r.anchor : null;
       const st = r.status;                                // online | idle | offline | documenting | consulting
-      const active = st === 'online' || st === 'documenting' || st === 'consulting';
-      a.setGhost(!active);                                // idle/offline → ghosted
-      a.state = active ? 'working' : 'idle';
+      const blocked = a.blocked;
+      const active = !blocked && (st === 'online' || st === 'documenting' || st === 'consulting');
+      a.setGhost(!active && !blocked);                    // idle/offline → ghosted (blocked stays solid — it's in a meeting)
+      a.state = blocked ? 'blocked' : active ? 'working' : 'idle';
 
-      // Fixed-anchor agents (marcus/oly/sentinel) stay at their office/station — unless consulting.
-      if (anchor && st !== 'consulting') {
+      // Marcus (ceo_desk) / Oly (control station) keep their home spot — UNLESS blocked or consulting (then they join the meeting).
+      if (anchor && !blocked && st !== 'consulting') {
         if (a.seated !== anchor && !a.path.length) a.goto(anchor, () => a.sitAt(anchor, active ? 'type' : 'sit'));
+        a.placedFor = 'home';
       } else {
-        const want = rosterPool(st, a.role);
-        if (a.heldPool === want) {                        // already in the ideal pool → keep the desk glow honest
-          const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = active ? 1.4 : 0.05;
-          a.placedFor = st;
-        } else if (a.placedFor !== st && !a.waitingPool && !a.path.length) {
-          // Status genuinely CHANGED → release the seat and walk to the new pool. Gate on
-          // placedFor, NOT just "not in the ideal pool": when the ideal pool is full the agent
-          // settles for a fallback seat (heldPool !== want forever), and re-checking that every
-          // 30s poll would make it stand up and re-walk endlessly — the "can't sit still for
-          // five minutes" bug. Only move when the real status actually changes.
+        // Status → where they stand: blocked/consulting → meeting · documenting → own office · working → DC spread · idle → lounge.
+        const key = blocked ? 'blocked' : st === 'consulting' ? 'meet' : st === 'documenting' ? 'doc' : st === 'online' ? 'dc' : 'lounge';
+        if (a.placedFor !== key && !a.waitingPool && !a.path.length) {
+          // Only move when the placement bucket actually CHANGES — a settled agent sits still (anti-churn).
           a.releaseSlot();
-          if (seatAgent(a, rosterOrder(want), st === 'consulting' ? 'talk' : active ? 'type' : 'sit', active)) a.placedFor = st;
-        } else if (a.seated && a.heldSlot) {              // settled (maybe in a fallback seat) → keep the glow honest
+          if (placeAgent(a, key, active)) a.placedFor = key;
+        } else if (key !== 'dc' && a.seated && a.heldSlot) { // settled at a desk → keep the glow honest
           const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = active ? 1.4 : 0.05;
         }
       }
