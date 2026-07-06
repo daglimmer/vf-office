@@ -1080,6 +1080,25 @@ async function pollRoster() {
     }
     a.refreshStatus();
   }
+  // ---- Duplicate backstop (Ray: "multiple of everybody, and it gets slower and slower") ----
+  // There must be exactly ONE body per agentId. If a second ever appears — from any path, deploy skew, or a
+  // race — remove the extra so the office can't fill with clones and crawl. Keep the body byId points at (the
+  // canonical one the card pass uses); warn so the leak's source stays visible in the console. The guard/patrol
+  // has no agentId and is never touched.
+  {
+    const seen = new Map();
+    let removed = 0;
+    for (const a of [...agents]) {
+      if (!a.agentId || a.isGuard) continue;
+      const keeper = seen.get(a.agentId);
+      if (!keeper) { seen.set(a.agentId, byId.get(a.agentId) ?? a); continue; }
+      if (a === keeper) continue;
+      a.remove();                       // remove() also does byId.delete(agentId)…
+      byId.set(a.agentId, keeper);      // …so re-point byId at the keeper (or the next poll would recreate + churn)
+      removed++;
+    }
+    if (removed) console.warn(`[dedup] removed ${removed} duplicate agent bod${removed === 1 ? 'y' : 'ies'} — total now ${agents.length}`);
+  }
   // The roster just (re)created/owns every body; re-run the card pass so any active task
   // lands on its agent's single body. Cards never create bodies (see syncWorkers), so this
   // can only annotate — never duplicate.
