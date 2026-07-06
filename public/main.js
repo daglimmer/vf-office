@@ -947,11 +947,12 @@ function syncWorkers() {
     for (const [cid, ag] of [...byCard]) if (ag === w && !list.some(c => c.cardId === cid)) byCard.delete(cid);
     for (const c of list) byCard.set(c.cardId, w);
     const switched = w.cardId !== top.cardId;
+    const titleChanged = w.taskTitle !== (top.title ?? top.cardId);
     w.cardId = top.cardId;
     w.taskTitle = top.title ?? top.cardId;
     const desired = COLUMN_STATE[top.column];
     if (switched || w.lifecycle !== desired) w.setLifecycle(desired);
-    w.drawTask();   // surface WHAT they're working on, on the floor (setBlocked below overrides if blocked)
+    if (switched || titleChanged) w.drawTask();   // only re-draw the label texture when the task actually changed (setBlocked below overrides if blocked)
     const blk = !!top.blocked || top.column === 'blocked' || top.column === 'waiting';
     if (blk !== w.blocked) w.setBlocked(blk, top.reason);
   }
@@ -1151,23 +1152,31 @@ async function httpFallback() {
 // empty board shows an empty office (truth), never fabricated motion.
 let boardFeedLive = false;
 let boardFeedLogged = false;
+// The office animates ACTIVE work only — a finished card just releases its worker. So the ever-growing "done"
+// pile (1000s of cards) is dead weight: shipping + diffing it every 2s is what slowed the office down over time.
+// Skip done-like columns here → the snapshot (and its diff) stays tiny regardless of how big "done" gets.
+const DONE_COLS = new Set(['done', 'completed', 'complete', 'finished', 'archived', 'cancelled', 'canceled', 'closed']);
 function boardToSnapshot(board) {
   const cols = board?.columns ?? {};
   const cards = [];
-  for (const col of Object.keys(cols))
+  for (const col of Object.keys(cols)) {
+    if (DONE_COLS.has(col.toLowerCase())) continue;   // don't carry the done history
     for (const c of (cols[col] ?? []))
       cards.push({ cardId: c.cardId ?? c.id, title: c.title ?? c.cardId ?? c.id, assignee: c.assignee ?? null, column: col });
+  }
   return { event: 'snapshot', cards };
 }
 async function pollBoardFeed() {
   try {
     const board = await fetch('/api/kanban/board').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-    const snap = boardToSnapshot(board);
     // Serve-stale on an empty blip: the board is load-balanced across replicas that can momentarily
     // return 0 cards (cold/empty instance). applySnapshot([]) would diff every card as deleted and
-    // empty the office. The homelab always has cards, so treat 0 as a blip — keep the last-good
-    // placement and retry. (Real cure: single-source the board so replicas can't diverge.)
-    if (snap.cards.length === 0) { setTimeout(pollBoardFeed, 2000); return; }
+    // empty the office. Guard on the TOTAL card count (not the active-only snapshot), so a board that's
+    // simply all-done still gets an honest empty snapshot (workers released) rather than being mistaken for a blip.
+    const cols = board?.columns ?? {};
+    const total = Object.values(cols).reduce((n, arr) => n + (Array.isArray(arr) ? arr.length : 0), 0);
+    if (total === 0) { setTimeout(pollBoardFeed, 2000); return; }
+    const snap = boardToSnapshot(board);                    // active-only (done excluded) → tiny, constant-size diff
     boardFeedLive = !!board?.columns;
     if (!boardFeedLogged) {
       const active = [...new Set(snap.cards.filter(c => c.assignee && ACTIVE_COLS.includes(c.column)).map(c => c.assignee))];
