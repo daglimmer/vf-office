@@ -109,30 +109,15 @@ jobs:
           docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
 
   # ════════════════════════════════════════════════════════════════
-  # DEPLOY TO K3s — STAGING FIRST (rollout status is the gate; the office
-  # has no separate public staging URL configured here)
-  # ════════════════════════════════════════════════════════════════
-  deploy-staging:
-    name: Deploy to Staging
-    needs: docker
-    runs-on: self-hosted
-    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
-    environment: staging
-    steps:
-      - name: Deploy to K3s staging namespace
-        run: |
-          export KUBECONFIG=${{ env.KUBECONFIG_PATH }}
-          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.docker.outputs.image_tag }}"
-          kubectl set image deploy/olympus-office-staging -n mission-control "olympus-office=$IMAGE"
-          kubectl rollout status deploy/olympus-office-staging -n mission-control --timeout=120s
-          echo "✓ Staging rollout complete"
-
-  # ════════════════════════════════════════════════════════════════
   # DEPLOY TO PRODUCTION
+  # NOTE: there is a SINGLE office deployment (olympus-office). A prior
+  # `deploy-staging` job targeted a non-existent `olympus-office-staging`,
+  # so every run failed at staging (NotFound) → prod skipped → spurious
+  # rollback. Removed. The rollout status + health check ARE the gate.
   # ════════════════════════════════════════════════════════════════
   deploy-production:
     name: Deploy to Production
-    needs: [docker, deploy-staging]
+    needs: [docker]
     runs-on: self-hosted
     if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
     environment: production
@@ -179,7 +164,7 @@ jobs:
   # ════════════════════════════════════════════════════════════════
   rollback:
     name: Rollback on Failure
-    needs: [deploy-staging, deploy-production]
+    needs: [deploy-production]
     if: failure()
     runs-on: self-hosted
     steps:
