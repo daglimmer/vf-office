@@ -7,3 +7,6 @@ build.sh
 *.log
 .env
 adapter/state.json
+
+# dev-only local preview config (proxies to live Olympus) — never deploy
+vite.dev-live.config.js

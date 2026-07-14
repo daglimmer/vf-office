@@ -510,6 +510,29 @@ function placeAgent(a, key, glow) {
   return seatAgent(a, ['lounge', 'work', 'doc'], 'sit', false);                   // idle → lounge
 }
 
+// ---- Home stations (Ray's layout) — where each agent SPAWNS + RESTS when idle. -----------------
+// Spawning everyone at spawn_dc funnelled all 16 through one corridor → pile-up. Instead each agent
+// starts + rests at its own home, distributed across the office, so the corridor never jams.
+//   Marcus → his office · Oly + Sentinel → the control room · DevOps team → their office · rest → lounge
+function homeOf(a) {
+  const n = (a.name || a.agentId || '').toLowerCase();
+  if (/marcus|(^|[^a-z])ceo/.test(n))    return { fixed: 'ceo_desk',      door: 'nav_door_ceo' };
+  if (/oly|ollie|(^|[^a-z])coo/.test(n)) return { fixed: 'ollie_station', door: 'nav_door_control' };
+  if (/sentinel/.test(n))                return { control: true,          door: 'nav_door_control' };
+  if (/devops/.test(n))                  return { pool: 'doc',            door: 'nav_door_devops' };  // DevOps → own office
+  return { pool: 'lounge', door: 'nav_door_lounge' };                                                 // everyone else → lounge
+}
+// A row of standing stations in the control room (second seat for Sentinel until a chair anchor lands).
+const _ctrlSpot = new Map(); let _ctrlNext = 0;
+function ctrlSpot(a) { if (!_ctrlSpot.has(a)) _ctrlSpot.set(a, _ctrlNext++); return new THREE.Vector3(30.3 + _ctrlSpot.get(a) * 1.4, 0, 9.7); }
+// Send an idle agent HOME. Returns truthy when a placement was issued (for anti-churn).
+function goHome(a) {
+  const h = homeOf(a);
+  if (h.fixed)   { if (a.seated !== h.fixed && !a.path.length) a.goto(h.fixed, () => a.sitAt(h.fixed, 'sit')); return 'home'; }
+  if (h.control) { a.goto('nav_door_control', () => a.gotoPoint(ctrlSpot(a), () => { a.pose = 'sit'; })); return 'home'; }
+  return seatAgent(a, h.pool === 'doc' ? ['doc', 'lounge'] : ['lounge', 'doc'], 'sit', false) ? 'home' : null;
+}
+
 // ----------------------------------------------------------------- avatar
 // Phase 8 (4): humanoid avatars - jointed mannequins built in avatars.js.
 // Status = small light above the head (statusMat is exposed as headMat so the
@@ -1041,7 +1064,8 @@ async function pollRoster() {
     }
     if (!a) {
       a = new Agent({ name: r.name ?? r.id, sub: r.role ?? r.group, color: r.color ?? undefined,
-                      agentId: r.id, role: rosterRole(r.group) });
+                      agentId: r.id, role: rosterRole(r.group),
+                      startAnchor: homeOf({ name: r.name ?? r.id, role: rosterRole(r.group) }).door });  // spawn AT home, not spawn_dc
       a.fx = { kind: 'spawn', t: 0 };
       a.materials.forEach(m => { m.transparent = true; m.opacity = 0; });
     }
@@ -1066,12 +1090,12 @@ async function pollRoster() {
         a.placedFor = 'home';
       } else {
         // Status → where they stand: blocked/consulting → meeting · documenting → own office · working → DC spread · idle → lounge.
-        const key = blocked ? 'blocked' : st === 'consulting' ? 'meet' : st === 'documenting' ? 'doc' : st === 'online' ? 'dc' : 'lounge';
+        const key = blocked ? 'blocked' : st === 'consulting' ? 'meet' : st === 'documenting' ? 'doc' : st === 'online' ? 'dc' : 'home';
         if (a.placedFor !== key && !a.waitingPool && !a.path.length) {
           // Only move when the placement bucket actually CHANGES — a settled agent sits still (anti-churn).
           a.releaseSlot();
-          if (placeAgent(a, key, active)) a.placedFor = key;
-        } else if (key !== 'dc' && a.seated && a.heldSlot) { // settled at a desk → keep the glow honest
+          if ((key === 'home' ? goHome(a) : placeAgent(a, key, active))) a.placedFor = key;
+        } else if (key !== 'dc' && key !== 'home' && a.seated && a.heldSlot) { // settled at a desk → keep the glow honest
           const g = deskGlow.get(a.heldSlot); if (g) g.material.emissiveIntensity = active ? 1.4 : 0.05;
         }
       }
