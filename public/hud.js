@@ -158,6 +158,14 @@ export function initHud({ bus, sim, demo }) {
 
   function render() {
     isDirty = false;
+    // Every FLEET agent in the 3D office must also have a sidebar card. `reg` was fed ONLY by bridge
+    // events, so roster agents that never emitted one (e.g. Metis, Pheme) were in the office but missing
+    // from the list. Seed reg from the live roster so the sidebar always matches the floor. (Ray)
+    for (const av of sim.getAgents()) {
+      const id = av.agentId;                       // fleet agents have agentId; card-workers/guard don't
+      if (!id || reg.has(id)) continue;
+      reg.set(id, { id, name: av.name ?? id, color: av.color });
+    }
     // stats
     const live = [...reg.values()].filter(a => a.type !== 'infrastructure');
     const states = live.map(a => agentState(a.id));
