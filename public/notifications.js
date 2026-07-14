@@ -12,7 +12,7 @@ const PRI = {
   alert: { color: '#FF4D4D', pulses: 6, pause: 5, panel: 20 },
 };
 
-export function initNotifications({ bus, sim, THREE, scene, byCard, anchors, rooms, agents }) {
+export function initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents }) {
 
   // ---------------- visuals
   function pingSphere(color, scale = 1) {
@@ -174,4 +174,48 @@ export function initNotifications({ bus, sim, THREE, scene, byCard, anchors, roo
     }
     if (ev.event === 'system.announcement') announce(ev.message, ev.priority ?? 'normal');
   });
+
+  // ---------------- THE BUZZ — live agent-to-agent bus (Ray). Reuse the envelope→walk-to-read channel.
+  // A message POSTed to an agent on olympus /api/messages pops an envelope over that agent's head; the
+  // agent walks to a desk and "reads" it (same mechanism Kanban comments use). Broadcasts fan out as a
+  // room-wide announcement. This is the VISIBLE layer; Marcus's webhook is the real wake layer (they pair).
+  const KIND_TYPE = { alert: 'blocked', ask: 'task_assigned', inform: 'comment', broadcast: 'comment' };
+  const BUZZ_ALIAS = { sage: 'k8slearn', ollie: 'oly', ceo: 'marcus', coo: 'oly' };
+  const buzzSeen = new Set();
+  let buzzPrimed = false;
+  function buzzResolve(to) {
+    if (!to) return null;
+    const key = String(to).toLowerCase();
+    const id = BUZZ_ALIAS[key] ?? key;
+    if (byId?.get(id)) return byId.get(id);
+    const flat = id.replace(/[^a-z0-9]/g, '');
+    return agents.find(a => (a.agentId || '').toLowerCase() === id
+      || (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, '').includes(flat));
+  }
+  function buzzDeliver(m) {
+    const to = String(m.to || '').toLowerCase();
+    const author = m.from || 'agent';
+    const text = m.subject || '(message)';
+    if (to === 'all' || to === 'broadcast' || to === 'fleet') {
+      announce(`${author}: ${text}`, m.kind === 'alert' ? 'alert' : 'normal');
+      return;
+    }
+    const a = buzzResolve(to);                              // no office body for this recipient (e.g. ray/opus) → skip
+    if (a) notifyAgent(a, { type: KIND_TYPE[m.kind] ?? 'comment', author, text });
+  }
+  async function pollBuzz() {
+    try {
+      const msgs = await fetch('/api/messages?limit=50').then(r => (r.ok ? r.json() : []));
+      const list = Array.isArray(msgs) ? msgs : [];
+      for (const m of list) {                               // newest-first; prime silently on first poll
+        if (!m || !m.id) continue;
+        if (buzzPrimed && !buzzSeen.has(m.id)) buzzDeliver(m);
+        buzzSeen.add(m.id);
+      }
+      buzzPrimed = true;
+      if (buzzSeen.size > 300) { buzzSeen.clear(); for (const m of list) if (m && m.id) buzzSeen.add(m.id); }
+    } catch { /* buzz endpoint blip — keep polling */ }
+    setTimeout(pollBuzz, 5000);
+  }
+  pollBuzz();
 }
