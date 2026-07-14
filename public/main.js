@@ -530,7 +530,8 @@ function goHome(a) {
   const h = homeOf(a);
   if (h.fixed)   { if (a.seated !== h.fixed && !a.path.length) a.goto(h.fixed, () => a.sitAt(h.fixed, 'sit')); return 'home'; }
   if (h.control) { a.goto('nav_door_control', () => a.gotoPoint(ctrlSpot(a), () => { a.pose = 'sit'; })); return 'home'; }
-  return seatAgent(a, h.pool === 'doc' ? ['doc', 'lounge'] : ['lounge', 'doc'], 'sit', false) ? 'home' : null;
+  // Spill across 3 pools (19 seats) so a full home room never strands an agent at the doorway.
+  return seatAgent(a, h.pool === 'doc' ? ['doc', 'work', 'lounge'] : ['lounge', 'doc', 'work'], 'sit', false) ? 'home' : null;
 }
 
 // ----------------------------------------------------------------- avatar
@@ -1081,7 +1082,7 @@ async function pollRoster() {
       const st = r.status;                                // online | idle | offline | documenting | consulting
       const blocked = a.blocked;
       const active = !blocked && (st === 'online' || st === 'documenting' || st === 'consulting');
-      a.setGhost(!active && !blocked);                    // idle/offline → ghosted (blocked stays solid — it's in a meeting)
+      a.setGhost(st === 'offline');                       // ONLY offline agents ghost — an idle agent resting at its home desk stays solid/visible (Ray: "I want to see my team")
       a.state = blocked ? 'blocked' : active ? 'working' : 'idle';
 
       // Marcus (ceo_desk) / Oly (control station) keep their home spot — UNLESS blocked or consulting (then they join the meeting).
@@ -1100,7 +1101,7 @@ async function pollRoster() {
         }
       }
     } else {
-      a.setGhost(r.status !== 'online');
+      a.setGhost(r.status === 'offline');   // only offline ghosts (see above) — keep idle agents visible
     }
     a.refreshStatus();
   }
