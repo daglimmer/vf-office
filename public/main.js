@@ -668,7 +668,11 @@ class Agent {
         this.materials.forEach(m => { m.transparent = true; m.opacity = 0; });
         this.pose = 'idle'; break;
       case 'briefing': this.acquire('meet', s => { this.hold('meet', s); this.goto(s, () => { this.sitAt(s, 'talk'); this.enterBriefing(); }); }); break;
-      case 'working': this.acquire('work', s => { this.hold('work', s); this.goto(s, () => { this.sitAt(s, 'type'); deskGlow.get(s).material.emissiveIntensity = 1.4; }); }); break;
+      // Ray 2026-07-15: a working agent used to `acquire('work')` — a SINGLE pool that QUEUES at the
+      // door when its 4 desks are full, leaving the 5th+ worker standing idle in the corridor forever
+      // (devops-app got stranded there). Use the pileup-safe seatAgent spill instead (never queues,
+      // 27 seats): prefer the agent's own room, then fall back — so a worker always lands at a desk.
+      case 'working': seatAgent(this, this.role === 'devops' ? ['doc', 'work', 'lounge'] : ['work', 'doc', 'lounge'], 'type', true); break;
       case 'debrief': this.acquire('meet', s => { this.hold('meet', s); this.goto(s, () => { this.sitAt(s, 'talk'); this.enterBriefing(); this.timer = TIMINGS.debrief; }); }); break;
       case 'documentation': this.acquire('doc', s => { this.hold('doc', s); this.goto(s, () => { this.sitAt(s, 'type'); this.timer = TIMINGS.documentation; }); }); break;
       case 'lunch': this.acquire('lounge', s => { this.hold('lounge', s); this.goto(s, () => { this.sitAt(s, 'sit'); this.timer = TIMINGS.lunch; }); }); break;

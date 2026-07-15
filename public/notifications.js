@@ -212,17 +212,21 @@ export function initNotifications({ bus, sim, THREE, scene, byCard, byId, anchor
   // always-on "who is sitting on unread mail" signal that does NOT depend on the LLM wake firing.
   const mailFlags = new Map();   // agent -> { sprite, count }
   function mailEnvelopeSprite(count) {
-    const cv = document.createElement('canvas'); cv.width = cv.height = 48;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
     const x = cv.getContext('2d');
-    x.strokeStyle = '#FFE32C'; x.lineWidth = 3;
-    x.strokeRect(9, 15, 30, 20); x.beginPath(); x.moveTo(9, 15); x.lineTo(24, 27); x.lineTo(39, 15); x.stroke();
-    if (count > 1) {
-      x.fillStyle = '#FF4D4D'; x.beginPath(); x.arc(40, 12, 9, 0, 7); x.fill();
-      x.fillStyle = '#fff'; x.font = 'bold 13px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-      x.fillText(count > 9 ? '9+' : String(count), 40, 12);
-    }
+    // bright glow halo so the badge reads clearly from the top-down overview camera
+    x.fillStyle = 'rgba(255,227,44,0.30)'; x.beginPath(); x.arc(32, 31, 27, 0, 7); x.fill();
+    // FILLED bright-yellow envelope (was a thin outline — too subtle; Ray: bigger + brighter)
+    x.fillStyle = '#FFE32C'; x.strokeStyle = '#3a2f00'; x.lineWidth = 2.5;
+    x.beginPath(); x.roundRect(12, 18, 40, 26, 3); x.fill(); x.stroke();
+    x.beginPath(); x.moveTo(12, 20); x.lineTo(32, 35); x.lineTo(52, 20); x.stroke();   // flap
+    // count badge ALWAYS shown (even 1) — so a partially-read inbox reads as "1 still unread",
+    // not a stuck envelope (Ray: an agent acked one of two, the badge correctly stayed for the other).
+    x.fillStyle = '#FF4D4D'; x.beginPath(); x.arc(52, 15, 11, 0, 7); x.fill();
+    x.fillStyle = '#fff'; x.font = 'bold 15px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(count > 9 ? '9+' : String(count), 52, 15);
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), color: 0xffffff, depthTest: false, transparent: true }));
-    sp.scale.setScalar(0.3); sp.position.y = 0.62;
+    sp.scale.setScalar(0.5); sp.position.y = 0.72;
     return sp;
   }
   function clearMailFlag(agent) {
