@@ -903,12 +903,12 @@ function walkUpdate(dt) {
 // office only knew in_progress/review/todo, so real cards (running/blocked/…) were all skipped
 // and the board went dead.
 const COLUMN_STATE = {
-  // queued / assigned, about to start → walk to the meeting to pick it up
-  ready: 'briefing', todo: 'briefing', queued: 'briefing', open: 'briefing', backlog: 'spawning',
   // actively running → sit at a desk and work it
   running: 'working', in_progress: 'working', active: 'working', pending: 'working',
-  // stalled
-  review: 'debrief', waiting: 'debrief', blocked: 'working',
+  // blocked stays at the desk but flagged (setBlocked overlay); stalled / in-review → debrief
+  blocked: 'working', review: 'debrief', waiting: 'debrief',
+  // NOTE: queued lanes (ready/todo/queued/open/backlog) are intentionally OMITTED. A not-yet-started
+  // card must NOT animate its agent — see ACTIVE_COLS below (Ray 2026-07-15 "briefing 24/7" fix).
 };
 let colorIdx = 0;
 // ---- Phase 10b: ONE avatar per ASSIGNEE (Ray). A real board has many cards
@@ -917,8 +917,14 @@ let colorIdx = 0;
 // worker switches tasks instead of a clone spawning. Roster bodies are reused.
 // Columns where the assignee is actively engaged (gets a working body). 'done'/'completed'/
 // archived are excluded — a finished card releases its worker back to idle.
-const ACTIVE_COLS = ['running', 'in_progress', 'active', 'pending', 'blocked', 'review', 'waiting', 'ready', 'todo', 'queued', 'open'];
-const PRIO = { running: 0, in_progress: 0, active: 0, pending: 0, blocked: 1, review: 1, waiting: 1, ready: 2, todo: 2, queued: 2, open: 2 };
+// Ray 2026-07-15 — THE "briefing 24/7" fix. A card merely QUEUED (ready/todo/queued/open) is NOT
+// being worked yet, so it must NOT seize a body and pin its assignee in a perpetual meeting (a card
+// parked in `ready` used to hold its agent in the meeting room forever — e.g. Sage's cron-cleanup
+// card standing in `ready` = Sage stuck briefing). Only cards that are actually RUNNING (or blocked/
+// in-review) animate an agent; a queued card leaves the agent under roster control, resting at home
+// per its real status. It starts moving the instant work actually starts (card → running).
+const ACTIVE_COLS = ['running', 'in_progress', 'active', 'pending', 'blocked', 'review', 'waiting'];
+const PRIO = { running: 0, in_progress: 0, active: 0, pending: 0, blocked: 1, review: 1, waiting: 1 };
 const MAX_WORKERS = 22;
 const cardsAll = new Map();             // cardId -> {cardId,title,column,assignee,blocked}
 const workers = new Map();              // assignee -> Agent

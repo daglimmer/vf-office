@@ -105,8 +105,10 @@ export function initNotifications({ bus, sim, THREE, scene, byCard, byId, anchor
         }, readFor * 1000);
       };
       if (st === 'idle' || st === 'spawning') {
-        readFor = 15;   // idle: walk to a desk, sit, read (§7.1)
-        agent.acquire('work', s => { agent.hold('work', s); agent.goto(s, () => { agent.sitAt(s, 'glance'); read(); }); });
+        // Ray 2026-07-15: an idle agent RESTS at home — a buzz must NOT drag it across the corridor
+        // to a work desk just to "read" a one-line message. Read in place (glance where it stands or
+        // sits), then it settles straight back home. (Was: acquire('work')→goto→sit = the corridor march.)
+        readFor = 12; agent.pose = 'glance'; read();
       } else if (st === 'working') {
         readFor = 15; agent.pose = 'glance'; read();
       } else if (agent.path.length) {
