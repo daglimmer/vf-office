@@ -205,6 +205,53 @@ export function initNotifications({ bus, sim, THREE, scene, byCard, byId, anchor
     const a = buzzResolve(to);                              // no office body for this recipient (e.g. ray/opus) → skip
     if (a) notifyAgent(a, { type: KIND_TYPE[m.kind] ?? 'comment', author, text });
   }
+  // ---- PERSISTENT unread-mail flag (Ray 2026-07-15): the transient envelope only shows for ~12s on a NEW
+  // message, and a message stays `unread` in the API until the agent's (flaky, sometimes-timing-out) buzz
+  // wake acks it. So pending mail was invisible unless you happened to be watching. This flag hovers a small
+  // envelope (+count) over any agent that has UNREAD messages and clears the instant they ack — a truthful,
+  // always-on "who is sitting on unread mail" signal that does NOT depend on the LLM wake firing.
+  const mailFlags = new Map();   // agent -> { sprite, count }
+  function mailEnvelopeSprite(count) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 48;
+    const x = cv.getContext('2d');
+    x.strokeStyle = '#FFE32C'; x.lineWidth = 3;
+    x.strokeRect(9, 15, 30, 20); x.beginPath(); x.moveTo(9, 15); x.lineTo(24, 27); x.lineTo(39, 15); x.stroke();
+    if (count > 1) {
+      x.fillStyle = '#FF4D4D'; x.beginPath(); x.arc(40, 12, 9, 0, 7); x.fill();
+      x.fillStyle = '#fff'; x.font = 'bold 13px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.fillText(count > 9 ? '9+' : String(count), 40, 12);
+    }
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), color: 0xffffff, depthTest: false, transparent: true }));
+    sp.scale.setScalar(0.3); sp.position.y = 0.62;
+    return sp;
+  }
+  function clearMailFlag(agent) {
+    const f = mailFlags.get(agent);
+    if (!f) return;
+    agent.parts?.head?.remove(f.sprite); f.sprite.material.map?.dispose?.(); f.sprite.material.dispose();
+    mailFlags.delete(agent);
+  }
+  function updateMailFlags(list) {
+    const unread = new Map();                                // agent -> unread count (targeted, unread only)
+    for (const m of list) {
+      if (!m || m.status !== 'unread') continue;
+      const to = String(m.to || '').toLowerCase();
+      if (to === 'all' || to === 'broadcast' || to === 'fleet') continue;  // broadcasts aren't per-agent mail
+      const a = buzzResolve(to);
+      if (a) unread.set(a, (unread.get(a) || 0) + 1);
+    }
+    for (const a of [...mailFlags.keys()]) if (!unread.has(a)) clearMailFlag(a);   // acked/gone → clear
+    for (const [a, count] of unread) {
+      const existing = mailFlags.get(a);
+      if (existing && existing.count === count) continue;    // unchanged → leave it
+      clearMailFlag(a);
+      if (!a.parts?.head) continue;
+      const sprite = mailEnvelopeSprite(count);
+      a.parts.head.add(sprite);
+      mailFlags.set(a, { sprite, count });
+    }
+  }
+
   async function pollBuzz() {
     try {
       const msgs = await fetch('/api/messages?limit=50').then(r => (r.ok ? r.json() : []));
@@ -216,6 +263,7 @@ export function initNotifications({ bus, sim, THREE, scene, byCard, byId, anchor
       }
       buzzPrimed = true;
       if (buzzSeen.size > 300) { buzzSeen.clear(); for (const m of list) if (m && m.id) buzzSeen.add(m.id); }
+      updateMailFlags(list);                                // persistent unread badge, every poll (incl. the first)
     } catch { /* buzz endpoint blip — keep polling */ }
     setTimeout(pollBuzz, 5000);
   }
