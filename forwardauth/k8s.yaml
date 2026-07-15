@@ -38,6 +38,10 @@ spec:
             - { name: ENFORCE, value: "false" }          # Phase 0 = permissive; flip to "true" at Phase 2
             - { name: ORG_DEFAULT, value: "110lymph" }
             - { name: DEX_ISSUER, value: "https://olympus.110lymph.nl/dex" }
+            # Fetch the JWKS from INTERNAL Dex, not the external olympus/.211 ingress — so token verify
+            # survives a control-plane/ingress node (.211) flap. Issuer check above stays the public URL,
+            # so the token's `iss` claim still matches. (Ray 2026-07-15: fixed the Truth Gate/Fleet flakiness.)
+            - { name: DEX_JWKS_URL, value: "http://dex.outline.svc.cluster.local:5556/dex/keys" }
           envFrom:
             - secretRef: { name: forwardauth-keys }
           readinessProbe: { httpGet: { path: /healthz, port: 8080 }, initialDelaySeconds: 3 }
