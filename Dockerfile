@@ -9,8 +9,7 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-RUN cp vite.config.js public/ && \
-    npx vite build public --base=/office/ --outDir /app/dist --emptyOutDir && \
+RUN npx vite build public --base=/office/ --outDir /app/dist --emptyOutDir --config vite.config.js && \
     cp public/anchors.json /app/dist/ && \
     cp public/waypoints.json /app/dist/ && \
     cp public/office.glb /app/dist/ 2>/dev/null; true
