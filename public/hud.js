@@ -227,12 +227,14 @@ export function initHud({ bus, sim, demo }) {
         cd.title = `cache ${Math.round(u.cacheHitRate * 100)}%`;
         cd.style.background = u.cacheHitRate > 0.8 ? '#3DFF7A' : u.cacheHitRate >= 0.4 ? '#FFB02E' : '#FF4D4D';
       }
-      // context row
+      // context row — Phase 12: show the agent's current task title whenever available,
+      // matching the 3D agent by agentId OR name (both indexed by syncWorkers and
+      // pollRoster above). Falls through to name-only when nothing is active.
       const ctx = el.querySelector('.ctx');
       if (st === 'blocked' && a.reason) ctx.textContent = `⛔ ${a.reason}`;
       else {
-        const av = sim.getAgents().find(v => v.name === id && v.cardId);
-        ctx.textContent = av ? `${av.cardId} · ${av.taskTitle ?? ''}` : '';
+        const av = sim.getAgents().find(v => (v.agentId === id || v.name === id) && (v.cardId || v.taskTitle));
+        ctx.textContent = av ? (av.cardId ? `${av.cardId} · ${av.taskTitle ?? ''}` : (av.taskTitle ?? '')) : '';
       }
       // counters (frozen presentational when paused/killed §10.3)
       const frozen = st === 'PAUSED' || st === 'KILLED';

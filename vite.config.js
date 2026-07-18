@@ -15,7 +15,6 @@ export default defineConfig({
     proxy: {
       '/agents': { target: TARGET, changeOrigin: true, prependPath: false },
       '/announce': { target: TARGET, changeOrigin: true, prependPath: false },
-      '/snapshot': { target: TARGET, changeOrigin: true, prependPath: false },
       '/api': { target: TARGET, changeOrigin: true, prependPath: false },
       '/mapping.json': { target: TARGET, changeOrigin: true, prependPath: false },
       '/ws': { target: WS_TARGET, ws: true },

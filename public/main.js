@@ -24,6 +24,8 @@ import { initScreens, updateScreens } from './screens.js';
 import { initMoments, updateMoments } from './moments.js';
 import { initNotifications } from './notifications.js';
 import { initTimeline } from './timeline.js';
+import { initBackups } from './backups.js';
+import { initDocs } from './docs.js';
 
 // ---- Phase 9.1: crash visibility. A silent runtime error = "all black", so
 // surface any boot/runtime error in the badge where Ray can read it.
@@ -930,6 +932,11 @@ let colorIdx = 0;
 const ACTIVE_COLS = ['running', 'in_progress', 'active', 'pending', 'blocked', 'review', 'waiting'];
 const PRIO = { running: 0, in_progress: 0, active: 0, pending: 0, blocked: 1, review: 1, waiting: 1 };
 const MAX_WORKERS = 22;
+// ---- Army bug fix (Ray 2026-07-18): filter done/cancelled/closed/completed cards at
+// ingestion so they NEVER enter cardsAll (syncWorkers already filter by ACTIVE_COLS, but
+// stale snapshots from the adapter WS/fallback path can flood the map with 1000s of done
+// cards). Also dedup strictly: one body per agentId, NEVER one per card.
+const INACTIVE_COLS = new Set(['done', 'completed', 'complete', 'finished', 'archived', 'cancelled', 'canceled', 'closed']);
 const cardsAll = new Map();             // cardId -> {cardId,title,column,assignee,blocked}
 const workers = new Map();              // assignee -> Agent
 let syncQueued = false;
@@ -941,7 +948,7 @@ function queueSync() {
 function syncWorkers() {
   const byAss = new Map();
   for (const c of cardsAll.values()) {
-    if (!c.assignee || !ACTIVE_COLS.includes(c.column)) continue;
+    if (!c.assignee || !ACTIVE_COLS.includes(c.column) || INACTIVE_COLS.has(c.column.toLowerCase())) continue;
     (byAss.get(c.assignee) ?? byAss.set(c.assignee, []).get(c.assignee)).push(c);
   }
   // release workers whose assignee has no active cards left
@@ -995,16 +1002,41 @@ function handleEvent(ev) {
   emit(ev);                                   // HUD + notification modules listen on bus
   switch (ev.event) {
     case 'snapshot': {
-      for (const c of ev.cards ?? [])
+      // Army fix: filter done/cancelled/closed/completed at the ingestion point so they
+      // NEVER enter cardsAll — regardless of which path (WS, fallback, or board feed)
+      // delivered the snapshot. Also remove cards from the PREVIOUS snapshot that aren't
+      // in this one (prevents stale-card accumulation from transient sources).
+      const keep = new Set();
+      for (const c of ev.cards ?? []) {
+        if (!c.column || INACTIVE_COLS.has(c.column.toLowerCase())) continue;
+        keep.add(c.cardId);
         cardsAll.set(c.cardId, { cardId: c.cardId, title: c.title ?? c.cardId, column: c.column, assignee: c.assignee ?? null, blocked: false });
+      }
+      // Flush cards from the previous snapshot that are gone now (or are now done).
+      for (const id of [...cardsAll.keys()]) {
+        if (!keep.has(id)) {
+          cardsAll.delete(id);
+          byCard.delete(id);
+        }
+      }
       queueSync();
       console.log(`[office] snapshot: ${ev.cards?.length ?? 0} cards -> ${[...new Set([...cardsAll.values()].filter(c => c.assignee && ACTIVE_COLS.includes(c.column)).map(c => c.assignee))].length} active assignees (cap ${MAX_WORKERS})`);
       break;
     }
-    case 'card.created':
-      cardsAll.set(ev.cardId, { cardId: ev.cardId, title: ev.title ?? ev.cardId, column: ev.column ?? 'backlog', assignee: ev.assignee ?? null, blocked: false });
+    case 'card.created': {
+      const col = ev.column ?? 'backlog';
+      if (INACTIVE_COLS.has(col.toLowerCase())) break;  // army fix: never ingest done cards
+      cardsAll.set(ev.cardId, { cardId: ev.cardId, title: ev.title ?? ev.cardId, column: col, assignee: ev.assignee ?? null, blocked: false });
       queueSync(); break;
+    }
     case 'card.moved': {
+      // Army fix: if a card moves INTO a done column, remove it from the active pool entirely.
+      // If it moves FROM done back to active, let it through.
+      if (INACTIVE_COLS.has((ev.to ?? '').toLowerCase())) {
+        cardsAll.delete(ev.cardId);
+        byCard.delete(ev.cardId);
+        queueSync(); break;
+      }
       const c = cardsAll.get(ev.cardId) ?? { cardId: ev.cardId, title: ev.title ?? ev.cardId, assignee: ev.assignee ?? null, blocked: false };
       c.column = ev.to;
       if (ev.title) c.title = ev.title;
@@ -1085,6 +1117,13 @@ async function pollRoster() {
     const nice = r.name ?? r.id;
     if (a.label.userData.name !== nice && a.overlay === 'ok' && !a.blocked) {
       a.name = nice; a.label.userData.name = nice; a.label.userData.draw(null);
+    }
+    // Phase 12 (Ray): propagate task title from roster into the 3D label + sidebar.
+    // The roster /api/agents carries the agent's current task (from fable-api), but no
+    // card is assigned yet. Show it on the chip unless syncWorkers already set a task.
+    if (r.taskTitle != null && !a.cardId && a.taskTitle !== r.taskTitle) {
+      a.taskTitle = r.taskTitle;
+      if (!a.blocked && a.overlay === 'ok') a.drawTask();
     }
     a.rosterStatus = r.status;
     if (!ROSTER_PINNED.has(r.id) && !a.cardId && a.overlay === 'ok') {
@@ -1209,12 +1248,12 @@ let boardFeedLogged = false;
 // The office animates ACTIVE work only — a finished card just releases its worker. So the ever-growing "done"
 // pile (1000s of cards) is dead weight: shipping + diffing it every 2s is what slowed the office down over time.
 // Skip done-like columns here → the snapshot (and its diff) stays tiny regardless of how big "done" gets.
-const DONE_COLS = new Set(['done', 'completed', 'complete', 'finished', 'archived', 'cancelled', 'canceled', 'closed']);
+// (INACTIVE_COLS shared from line ~905 — redundant local DONE_COLS removed)
 function boardToSnapshot(board) {
   const cols = board?.columns ?? {};
   const cards = [];
   for (const col of Object.keys(cols)) {
-    if (DONE_COLS.has(col.toLowerCase())) continue;   // don't carry the done history
+    if (INACTIVE_COLS.has(col.toLowerCase())) continue;   // don't carry the done history
     for (const c of (cols[col] ?? []))
       cards.push({ cardId: c.cardId ?? c.id, title: c.title ?? c.cardId ?? c.id, assignee: c.assignee ?? null, column: col });
   }
@@ -1294,6 +1333,8 @@ try { if (!SAFE) initMoments({ bus, sim }); }
 catch (e) { console.error('[moments] init failed:', e); }
 initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents });
 initTimeline({ sim, demo: () => demoMode });
+initBackups();
+initDocs();
 
 // ----------------------------------------------------------------- security guard
 // A non-roster avatar that patrols the forecourt (reuses the walk system + the

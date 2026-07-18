@@ -876,7 +876,6 @@ const server = http.createServer(async (req, res) => {
       return json(res, h.ok ? 200 : 503, { status: h.ok ? 'ok' : 'degraded', ...h });
     }
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
-    if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
     if (req.method === 'GET' && p === '/api/agents') return json(res, 200, await agentRoster());           // Phase 6
     const adet = p.match(/^\/api\/agents\/([\w.\-]+)$/);                                                   // Phase 7b
