@@ -875,6 +875,7 @@ const server = http.createServer(async (req, res) => {
       const h = healthReport();
       return json(res, h.ok ? 200 : 503, { status: h.ok ? 'ok' : 'degraded', ...h });
     }
+    if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());       // Phase 5: REST snapshot for HTTP fallback + probes
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
     if (req.method === 'GET' && p === '/api/agents') return json(res, 200, await agentRoster());           // Phase 6
