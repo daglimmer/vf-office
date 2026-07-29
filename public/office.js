@@ -615,6 +615,20 @@ export function buildOffice(report) {
       box(`prop_ctlrack_led_${r}`, 36.58, 0.45 + r * 0.22, 7.2, 0.04, 0.14, 0.72, zoneMats[r % 6]);
   }
 
+  // ---------------------------------------------------------------- review station (work-acceptance loop)
+  // A small standing podium in the control room where an agent presents work
+  // to the reviewer(s) when their card is in the `review` column.
+  {
+    const p = A('review_station');
+    // podium body
+    rbox('prop_review_podium', p.x, 0.78, p.z, 1.0, 0.05, 0.6, M.metal, 0, 0.03);
+    box('prop_review_podium_base', p.x, 0.38, p.z, 0.6, 0.76, 0.4, M.prop);
+    // small screen facing the reviewers at the command desk (+x)
+    box('prop_review_screen', p.x + 0.12, 1.08, p.z, 0.05, 0.35, 0.5, M.screen);
+    // status ring above the presenter
+    torus('prop_review_ring', p.x, 2.1, p.z, 0.35, 0.03, M.ringWarm, 28, 90);
+  }
+
   // ---------------------------------------------------------------- ceo
   {
     const p = A('ceo_desk');                              // 8f: anchor faces -z
