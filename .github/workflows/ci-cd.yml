@@ -108,18 +108,19 @@ jobs:
       IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
       IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
     steps:
+      - name: Setup kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > "$RUNNER_TEMP/kubeconfig" && chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> $GITHUB_ENV
+
       - name: Deploy to K3s (staging namespace)
         run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
-          export KUBECONFIG=/tmp/kubeconfig
           kubectl set image deployment/${{ env.KUBE_DEPLOYMENT }}-staging \
             ${{ env.KUBE_DEPLOYMENT }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -n ${{ env.KUBE_NAMESPACE }} --record
 
       - name: Wait for rollout
         run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
-          export KUBECONFIG=/tmp/kubeconfig
           kubectl rollout status deployment/${{ env.KUBE_DEPLOYMENT }}-staging \
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
 
@@ -146,18 +147,19 @@ jobs:
       IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
       IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
     steps:
+      - name: Setup kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > "$RUNNER_TEMP/kubeconfig" && chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> $GITHUB_ENV
+
       - name: Deploy to K3s (production)
         run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
-          export KUBECONFIG=/tmp/kubeconfig
           kubectl set image deployment/${{ env.KUBE_DEPLOYMENT }} \
             ${{ env.KUBE_DEPLOYMENT }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             -n ${{ env.KUBE_NAMESPACE }} --record
 
       - name: Wait for rollout
         run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
-          export KUBECONFIG=/tmp/kubeconfig
           kubectl rollout status deployment/${{ env.KUBE_DEPLOYMENT }} \
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
 
@@ -236,10 +238,13 @@ jobs:
     needs: [deploy-staging, deploy-production]
     if: failure()
     steps:
+      - name: Setup kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > "$RUNNER_TEMP/kubeconfig" && chmod 600 "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> $GITHUB_ENV
+
       - name: Rollback production
         run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > /tmp/kubeconfig
-          export KUBECONFIG=/tmp/kubeconfig
           kubectl rollout undo deployment/${{ env.KUBE_DEPLOYMENT }} -n ${{ env.KUBE_NAMESPACE }}
           kubectl rollout status deployment/${{ env.KUBE_DEPLOYMENT }} -n ${{ env.KUBE_NAMESPACE }} --timeout=60s
 
