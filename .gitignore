@@ -1,1 +1,6 @@
 node_modules
+
+# Stale backup files
+*.bak*
+*.bck
+.kube/
