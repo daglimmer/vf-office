@@ -1,5 +1,10 @@
 node_modules
 
+# Build artifacts
+dist/
+adapter/public/
+public/dist/
+
 # Stale backup files
 *.bak*
 *.bck
