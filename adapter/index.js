@@ -523,6 +523,16 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { status: 'ok' });
     }
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
+    if (req.method === 'GET' && p === '/health') {
+      // Dashboard + K8s probes expect a simple health surface. The adapter is healthy
+      // when the DB is open and snapshot() can enumerate cards. Report poll/sql errors
+      // so the dashboard doesn't mask a broken adapter.
+      const errs = [];
+      if (!db) errs.push('database not open');
+      const snap = snapshot();
+      if (!Array.isArray(snap.cards)) errs.push('snapshot missing cards');
+      return json(res, errs.length ? 503 : 200, { ok: errs.length === 0, gatewayOk: true, errors: errs });
+    }
     if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());   // Phase 5: HTTP polling fallback
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
     if (req.method === 'GET' && p === '/api/agents') return json(res, 200, agentRoster());                // Phase 6
