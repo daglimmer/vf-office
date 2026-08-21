@@ -1,0 +1,53 @@
+rules:
+  - id: github-actions-run-injection
+    languages:
+      - yaml
+    message: >
+      GitHub Actions run step interpolates untrusted attacker-controlled context
+      into a shell script (github.event.* / github.actor / github.head_ref / github.base_ref /
+      github.ref / github.ref_name). Use an intermediate env variable instead, or
+      restrict the workflow trigger to trusted events.
+    severity: ERROR
+    metadata:
+      confidence: HIGH
+      category: security
+      references:
+        - https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#understanding-the-risk-of-script-injections
+        - https://securitylab.github.com/advisories/GHSL-2023-117_ghostwriter
+    pattern-regex: >-
+      (?m)(?:^\s*run:\s*\|?\s*$\n\s+.*|^\s*run:.*)\$\{\{\s*(?:github\.event\.|github\.actor\s*\}|github\.head_ref|github\.base_ref|github\.ref(?:_name)?).*?\}\}
+
+  - id: github-actions-insecure-checkout
+    languages:
+      - yaml
+    message: >
+      actions/checkout is configured to persist credentials across steps. This allows
+      subsequent untrusted steps to access the GitHub token. Set persist-credentials: false
+      unless the token is explicitly needed in later steps.
+    severity: WARNING
+    metadata:
+      confidence: HIGH
+      category: security
+    pattern-regex: >-
+      (?m)^\s*-?\s*uses:\s+actions/checkout@[^\s\n]*\s*$\n(?:(?!^\s*-?\s*(?:uses:|run:|if:|env:|with:|name:)).*\n)*?\s*with:\s*$\n(?:(?!^\s*-?\s*(?:uses:|run:|if:|env:|name:)).*\n)*?(?!^\s*persist-credentials:\s*false)^\s*\w+:
+
+  - id: github-actions-artifact-overwrite
+    languages:
+      - yaml
+    pattern-either:
+      - pattern: |
+          uses: actions/upload-artifact@$VERSION
+          with:
+            overwrite: true
+      - pattern: |
+          uses: actions/upload-artifact@$VERSION
+          with:
+            overwrite: "true"
+    message: >
+      actions/upload-artifact overwrite: true allows attackers to overwrite build
+      artifacts in pull_request_target / untrusted workflows. Avoid unless the GITHUB_TOKEN
+      scope is narrowed.
+    severity: WARNING
+    metadata:
+      confidence: MEDIUM
+      category: security

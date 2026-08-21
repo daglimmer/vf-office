@@ -1,0 +1,125 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  workflow-security:
+    name: Workflow Security (zizmor + actionlint)
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install zizmor + actionlint
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "zizmor==1.29.0" "actionlint-py==1.7.12.24"
+
+      - name: Run zizmor on workflow files
+        run: |
+          zizmor --format plain --min-severity high --min-confidence high .github/workflows
+
+      - name: Run actionlint on workflow files
+        run: |
+          actionlint .github/workflows/*.yml
+
+      - name: Save zizmor JSON report
+        if: always()
+        run: |
+          mkdir -p security-reports
+          zizmor --format json .github/workflows > security-reports/zizmor.json || true
+
+      - name: Upload zizmor report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zizmor-report
+          path: security-reports/zizmor.json
+          retention-days: 30
+
+  sast:
+    name: SAST (Semgrep)
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Semgrep
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "semgrep==1.174.0"
+
+      - name: Run Semgrep custom + registry rules
+        run: |
+          semgrep scan             --config .semgrep.yml             --config p/security-audit             --config p/javascript             --config p/python             --config p/github-actions             --exclude .semgrep.yml             --severity ERROR             --error             --json --output semgrep-results.json             .
+
+      - name: Upload Semgrep results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
+          retention-days: 30
+
+  dependency-scan:
+    name: Dependency Scan (osv-scanner)
+    runs-on: self-hosted
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install osv-scanner
+        env:
+          OSV_VERSION: v2.5.1
+        run: |
+          mkdir -p "$RUNNER_TEMP/osv-scanner"
+          curl -fsSL -o "$RUNNER_TEMP/osv-scanner/osv-scanner"             "https://github.com/google/osv-scanner/releases/download/${OSV_VERSION}/osv-scanner_linux_amd64"
+          chmod +x "$RUNNER_TEMP/osv-scanner/osv-scanner"
+          echo "$RUNNER_TEMP/osv-scanner" >> "$GITHUB_PATH"
+
+      - name: Run osv-scanner
+        continue-on-error: true
+        run: |
+          mkdir -p security-reports
+          osv-scanner scan source -r . --format json --output security-reports/osv-scanner.json || true
+          osv-scanner scan source -r .
+
+      - name: Upload osv-scanner report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: osv-scanner-report
+          path: security-reports/osv-scanner.json
+          retention-days: 30
