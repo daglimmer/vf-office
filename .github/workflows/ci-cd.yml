@@ -51,7 +51,15 @@ jobs:
         run: npm run build
 
       - name: Verify build output
-        run: test -f dist/index.html && echo "Build output verified"
+        run: |
+          # The office is a WebGL scene -- index.html alone proves nothing. main.js does
+          # Promise.all([loadAsync office.glb, fetch waypoints.json]), so either asset
+          # missing rejects the pair, scene.add() never runs, and the page serves a clean
+          # HTTP 200 that renders a BLACK SCREEN. Assert the scene actually ships.
+          for f in index.html office.glb waypoints.json; do
+            test -s "dist/$f" || { echo "::error::dist/$f missing or empty - the office would render black"; exit 1; }
+          done
+          echo "Build output verified (shell + scene assets)"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
