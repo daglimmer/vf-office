@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite public",
-    "build": "vite build --config vite.config.js public --base=/office/ --outDir ../dist --emptyOutDir",
-    "deploy": "npm run build && cp -r public/office.glb public/waypoints.json dist/ 2>/dev/null; echo 'copy dist/* into adapter public dir'"
+    "build": "vite build --config vite.config.js public --base=/office/ --outDir ../dist --emptyOutDir && cp public/office.glb public/waypoints.json dist/",
+    "deploy": "npm run build && echo 'copy dist/* into adapter public dir'"
   },
-  "dependencies": { "three": "^0.165.0" },
-  "devDependencies": { "vite": "^5.3.0" }
+  "dependencies": {
+    "three": "^0.165.0"
+  },
+  "devDependencies": {
+    "vite": "^5.3.0"
+  }
 }
