@@ -22,15 +22,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      # 2026-08-25: setup-python@v5 failed on EVERY run. This self-hosted runner has no
+      # tool cache, so it tried to download 3.12 and fell over -- a permanent red X that
+      # had nothing to do with the code. The box already has python3 (3.13). Use it.
+      - name: Show Python
+        run: python3 --version
 
       - name: Install zizmor + actionlint
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install "zizmor==1.29.0" "actionlint-py==1.7.12.24"
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "zizmor==1.29.0" "actionlint-py==1.7.12.24"
 
       - name: Run zizmor on workflow files
         run: |
@@ -66,15 +67,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      # 2026-08-25: setup-python@v5 failed on EVERY run. This self-hosted runner has no
+      # tool cache, so it tried to download 3.12 and fell over -- a permanent red X that
+      # had nothing to do with the code. The box already has python3 (3.13). Use it.
+      - name: Show Python
+        run: python3 --version
 
       - name: Install Semgrep
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install "semgrep==1.174.0"
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "semgrep==1.174.0"
 
       - name: Run Semgrep custom + registry rules
         run: |
