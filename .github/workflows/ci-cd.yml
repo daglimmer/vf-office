@@ -50,16 +50,42 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify build output
+      - name: Verify the office is COMPLETE, not merely present
+        # 2026-08-25. The office renders PROCEDURALLY from office.js + anchors.json; office.glb is
+        # only one prop. A 'cleanup' commit deleted office.js, screens.js, avatars.js,
+        # interactive.js, moments.js and anchors.json, and halved main.js. The build still
+        # SUCCEEDED and still deployed - it just shipped a hollow office. An earlier fix then
+        # restored office.glb and declared victory, because the page was no longer black.
+        #
+        # Existence checks cannot catch that. These are COMPLETENESS checks.
         run: |
-          # The office is a WebGL scene -- index.html alone proves nothing. main.js does
-          # Promise.all([loadAsync office.glb, fetch waypoints.json]), so either asset
-          # missing rejects the pair, scene.add() never runs, and the page serves a clean
-          # HTTP 200 that renders a BLACK SCREEN. Assert the scene actually ships.
-          for f in index.html office.glb waypoints.json; do
-            test -s "dist/$f" || { echo "::error::dist/$f missing or empty - the office would render black"; exit 1; }
+          set -e
+          fail() { echo "::error::$1"; exit 1; }
+      
+          # 1. the modules that BUILD the office must exist
+          for f in main.js office.js screens.js avatars.js interactive.js moments.js anchors.json; do
+            test -s "public/$f" || fail "public/$f is missing - the office would render hollow"
           done
-          echo "Build output verified (shell + scene assets)"
+      
+          # 2. the office must actually be WIRED IN, not merely on disk
+          grep -q "from './office.js'"  public/main.js || fail "main.js does not import office.js - there is no office"
+          grep -q "from './avatars.js'" public/main.js || fail "main.js does not import avatars.js - no people in the office"
+      
+          # 3. every runtime asset must ship
+          for f in index.html office.glb waypoints.json anchors.json; do
+            test -s "dist/$f" || fail "dist/$f missing or empty"
+          done
+      
+          # 4. the bundle must not have silently shrunk. The real office is ~1,000,000 bytes;
+          #    the hollow one was 663,327. A floor catches the whole failure class.
+          BUNDLE=$(ls -S dist/assets/index-*.js | head -1)
+          SIZE=$(wc -c < "$BUNDLE")
+          echo "office bundle: $BUNDLE = $SIZE bytes"
+          [ "$SIZE" -ge 900000 ] || fail "office bundle is only $SIZE bytes (floor 900000). Modules are missing - this is the hollow office, do NOT deploy."
+          ANCH=$(wc -c < dist/anchors.json)
+          [ "$ANCH" -ge 8000 ] || fail "anchors.json is only $ANCH bytes - the office would be unfurnished"
+      
+          echo "office verified complete: bundle $SIZE, anchors $ANCH"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

@@ -59,15 +59,38 @@ export function initHud({ bus, sim, demo }) {
   const log5 = [], hist = [];
   let histFilter = 'all';
 
-  // ---------------- collapse behavior (§9.6)
+  // ---------------- collapse behavior (§9.6) + Phase 8f pin (Ray)
+  // States: auto (events expand it, collapses when idle) -> pinned open ->
+  // pinned closed. Persisted across reloads.
+  let pinState = localStorage.getItem('hudPin') ?? 'auto';
+  const pin = document.createElement('button');
+  pin.className = 'hud-pin';
+  function applyPin() {
+    root.classList.toggle('pin-closed', pinState === 'closed');
+    if (pinState === 'open') root.classList.add('open');
+    if (pinState === 'closed') root.classList.remove('open');
+    pin.textContent = pinState === 'open' ? '\u{1F4CC}' : pinState === 'closed' ? '\u2715' : '\u25CC';
+    pin.title = `sidebar: ${pinState} — click to cycle (auto \u2192 pinned open \u2192 pinned closed)`;
+    pin.classList.toggle('on', pinState !== 'auto');
+  }
+  pin.onclick = e => {
+    e.stopPropagation();
+    pinState = pinState === 'auto' ? 'open' : pinState === 'open' ? 'closed' : 'auto';
+    try { localStorage.setItem('hudPin', pinState); } catch {}
+    applyPin();
+  };
+  root.appendChild(pin);
+  applyPin();
+
   let expandTimer = null;
   function expandPulse() {
+    if (pinState !== 'auto') return;
     root.classList.add('open');
     clearTimeout(expandTimer);
     expandTimer = setTimeout(() => { if (!root.matches(':hover')) root.classList.remove('open'); }, 6000);
   }
-  root.addEventListener('mouseenter', () => root.classList.add('open'));
-  root.addEventListener('mouseleave', () => root.classList.remove('open'));
+  root.addEventListener('mouseenter', () => { if (pinState !== 'closed') root.classList.add('open'); });
+  root.addEventListener('mouseleave', () => { if (pinState === 'auto') root.classList.remove('open'); });
 
   root.querySelector('.hist-toggle').onclick = () => {
     const h = root.querySelector('.hud-history');
@@ -135,6 +158,14 @@ export function initHud({ bus, sim, demo }) {
 
   function render() {
     isDirty = false;
+    // Every FLEET agent in the 3D office must also have a sidebar card. `reg` was fed ONLY by bridge
+    // events, so roster agents that never emitted one (e.g. Metis, Pheme) were in the office but missing
+    // from the list. Seed reg from the live roster so the sidebar always matches the floor. (Ray)
+    for (const av of sim.getAgents()) {
+      const id = av.agentId;                       // fleet agents have agentId; card-workers/guard don't
+      if (!id || reg.has(id)) continue;
+      reg.set(id, { id, name: av.name ?? id, color: av.color });
+    }
     // stats
     const live = [...reg.values()].filter(a => a.type !== 'infrastructure');
     const states = live.map(a => agentState(a.id));
@@ -196,12 +227,14 @@ export function initHud({ bus, sim, demo }) {
         cd.title = `cache ${Math.round(u.cacheHitRate * 100)}%`;
         cd.style.background = u.cacheHitRate > 0.8 ? '#3DFF7A' : u.cacheHitRate >= 0.4 ? '#FFB02E' : '#FF4D4D';
       }
-      // context row
+      // context row — Phase 12: show the agent's current task title whenever available,
+      // matching the 3D agent by agentId OR name (both indexed by syncWorkers and
+      // pollRoster above). Falls through to name-only when nothing is active.
       const ctx = el.querySelector('.ctx');
       if (st === 'blocked' && a.reason) ctx.textContent = `⛔ ${a.reason}`;
       else {
-        const av = sim.getAgents().find(v => v.name === id && v.cardId);
-        ctx.textContent = av ? `${av.cardId} · ${av.taskTitle ?? ''}` : '';
+        const av = sim.getAgents().find(v => (v.agentId === id || v.name === id) && (v.cardId || v.taskTitle));
+        ctx.textContent = av ? (av.cardId ? `${av.cardId} · ${av.taskTitle ?? ''}` : (av.taskTitle ?? '')) : '';
       }
       // counters (frozen presentational when paused/killed §10.3)
       const frozen = st === 'PAUSED' || st === 'KILLED';

@@ -28,17 +28,17 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0f13;
   background: var(--glass); backdrop-filter: blur(14px);
   border-left: 1px solid var(--line); overflow: hidden;
   transition: width .25s ease; display: flex; flex-direction: column; }
-.hud.open, .hud:hover { width: 320px; }
+.hud.open, .hud:not(.pin-closed):hover { width: 320px; }
 .hud-stats { display: flex; gap: 4px; padding: 8px 6px; border-bottom: 1px solid rgba(255,255,255,.07); flex-direction: column; }
-.hud.open .hud-stats, .hud:hover .hud-stats { flex-direction: row; justify-content: space-between; padding: 10px; }
+.hud.open .hud-stats, .hud:not(.pin-closed):hover .hud-stats { flex-direction: row; justify-content: space-between; padding: 10px; }
 .hud-stats div { display: flex; flex-direction: column; align-items: center; min-width: 24px; }
 .hud-stats b { font-size: 14px; }
 .hud-stats span { font-size: 9px; color: var(--mut); display: none; }
-.hud.open .hud-stats span, .hud:hover .hud-stats span { display: block; }
+.hud.open .hud-stats span, .hud:not(.pin-closed):hover .hud-stats span { display: block; }
 .hud-stats .warn { color: var(--amber); } .hud-stats .alert { color: var(--red); }
 
 .hud-infra { display: none; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.07); }
-.hud.open .hud-infra, .hud:hover .hud-infra { display: flex; }
+.hud.open .hud-infra, .hud:not(.pin-closed):hover .hud-infra { display: flex; }
 .hud-infra .vm { display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
   background: rgba(255,255,255,.04); border-radius: 5px; padding: 3px 8px; }
 .hud-infra .vm em { color: var(--mut); font-style: normal; font-size: 10px; }
@@ -46,7 +46,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0f13;
 .hud-infra .none { color: var(--mut); font-size: 11px; }
 
 .hud-agents { flex: 1; overflow-y: auto; padding: 8px; display: none; grid-auto-rows: min-content; gap: 6px; }
-.hud.open .hud-agents, .hud:hover .hud-agents { display: grid; }
+.hud.open .hud-agents, .hud:not(.pin-closed):hover .hud-agents { display: grid; }
 .agent-card { background: rgba(255,255,255,.04); border: 1px solid transparent; border-radius: 8px;
   padding: 8px 10px; transition: opacity .25s, box-shadow .3s; }
 .agent-card.child { margin-left: 16px; border-left: 2px solid #9B30FF55; }
@@ -83,12 +83,12 @@ button.icon.kill.armed { color: #fff; border-color: var(--red);
 .hud-notif-head { display: none; padding: 6px 10px; font-size: 10px; text-transform: uppercase;
   letter-spacing: .08em; color: var(--mut); border-top: 1px solid rgba(255,255,255,.07);
   justify-content: space-between; align-items: center; }
-.hud.open .hud-notif-head, .hud:hover .hud-notif-head { display: flex; }
+.hud.open .hud-notif-head, .hud:not(.pin-closed):hover .hud-notif-head { display: flex; }
 .hist-toggle { background: none; border: 1px solid rgba(255,255,255,.15); color: var(--mut);
   border-radius: 4px; font-size: 9px; cursor: pointer; padding: 1px 6px; }
 .hud-notifications, .hud-history { display: none; padding: 4px 8px 10px; }
-.hud.open .hud-notifications, .hud:hover .hud-notifications { display: block; }
-.hud.open .hud-history[style*="block"], .hud:hover .hud-history[style*="block"] { display: block; }
+.hud.open .hud-notifications, .hud:not(.pin-closed):hover .hud-notifications { display: block; }
+.hud.open .hud-history[style*="block"], .hud:not(.pin-closed):hover .hud-history[style*="block"] { display: block; }
 .nrow { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 2px;
   cursor: pointer; animation: slide-in .25s ease; }
 .nrow span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mut); }
@@ -133,7 +133,7 @@ button.icon.kill.armed { color: #fff; border-color: var(--red);
 
 /* ---------------- Phase 6: HUD tabs + page panels (Backups / Docs) ---------------- */
 .hud-tabs { display: none; gap: 4px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,.07); }
-.hud.open .hud-tabs, .hud:hover .hud-tabs { display: flex; }
+.hud.open .hud-tabs, .hud:not(.pin-closed):hover .hud-tabs { display: flex; }
 .hud-tabs button { flex: 1; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.12);
   color: var(--mut); border-radius: 6px; padding: 4px 0; font-size: 11px; cursor: pointer; }
 .hud-tabs button.on { color: var(--fg); border-color: #4DD8FF; }
@@ -274,3 +274,32 @@ body.embed #presets { left: 118px; max-width: 50vw; }
 .ad-task span { color: var(--mut); font-size: 10px; margin-left: 4px; }
 .ad-task.ad-none { color: var(--mut); font-style: italic; }
 .ad-offline { color: var(--mut); font-size: 10px; font-style: italic; margin-top: 8px; }
+
+/* ---------------- Phase 8: clickable-object tooltip ---------------- */
+#hot-tip { position: fixed; z-index: 40; pointer-events: none; background: var(--glass);
+  backdrop-filter: blur(14px); border: 1px solid #4DD8FF; border-radius: 6px;
+  color: var(--fg); font-size: 11px; padding: 4px 10px; max-width: 320px;
+  animation: fade-in .15s ease; }
+
+/* ---------------- Phase 8f: sidebar pin ---------------- */
+.hud-pin { position: absolute; top: 6px; left: 6px; z-index: 5; width: 24px; height: 22px;
+  background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.14); color: var(--mut);
+  border-radius: 5px; font-size: 11px; cursor: pointer; padding: 0; line-height: 1; }
+.hud-pin.on { color: #4DD8FF; border-color: #4DD8FF; }
+.hud.pin-closed .hud-pin { color: var(--amber); border-color: var(--amber); }
+.hud .hud-stats { margin-top: 26px; }
+
+/* ---------------- Phase 9.2: boot splash ---------------- */
+#bootsplash { position: fixed; inset: 0; z-index: 100; background: #0d0f13;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+#bootsplash b { color: #4DD8FF; font-size: 18px; letter-spacing: .12em; animation: splash-pulse 1.6s infinite; }
+#bootsplash span { color: var(--mut); font-size: 12px; }
+@keyframes splash-pulse { 50% { opacity: .45; } }
+
+/* ---------------- Phase 9.4: perf badge ---------------- */
+#perfbadge { position: fixed; bottom: 54px; left: 10px; z-index: 50; background: var(--glass);
+  backdrop-filter: blur(14px); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--green); font: 11px/1.4 monospace; padding: 4px 10px; pointer-events: none; }
+
+/* ---------------- Phase 9.7: ?blur=0 strips backdrop blur (perf A/B) ---------------- */
+body.noblur * { backdrop-filter: none !important; }

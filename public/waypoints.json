@@ -59,9 +59,10 @@
     ["nav_door_dc", "spawn_dc"],
     ["nav_door_dc", "despawn_dc"]
   ],
+  "comment_labels": "Room display labels moved to config/topology.json (Project E / E6) — the office viewer reads them from /api/topology. This file keeps only nav geometry (center + camera target).",
   "rooms": {
     "lounge":  { "center": [8.5, 0, 3],     "cam": "cam_room_lounge" },
-    "staff":   { "center": [8.5, 0, 8.5],   "cam": "cam_room_staff" },
+    "staff":   { "center": [8.5, 0, 8.5],    "cam": "cam_room_staff" },
     "devops":  { "center": [8.5, 0, 14],    "cam": "cam_room_devops" },
     "corridor":{ "center": [20, 0, 8.5],    "cam": "cam_room_corridor" },
     "meeting": { "center": [31.5, 0, 3],    "cam": "cam_room_meeting" },

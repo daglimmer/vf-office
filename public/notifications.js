@@ -12,7 +12,7 @@ const PRI = {
   alert: { color: '#FF4D4D', pulses: 6, pause: 5, panel: 20 },
 };
 
-export function initNotifications({ bus, sim, THREE, scene, byCard, anchors, rooms, agents }) {
+export function initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents }) {
 
   // ---------------- visuals
   function pingSphere(color, scale = 1) {
@@ -105,8 +105,10 @@ export function initNotifications({ bus, sim, THREE, scene, byCard, anchors, roo
         }, readFor * 1000);
       };
       if (st === 'idle' || st === 'spawning') {
-        readFor = 15;   // idle: walk to a desk, sit, read (§7.1)
-        agent.acquire('work', s => { agent.hold('work', s); agent.goto(s, () => { agent.sitAt(s, 'glance'); read(); }); });
+        // Ray 2026-07-15: an idle agent RESTS at home — a buzz must NOT drag it across the corridor
+        // to a work desk just to "read" a one-line message. Read in place (glance where it stands or
+        // sits), then it settles straight back home. (Was: acquire('work')→goto→sit = the corridor march.)
+        readFor = 12; agent.pose = 'glance'; read();
       } else if (st === 'working') {
         readFor = 15; agent.pose = 'glance'; read();
       } else if (agent.path.length) {
@@ -174,4 +176,100 @@ export function initNotifications({ bus, sim, THREE, scene, byCard, anchors, roo
     }
     if (ev.event === 'system.announcement') announce(ev.message, ev.priority ?? 'normal');
   });
+
+  // ---------------- THE BUZZ — live agent-to-agent bus (Ray). Reuse the envelope→walk-to-read channel.
+  // A message POSTed to an agent on olympus /api/messages pops an envelope over that agent's head; the
+  // agent walks to a desk and "reads" it (same mechanism Kanban comments use). Broadcasts fan out as a
+  // room-wide announcement. This is the VISIBLE layer; Marcus's webhook is the real wake layer (they pair).
+  const KIND_TYPE = { alert: 'blocked', ask: 'task_assigned', inform: 'comment', broadcast: 'comment' };
+  const BUZZ_ALIAS = { sage: 'k8slearn', ollie: 'oly', ceo: 'marcus', coo: 'oly' };
+  const buzzSeen = new Set();
+  let buzzPrimed = false;
+  function buzzResolve(to) {
+    if (!to) return null;
+    const key = String(to).toLowerCase();
+    const id = BUZZ_ALIAS[key] ?? key;
+    if (byId?.get(id)) return byId.get(id);
+    const flat = id.replace(/[^a-z0-9]/g, '');
+    return agents.find(a => (a.agentId || '').toLowerCase() === id
+      || (a.name || '').toLowerCase().replace(/[^a-z0-9]/g, '').includes(flat));
+  }
+  function buzzDeliver(m) {
+    const to = String(m.to || '').toLowerCase();
+    const author = m.from || 'agent';
+    const text = m.subject || '(message)';
+    if (to === 'all' || to === 'broadcast' || to === 'fleet') {
+      announce(`${author}: ${text}`, m.kind === 'alert' ? 'alert' : 'normal');
+      return;
+    }
+    const a = buzzResolve(to);                              // no office body for this recipient (e.g. ray/opus) → skip
+    if (a) notifyAgent(a, { type: KIND_TYPE[m.kind] ?? 'comment', author, text });
+  }
+  // ---- PERSISTENT unread-mail flag (Ray 2026-07-15): the transient envelope only shows for ~12s on a NEW
+  // message, and a message stays `unread` in the API until the agent's (flaky, sometimes-timing-out) buzz
+  // wake acks it. So pending mail was invisible unless you happened to be watching. This flag hovers a small
+  // envelope (+count) over any agent that has UNREAD messages and clears the instant they ack — a truthful,
+  // always-on "who is sitting on unread mail" signal that does NOT depend on the LLM wake firing.
+  const mailFlags = new Map();   // agent -> { sprite, count }
+  function mailEnvelopeSprite(count) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const x = cv.getContext('2d');
+    // bright glow halo so the badge reads clearly from the top-down overview camera
+    x.fillStyle = 'rgba(255,227,44,0.30)'; x.beginPath(); x.arc(32, 31, 27, 0, 7); x.fill();
+    // FILLED bright-yellow envelope (was a thin outline — too subtle; Ray: bigger + brighter)
+    x.fillStyle = '#FFE32C'; x.strokeStyle = '#3a2f00'; x.lineWidth = 2.5;
+    x.beginPath(); x.roundRect(12, 18, 40, 26, 3); x.fill(); x.stroke();
+    x.beginPath(); x.moveTo(12, 20); x.lineTo(32, 35); x.lineTo(52, 20); x.stroke();   // flap
+    // count badge ALWAYS shown (even 1) — so a partially-read inbox reads as "1 still unread",
+    // not a stuck envelope (Ray: an agent acked one of two, the badge correctly stayed for the other).
+    x.fillStyle = '#FF4D4D'; x.beginPath(); x.arc(52, 15, 11, 0, 7); x.fill();
+    x.fillStyle = '#fff'; x.font = 'bold 15px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(count > 9 ? '9+' : String(count), 52, 15);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), color: 0xffffff, depthTest: false, transparent: true }));
+    sp.scale.setScalar(0.5); sp.position.y = 0.72;
+    return sp;
+  }
+  function clearMailFlag(agent) {
+    const f = mailFlags.get(agent);
+    if (!f) return;
+    agent.parts?.head?.remove(f.sprite); f.sprite.material.map?.dispose?.(); f.sprite.material.dispose();
+    mailFlags.delete(agent);
+  }
+  function updateMailFlags(list) {
+    const unread = new Map();                                // agent -> unread count (targeted, unread only)
+    for (const m of list) {
+      if (!m || m.status !== 'unread') continue;
+      const to = String(m.to || '').toLowerCase();
+      if (to === 'all' || to === 'broadcast' || to === 'fleet') continue;  // broadcasts aren't per-agent mail
+      const a = buzzResolve(to);
+      if (a) unread.set(a, (unread.get(a) || 0) + 1);
+    }
+    for (const a of [...mailFlags.keys()]) if (!unread.has(a)) clearMailFlag(a);   // acked/gone → clear
+    for (const [a, count] of unread) {
+      const existing = mailFlags.get(a);
+      if (existing && existing.count === count) continue;    // unchanged → leave it
+      clearMailFlag(a);
+      if (!a.parts?.head) continue;
+      const sprite = mailEnvelopeSprite(count);
+      a.parts.head.add(sprite);
+      mailFlags.set(a, { sprite, count });
+    }
+  }
+
+  async function pollBuzz() {
+    try {
+      const msgs = await fetch('/api/messages?limit=50').then(r => (r.ok ? r.json() : []));
+      const list = Array.isArray(msgs) ? msgs : [];
+      for (const m of list) {                               // newest-first; prime silently on first poll
+        if (!m || !m.id) continue;
+        if (buzzPrimed && !buzzSeen.has(m.id)) buzzDeliver(m);
+        buzzSeen.add(m.id);
+      }
+      buzzPrimed = true;
+      if (buzzSeen.size > 300) { buzzSeen.clear(); for (const m of list) if (m && m.id) buzzSeen.add(m.id); }
+      updateMailFlags(list);                                // persistent unread badge, every poll (incl. the first)
+    } catch { /* buzz endpoint blip — keep polling */ }
+    setTimeout(pollBuzz, 5000);
+  }
+  pollBuzz();
 }
