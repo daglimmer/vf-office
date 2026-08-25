@@ -60,6 +60,45 @@ jobs:
       - name: Verify dist/index.html exists
         run: test -f dist/index.html && echo "✓ Build output verified"
 
+      - name: Completeness gate — six office modules + runtime assets
+        run: |
+          set -euo pipefail
+          echo "Checking six office modules in source public/..."
+          for f in office.js avatars.js screens.js interactive.js moments.js anchors.json; do
+            if [ ! -f "public/$f" ]; then
+              echo "❌ REGRESSION: public/$f missing"
+              exit 1
+            fi
+            echo "  ✓ public/$f"
+          done
+          echo "Checking runtime assets in source public/..."
+          for f in office.glb waypoints.json anchors.json; do
+            if [ ! -f "public/$f" ]; then
+              echo "❌ REGRESSION: public/$f missing"
+              exit 1
+            fi
+            echo "  ✓ public/$f"
+          done
+          echo "Checking main.js imports office.js and avatars.js..."
+          grep -qE 'import.*office\.js|from.*office\.js' public/main.js || \
+            (echo "❌ REGRESSION: public/main.js does not import office.js"; exit 1)
+          grep -qE 'import.*avatars\.js|from.*avatars\.js' public/main.js || \
+            (echo "❌ REGRESSION: public/main.js does not import avatars.js"; exit 1)
+          echo "  ✓ public/main.js imports office.js and avatars.js"
+          echo "Copying runtime assets to dist/ (mirrors Dockerfile stage 1)..."
+          cp public/anchors.json dist/ || true
+          cp public/waypoints.json dist/ || true
+          cp public/office.glb dist/ 2>/dev/null || true
+          echo "Checking built bundle size floor (~900 KB)..."
+          BUNDLE_SIZE=$(find dist -name '*.js' -printf '%s\n' | awk '{s+=$1} END {print s}')
+          FLOOR=900000
+          if [ "$BUNDLE_SIZE" -lt "$FLOOR" ]; then
+            echo "❌ REGRESSION: combined dist/*.js size $BUNDLE_SIZE bytes < $FLOOR bytes"
+            exit 1
+          fi
+          echo "✓ Bundle size OK ($BUNDLE_SIZE bytes)"
+          echo "✓ Completeness gate passed"
+
       - name: PointLight regression guard
         run: |
           CURRENT=$(grep -c 'PointLight' public/3d.html 2>/dev/null || echo 0)
@@ -77,12 +116,14 @@ jobs:
     name: Build & Push Docker
     needs: quality-gates
     runs-on: self-hosted   # private registry (10.75.1.211) is only reachable on the LAN
-    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/master'
     outputs:
       image_tag: ${{ steps.tag.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for deploy-time provenance check
 
       - name: Compute immutable image tag
         id: tag
@@ -119,9 +160,18 @@ jobs:
     name: Deploy to Production
     needs: [docker]
     runs-on: self-hosted
-    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/master'
     environment: production
     steps:
+      - name: Deploy-time provenance check
+        run: |
+          # The image must be built from a commit that is an ancestor of origin/master
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "❌ PROVENANCE FAIL: $GITHUB_SHA is not an ancestor of origin/master"
+            exit 1
+          fi
+          echo "✓ Provenance OK: $GITHUB_SHA is an ancestor of origin/master"
+
       - name: Deploy to K3s production namespace
         run: |
           export KUBECONFIG=${{ env.KUBECONFIG_PATH }}
