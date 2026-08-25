@@ -143,49 +143,18 @@ jobs:
           DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.TAG }} | cut -d'@' -f2)
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: self-hosted
-    needs: docker-build
-    environment: staging
-    env:
-      IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
-      IMAGE_DIGEST: ${{ needs.docker-build.outputs.image_digest }}
-    steps:
-      - name: Setup kubeconfig
-        run: |
-          echo "${{ secrets.KUBECONFIG }}" | base64 -d > "$RUNNER_TEMP/kubeconfig" && chmod 600 "$RUNNER_TEMP/kubeconfig"
-          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> $GITHUB_ENV
-
-      - name: Deploy to K3s (staging namespace)
-        run: |
-          kubectl set image deployment/${{ env.KUBE_DEPLOYMENT }}-staging \
-            ${{ env.KUBE_DEPLOYMENT }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-            -n ${{ env.KUBE_NAMESPACE }} --record
-
-      - name: Wait for rollout
-        run: |
-          kubectl rollout status deployment/${{ env.KUBE_DEPLOYMENT }}-staging \
-            -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
-
-      - name: Verify staging health
-        run: |
-          sleep 10
-          curl -sf https://staging-office.k3s.110lymph.nl/api/health | jq -e '.status' || exit 1
-          curl -sf https://staging-office.k3s.110lymph.nl/api/backups | jq -e '.systems | length > 0' || exit 1
-
-      - name: Capture staging screenshots
-        run: |
-          mkdir -p screenshots
-          npx playwright install chromium 2>/dev/null || true
-          npx playwright screenshot https://staging-office.k3s.110lymph.nl screenshots/staging-home.png --full-page 2>/dev/null || true
-          npx playwright screenshot https://staging-office.k3s.110lymph.nl/backups screenshots/staging-backups.png --full-page 2>/dev/null || true
-          npx playwright screenshot https://staging-office.k3s.110lymph.nl/office screenshots/staging-office.png --full-page 2>/dev/null || true
+  # deploy-staging REMOVED 2026-08-25 (Orion).
+  # It ran `kubectl set image deployment/olympus-office-staging`, and that deployment has
+  # NEVER EXISTED. So the job failed on every run, which (a) blocked deploy-production via
+  # `needs`, and (b) tripped rollback-on-failure — whose `Rollback production` step then
+  # REVERTED PRODUCTION. Every push to main therefore un-deployed itself and rolled the live
+  # office back. It ate the office restore on 2026-08-25 minutes after it was merged.
+  # If real staging is ever wanted, create the deployment FIRST, then add the job back.
 
   deploy-production:
     name: Deploy to Production
     runs-on: self-hosted
-    needs: [docker-build, deploy-staging]
+    needs: [docker-build]
     environment: production
     env:
       IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
@@ -229,7 +198,7 @@ jobs:
   kanban-complete:
     name: Kanban Complete with Evidence
     runs-on: self-hosted
-    needs: [docker-build, deploy-staging, deploy-production]
+    needs: [docker-build, deploy-production]
     if: always()
     env:
       IMAGE_TAG: ${{ needs.docker-build.outputs.image_tag }}
@@ -279,7 +248,7 @@ jobs:
   rollback-on-failure:
     name: Auto Rollback on Failure
     runs-on: self-hosted
-    needs: [deploy-staging, deploy-production]
+    needs: [deploy-production]
     if: failure()
     steps:
       - name: Setup kubeconfig
