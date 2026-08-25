@@ -177,23 +177,41 @@ jobs:
             -n ${{ env.KUBE_NAMESPACE }} --timeout=300s
 
       - name: Verify production health
+        # 2026-08-25: this checked https://olympus.110lymph.nl — a hostname that DOES NOT RESOLVE.
+        # It therefore failed on every run, which tripped rollback-on-failure and REVERTED
+        # PRODUCTION every single time. Combined with the phantom staging job, the pipeline
+        # un-deployed itself on every push. Real host is olympus.110lymph.nl.
+        #
+        # It also only asked "is it alive?". Being alive is how a hollow office passes: the page
+        # loaded fine while a third of the office was missing. So we verify COMPLETENESS in
+        # production, the same way the build does.
         run: |
-          sleep 10
-          curl -sf https://office.110lymph.nl/api/health | jq -e '.status' || exit 1
-          curl -sf https://office.110lymph.nl/api/backups | jq -e '.systems | length > 0' || exit 1
+          set -e
+          BASE=https://olympus.110lymph.nl
+          sleep 20
+          curl -sf "$BASE/office/health" | jq -e '.ok' >/dev/null || { echo "::error::office /health not ok"; exit 1; }
+          curl -sf "$BASE/api/backups" | jq -e '.systems | length > 0' >/dev/null || { echo "::error::backups feed empty"; exit 1; }
+
+          ANCH=$(curl -sf -o /dev/null -w '%{size_download}' "$BASE/office/anchors.json")
+          [ "${ANCH:-0}" -ge 8000 ] || { echo "::error::anchors.json is ${ANCH} bytes in PRODUCTION - the office is unfurnished"; exit 1; }
+
+          BUNDLE=$(curl -sf "$BASE/office/" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1)
+          SIZE=$(curl -sf -o /dev/null -w '%{size_download}' "$BASE/office/$BUNDLE")
+          echo "production office: $BUNDLE = $SIZE bytes, anchors = $ANCH bytes"
+          [ "${SIZE:-0}" -ge 900000 ] || { echo "::error::production bundle is only ${SIZE} bytes - the hollow office is live"; exit 1; }
 
       - name: Capture production screenshots
         run: |
           mkdir -p screenshots
           npx playwright install chromium 2>/dev/null || true
-          npx playwright screenshot https://office.110lymph.nl screenshots/prod-home.png --full-page 2>/dev/null || true
-          npx playwright screenshot https://office.110lymph.nl/backups screenshots/prod-backups.png --full-page 2>/dev/null || true
-          npx playwright screenshot https://office.110lymph.nl/office screenshots/prod-office.png --full-page 2>/dev/null || true
+          npx playwright screenshot https://olympus.110lymph.nl screenshots/prod-home.png --full-page 2>/dev/null || true
+          npx playwright screenshot https://olympus.110lymph.nl/backups screenshots/prod-backups.png --full-page 2>/dev/null || true
+          npx playwright screenshot https://olympus.110lymph.nl/office screenshots/prod-office.png --full-page 2>/dev/null || true
 
       - name: Verify Kanban & Cost components render
         run: |
-          npx playwright screenshot https://office.110lymph.nl/kanban screenshots/prod-kanban.png --full-page 2>/dev/null || true
-          npx playwright screenshot https://office.110lymph.nl/infrastructure screenshots/prod-infrastructure.png --full-page 2>/dev/null || true
+          npx playwright screenshot https://olympus.110lymph.nl/kanban screenshots/prod-kanban.png --full-page 2>/dev/null || true
+          npx playwright screenshot https://olympus.110lymph.nl/infrastructure screenshots/prod-infrastructure.png --full-page 2>/dev/null || true
 
   kanban-complete:
     name: Kanban Complete with Evidence
