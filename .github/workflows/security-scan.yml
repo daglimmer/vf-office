@@ -29,9 +29,15 @@ jobs:
         run: python3 --version
 
       - name: Install zizmor + actionlint
+        # 2026-08-25: plain `pip install` fails on this runner with
+        # `externally-managed-environment` (PEP 668 - the system Python refuses to be
+        # written to). Install into a throwaway venv and put it on PATH, so the run
+        # steps below stay unchanged.
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install "zizmor==1.29.0" "actionlint-py==1.7.12.24"
+          python3 -m venv "$RUNNER_TEMP/ci-venv"
+          "$RUNNER_TEMP/ci-venv/bin/pip" install --quiet --upgrade pip
+          "$RUNNER_TEMP/ci-venv/bin/pip" install --quiet "zizmor==1.29.0" "actionlint-py==1.7.12.24"
+          echo "$RUNNER_TEMP/ci-venv/bin" >> "$GITHUB_PATH"
 
       - name: Run zizmor on workflow files
         run: |
@@ -74,9 +80,15 @@ jobs:
         run: python3 --version
 
       - name: Install Semgrep
+        # 2026-08-25: plain `pip install` fails on this runner with
+        # `externally-managed-environment` (PEP 668 - the system Python refuses to be
+        # written to). Install into a throwaway venv and put it on PATH, so the run
+        # steps below stay unchanged.
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install "semgrep==1.174.0"
+          python3 -m venv "$RUNNER_TEMP/ci-venv"
+          "$RUNNER_TEMP/ci-venv/bin/pip" install --quiet --upgrade pip
+          "$RUNNER_TEMP/ci-venv/bin/pip" install --quiet "semgrep==1.174.0"
+          echo "$RUNNER_TEMP/ci-venv/bin" >> "$GITHUB_PATH"
 
       - name: Run Semgrep custom + registry rules
         run: |
