@@ -610,7 +610,7 @@ class Agent {
     if (this.blocked) st = 'blocked';
     else if (this.overlay === 'down' || this.overlay === 'killed') st = 'offline';
     else if (this.rosterStatus === 'offline') st = 'offline';
-    else if (['working', 'briefing', 'debrief', 'documentation'].includes(this.state)) st = 'active';
+    else if (['working', 'briefing', 'debrief', 'documentation', 'review'].includes(this.state)) st = 'active';
     const c = new THREE.Color(STATUS_COLOR[st]);
     this.headMat.color.copy(c); this.headMat.emissive.copy(c);
     this.ring.visible = this.state === 'working' && st === 'active';
@@ -676,6 +676,7 @@ class Agent {
       // 27 seats): prefer the agent's own room, then fall back — so a worker always lands at a desk.
       case 'working': seatAgent(this, this.role === 'devops' ? ['doc', 'work', 'lounge'] : ['work', 'doc', 'lounge'], 'type', true); break;
       case 'debrief': this.acquire('meet', s => { this.hold('meet', s); this.goto(s, () => { this.sitAt(s, 'talk'); this.enterBriefing(); this.timer = TIMINGS.debrief; }); }); break;
+      case 'review': this.goto('review_station', () => { this.sitAt('review_station', 'talk'); }); break;
       case 'documentation': this.acquire('doc', s => { this.hold('doc', s); this.goto(s, () => { this.sitAt(s, 'type'); this.timer = TIMINGS.documentation; }); }); break;
       case 'lunch': this.acquire('lounge', s => { this.hold('lounge', s); this.goto(s, () => { this.sitAt(s, 'sit'); this.timer = TIMINGS.lunch; }); }); break;
       case 'despawning': this.goto('despawn_dc', () => { this.fx = { kind: 'despawn', t: 0 }; }); break;
@@ -911,8 +912,8 @@ function walkUpdate(dt) {
 const COLUMN_STATE = {
   // actively running → sit at a desk and work it
   running: 'working', in_progress: 'working', active: 'working', pending: 'working',
-  // blocked stays at the desk but flagged (setBlocked overlay); stalled / in-review → debrief
-  blocked: 'working', review: 'debrief', waiting: 'debrief',
+  // blocked stays at the desk but flagged (setBlocked overlay); review → present at the review station
+  blocked: 'working', review: 'review', waiting: 'debrief',
   // NOTE: queued lanes (ready/todo/queued/open/backlog) are intentionally OMITTED. A not-yet-started
   // card must NOT animate its agent — see ACTIVE_COLS below (Ray 2026-07-15 "briefing 24/7" fix).
 };
@@ -957,7 +958,11 @@ function syncWorkers() {
     workers.delete(name);
     for (const [cid, ag] of [...byCard]) if (ag === w) byCard.delete(cid);
     w.taskTitle = null; w.cardId = null; w.drawTask();   // released → label back to name-only
-    if (w.agentId) { w.state = 'idle'; w.refreshStatus(); }   // roster body: back to roster control
+    if (w.agentId) { 
+      w.lifecycle = null;                                     // reset so the next active card drives a fresh lifecycle
+      w.state = 'idle'; w.refreshStatus(); 
+      if (w.seated === 'review_station' && !w.path.length) goHome(w); // accepted review: walk away from the review station
+    }
     else w.setLifecycle('debrief');                           // ride the walk-out chain
   }
   // ensure/update one worker per assignee

@@ -1,6 +1,6 @@
 {
  "comment": "Ground truth extracted from Phase 3 office.glb. Anchors are glTF Y-up world positions; build_office.py MUST reproduce these exactly (tolerance 0.01m).",
- "count": 62,
+ "count": 63,
  "rooms": {
   "lounge": {
    "center": [
@@ -724,6 +724,20 @@
     0,
     0,
     1
+   ]
+  },
+  {
+   "name": "review_station",
+   "pos": [
+    28,
+    0,
+    8.75
+   ],
+   "quat": [
+    0,
+    0.707108,
+    0,
+    0.707106
    ]
   },
   {

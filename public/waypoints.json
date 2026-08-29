@@ -54,6 +54,7 @@
     ["nav_door_meeting", "meet_seat_07"],
 
     ["nav_door_control", "ollie_station"],
+    ["nav_door_control", "review_station"],
     ["nav_door_ceo", "ceo_desk"],
 
     ["nav_door_dc", "spawn_dc"],
