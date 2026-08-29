@@ -1257,12 +1257,22 @@ let boardFeedLogged = false;
 function boardToSnapshot(board) {
   const cols = board?.columns ?? {};
   const cards = [];
+  // "WAITING ON YOU" — cards assigned to ray that aren't done/archived.
+  // Computed from the board feed (the live board) so it works even when the
+  // WS /snapshot path is unavailable (the board feed is the primary card source).
+  let waitingOnYou = 0;
+  const waitingOnYouCards = [];
   for (const col of Object.keys(cols)) {
     if (INACTIVE_COLS.has(col.toLowerCase())) continue;   // don't carry the done history
-    for (const c of (cols[col] ?? []))
+    for (const c of (cols[col] ?? [])) {
       cards.push({ cardId: c.cardId ?? c.id, title: c.title ?? c.cardId ?? c.id, assignee: c.assignee ?? null, column: col });
+      if ((c.assignee ?? '').toLowerCase() === 'ray') {
+        waitingOnYou++;
+        waitingOnYouCards.push({ id: c.cardId ?? c.id, title: c.title ?? c.cardId ?? c.id });
+      }
+    }
   }
-  return { event: 'snapshot', cards };
+  return { event: 'snapshot', cards, waitingOnYou, waitingOnYouCards };
 }
 async function pollBoardFeed() {
   try {
