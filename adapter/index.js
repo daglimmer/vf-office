@@ -302,6 +302,15 @@ function snapshot() {
     const row = db.prepare("SELECT COUNT(*) AS cnt FROM tasks WHERE lower(status) = 'blocked'").get();
     blockedCount = row ? Number(row.cnt) : 0;
   } catch (e) { /* ignore */ }
+  // "WAITING ON YOU" — cards assigned to Ray that aren't done/archived. This is the
+  // failure that keeps repeating: Ray is the bottleneck without knowing it. A number
+  // he cannot miss, on a screen he already looks at, fixes that.
+  let waitingOnYou = 0, waitingOnYouCards = [];
+  try {
+    const rows = db.prepare("SELECT id, title FROM tasks WHERE lower(assignee) = 'ray' AND lower(status) NOT IN ('done','archived') ORDER BY created_at DESC").all();
+    waitingOnYou = rows.length;
+    waitingOnYouCards = rows.map(r => ({ id: String(r.id), title: r.title }));
+  } catch (e) { /* ignore */ }
   // Dynamic active count: agents with recent heartbeat (last 5 minutes)
   let activeCount = 0;
   const activeThreshold = Date.now() - 5 * 60 * 1000;
@@ -317,7 +326,7 @@ function snapshot() {
   const fmap = _fable.map;
   health.lastSnapshotAt = Date.now(); health.lastCardCount = cards.length;
   return {
-    event: 'snapshot', ts: now(), cards, links, blockedCount, activeCount,
+    event: 'snapshot', ts: now(), cards, links, blockedCount, activeCount, waitingOnYou, waitingOnYouCards,
     degraded: health.errors.size > 0,              // error propagation: let the office show "data stale"
     staleSources: [...health.errors.keys()],
     agents: [...agents.values()].map(a => {
