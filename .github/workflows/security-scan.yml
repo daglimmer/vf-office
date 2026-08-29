@@ -135,12 +135,13 @@ jobs:
         run: |
           mkdir -p security-reports
           osv-scanner scan source -r . --format json --output security-reports/osv-scanner.json || true
-          # Gating scan: --skip-dev (2026-08-29, t_8070899a). The SHIPPED artifact
-          # (adapter image) has ZERO npm deps — adapter/package.json is node
-          # built-ins only; the frontend bundle is compiled at build time.
-          # Dev-dep advisories (vite/nanoid/postcss/esbuild) are build-time only
-          # and remain captured in the uploaded report above; they do not gate.
-          osv-scanner scan source -r . --skip-dev
+          # Full gate restored (2026-08-29, t_0014ae19). Dev toolchain upgraded:
+          # vite 5.4.21 -> 6.4.3, nanoid 3.3.12 -> 3.3.18, postcss 8.5.15 -> 8.5.26,
+          # esbuild 0.21.5 -> 0.25.12. Zero advisories across the entire lockfile
+          # (dev deps included), verified via OSV querybatch before restoring.
+          # History: --skip-dev was a temporary scope-down from t_8070899a when
+          # OSV-DB drift flagged build-toolchain dev deps; those are now fixed.
+          osv-scanner scan source -r .
 
       - name: Upload osv-scanner report
         if: always()
