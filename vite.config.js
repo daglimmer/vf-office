@@ -18,15 +18,7 @@ export default defineConfig({
       '/api': TARGET,
       '/mapping.json': TARGET,
       '/ws': { target: WS_TARGET, ws: true },
-      '/timeline': {
-        target: TARGET,
-        bypass: function(req, res, proxyOptions) {
-          // If the request is for /timeline.js, don't proxy it
-          if (req.url.endsWith('.js') || req.url.endsWith('.css')) {
-            return req.url;
-          }
-        },
-      },
+      // 2026-08-29 (t_c369e5e0): /timeline proxy + bypass removed — ticker gone.
     },
   },
 });

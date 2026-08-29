@@ -509,10 +509,12 @@ function notify(ev) {
 }
 
 // ------------------------------------------------------------------ schedules (Phase 4: VF #3 timeline + VF #4 reminders)
-// mapping.json:
-//   reminders:   [{ message, priority, intervalMinutes | dailyAt:"HH:MM", kind? }]
-//   cronJobs:    [{ label, owner, intervalMinutes | dailyAt:"HH:MM" }]
-//   maintenance: [{ label, owner, at:"2026-06-12T02:00:00Z", durationMinutes }]
+// 2026-08-29 (t_c369e5e0): the timeline ticker + reminder broadcasts were removed.
+// Their only data source was mapping.json fixtures (reminders/cronJobs/maintenance),
+// never a real event feed. nextFire() is retained for when a real scheduler exists;
+// timelineItems() and reminderTick() now no-op on empty arrays (which is the honest
+// state until real jobs land in mapping.json). The /timeline REST endpoint stays so
+// callers don't 404, returning [].
 function nextFire(spec, afterMs) {
   if (spec.intervalMinutes) {
     const iv = spec.intervalMinutes * 60000;
@@ -528,8 +530,10 @@ function nextFire(spec, afterMs) {
   return null;
 }
 function timelineItems() {
+  // Retained for real schedule data. With mapping.json fixtures emptied
+  // (t_c369e5e0) this returns [] until a real scheduler populates the arrays.
   const out = [], nowMs = Date.now(), horizon = nowMs + 12 * 3600 * 1000;
-  const MAX_PER = 24;                                       // cap runaway expansions
+  const MAX_PER = 24;
   for (const c of mapping.cronJobs ?? []) {
     let t = nextFire(c, nowMs), n = 0;
     while (t && t <= horizon && n++ < MAX_PER) { out.push({ ts: Math.floor(t / 1000), label: c.label, kind: c.kind ?? 'cron', owner: c.owner ?? null }); t = nextFire(c, t); }
@@ -545,25 +549,10 @@ function timelineItems() {
   }
   return out.sort((a, b) => a.ts - b.ts);
 }
-st.reminderFired = st.reminderFired || {};
-function reminderTick() {
-  const nowMs = Date.now();
-  (mapping.reminders ?? []).forEach((r, i) => {
-    const key = String(i);
-    const last = st.reminderFired[key] ?? nowMs;            // first boot: skip past fires
-    const due = nextFire(r, last);
-    if (due && due <= nowMs) {
-      st.reminderFired[key] = due;
-      broadcast({ event: 'system.announcement', message: r.message, priority: r.priority ?? 'normal', ts: now() });
-      log('reminder fired:', r.message);
-    } else if (!st.reminderFired[key]) {
-      st.reminderFired[key] = nowMs;
-    }
-  });
-  saveState();
-}
-setInterval(reminderTick, 15000);
-reminderTick();
+// reminderTick() removed (t_c369e5e0): it broadcast mapping.json reminder fixtures
+// as system.announcement events — fiction shown without the demo badge. With the
+// fixtures emptied it would no-op every 15s anyway. Re-enable when real reminders
+// exist, not hardcoded strings.
 
 // ------------------------------------------------------------------ agent roster (Phase 6 - /api/agents)
 function agentGroup(a) {
