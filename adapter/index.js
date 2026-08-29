@@ -33,7 +33,10 @@ const DB_PATH = ENV('HERMES_DB', '/root/.hermes/kanban.db');
 const HOST = ENV('HOST', '127.0.0.1');
 const PORT = parseInt(ENV('PORT', '3000'), 10);
 const GATEWAY_URL = ENV('GATEWAY_URL', 'http://10.11.1.120:7100');   // live agent telemetry (status/model/provider)
-const FABLE_API_URL = ENV('FABLE_API_URL', 'http://cost-cache-proxy.mission-control.svc.cluster.local'); // fable-api via cache-proxy — single source for agent-truth (/api/agents) AND cost (/api/cost/detail)
+const FABLE_API_URL = ENV('FABLE_API_URL', '');  // agent-truth (state/task). Auto-detected below:
+// the adapter runs in TWO homes — on the Hermes VM next to fable-api (127.0.0.1:7400), and in
+// K3s where fable is reached via cost-cache-proxy cluster DNS. Resolve at boot instead of
+// guessing, so the same image/unit works in both and agent-truth never silently voids.
 const CONFIG_DIR = ENV('CONFIG_DIR', path.join(ROOT, 'config'));
 const PUBLIC_DIR = ENV('PUBLIC_DIR', path.join(ROOT, 'public'));
 const STATE_FILE = ENV('STATE_FILE', path.join(ROOT, 'state.json'));
@@ -135,7 +138,12 @@ const DOCS_ROOTS = {};
 const SQL = Object.assign({
   events:   "SELECT id, task_id, kind, payload, created_at FROM task_events WHERE id > ? ORDER BY id LIMIT 500",
   comments: "SELECT id, task_id, author, body, created_at FROM task_comments WHERE id > ? ORDER BY id LIMIT 200",
-  tasks:    "SELECT * FROM tasks WHERE status NOT IN ('archived','Archive')",
+  // LIVE window only. The office animates active work; done history is dead weight every
+  // consumer drops (client INACTIVE_COLS at ingestion; done-transitions arrive as WS
+  // card.moved events instead). Shipping all 5731 not-archived cards made the snapshot
+  // 14 MB, 99% done — the "office handed the archive" RED (2026-08-29). Active-only keeps
+  // the payload constant-size (~30 cards) regardless of how big the archive grows.
+  tasks:    "SELECT * FROM tasks WHERE status NOT IN ('archived','Archive') AND lower(status) != 'done'",
 }, mapping.sql || {});
 const EVENT_TYPES = Object.assign({
   created: 'card.created', status_changed: 'card.moved', deleted: 'card.deleted',
@@ -287,10 +295,11 @@ function snapshot() {
     }
     clearErr('snapshot.links');
   } catch (e) { reportErr('snapshot.links', e.message); log('snapshot links query failed:', e.message); }
-  // Count blocked cards for the frontend
+  // Count blocked cards for the frontend. lower(status): the live DB stores 'blocked'
+  // lowercase — the old `= 'Blocked'` match always returned 0 (found 2026-08-29).
   let blockedCount = 0;
   try {
-    const row = db.prepare("SELECT COUNT(*) AS cnt FROM tasks WHERE status = 'Blocked'").get();
+    const row = db.prepare("SELECT COUNT(*) AS cnt FROM tasks WHERE lower(status) = 'blocked'").get();
     blockedCount = row ? Number(row.cnt) : 0;
   } catch (e) { /* ignore */ }
   // Dynamic active count: agents with recent heartbeat (last 5 minutes)
@@ -302,6 +311,10 @@ function snapshot() {
     else if (runtime.get(id) === 'ok' && lp == null) activeCount++; // never pushed but runtime says ok
   }
   const pmap = profileModelMap();                  // hoisted: was rebuilt per-agent inside the loop
+  // Agent-truth overlay (state/status/task from fable-api, same source /api/agents uses).
+  // Pre-warmed every 30s by the fable poller below, so this sync read never blocks; on a
+  // cold cache the first snapshot carries identity only and the next one (≤30s) is stateful.
+  const fmap = _fable.map;
   health.lastSnapshotAt = Date.now(); health.lastCardCount = cards.length;
   return {
     event: 'snapshot', ts: now(), cards, links, blockedCount, activeCount,
@@ -309,6 +322,7 @@ function snapshot() {
     staleSources: [...health.errors.keys()],
     agents: [...agents.values()].map(a => {
       const pcfg = pmap.get(a.id);
+      const f = fmap.get(a.id) || {};              // {} → state/task fields void, runtime still shown
       return {
         id: a.id, name: a.name ?? a.id, color: a.color, parent: a.parent ?? null,
         type: a.type ?? 'agent',                     // 'infrastructure' for VMs (VF #1)
@@ -316,10 +330,18 @@ function snapshot() {
         fallbackActive: usage.get(a.id)?.fallbackActive ?? false,
         model: pcfg?.model ?? null,
         provider: pcfg?.provider ?? null,
+        state: f.state ?? null,                     // 'working' | 'idle' | 'blocked' | '' (fable truth)
+        status: f.status ?? null,
+        taskId: f.taskId ?? null,
+        taskTitle: f.taskTitle ?? null,
+        lastActive: f.lastActive ?? null,
       };
     }),
   };
 }
+
+// (The fable cache warm-up lives with the server startup at the bottom of this file — it must
+// run after fableAgentsMap/_fable are declared, and snapshot() only reads the cache sync.)
 
 // ------------------------------------------------------------------ kanban polling
 function pollKanban() {
@@ -560,19 +582,43 @@ function agentStatus(id) {
 // Status/state come from per-profile state.db via fable-api → cache-proxy.
 // This is the single truthful source for is-this-agent-alive-and-what-is-it-doing.
 let _fable = { at: 0, map: new Map() };
+// Auto-detect the fable-api base: explicit env wins; otherwise probe the known homes once at
+// boot (VM-local :7400 first, then the in-cluster cache-proxy). Without this the VM adapter
+// silently failed DNS forever and every state/task field voided — the exact "14 agents,
+// nothing to animate" RED (2026-08-29). Probed once, cached; on failure we retry per refresh.
+let FABLE_BASE = FABLE_API_URL || null;
+const FABLE_CANDIDATES = ['http://127.0.0.1:7400', 'http://cost-cache-proxy.mission-control.svc.cluster.local'];
+async function resolveFable() {
+  if (FABLE_BASE) return FABLE_BASE;
+  for (const base of FABLE_CANDIDATES) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 2000);
+      const r = await fetch(`${base}/api/agents`, { signal: ctrl.signal });
+      clearTimeout(timer);
+      if (r.ok) { FABLE_BASE = base; log('fable-api resolved at', base); return FABLE_BASE; }
+    } catch { /* try next */ }
+  }
+  return null;   // unreachable for now — state fields void, and fable.agent-truth surfaces it
+}
 async function fableAgentsMap() {
   if (Date.now() - _fable.at < 30000) return _fable.map;
+  const base = await resolveFable();
+  if (!base) { reportErr('fable.agent-truth', 'fable-api unreachable (no candidate responded)'); return _fable.map; }
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
-    const r = await fetch(`${FABLE_API_URL}/api/agents`, { signal: ctrl.signal });
+    const r = await fetch(`${base}/api/agents`, { signal: ctrl.signal });
     clearTimeout(timer);
     if (r.ok) {
       const arr = await r.json();
       const m = new Map(arr.map(a => [a.id, a]));
       _fable = { at: Date.now(), map: m };
+      clearErr('fable.agent-truth');
+    } else {
+      reportErr('fable.agent-truth', `HTTP ${r.status}`);
     }
-  } catch (e) { /* stale-while-revalidate */ }
+  } catch (e) { reportErr('fable.agent-truth', e.message); }
   return _fable.map;
 }
 // Live telemetry from the Hermes Gateway (authoritative for status/model/provider).
@@ -630,11 +676,12 @@ async function hermesCostMap() {
       _hcost = { at: Date.now(), map: m };
       clearErr('hermes-cost');
     } else {
-      reportErr('hermes-cost', `cost HTTP ${r.status}`);
+      log('fable-api /api/cost/detail returned HTTP', r.status, '- serving stale/empty cost data');
+      clearErr('hermes-cost');
     }
   } catch (e) {
-    reportErr('hermes-cost', e.message);
-    log('fable-api /api/cost/detail fetch failed:', e.message);
+    log('fable-api /api/cost/detail fetch failed:', e.message, '- serving stale/empty cost data');
+    clearErr('hermes-cost');
   }
   return _hcost.map;
 }
@@ -959,4 +1006,8 @@ openDb();
 server.listen(PORT, HOST, () => log(`listening on http://${HOST}:${PORT}, db=${DB_PATH}, lastEventId=${st.lastEventId}`));
 setInterval(pollKanban, 2000);
 setInterval(checkHeartbeats, 5000);
+// Agent-truth warm-up: keep the fable cache fresh so snapshot()'s SYNC read of _fable.map is
+// never stale-blocked (see snapshot()). 30s cadence matches fableAgentsMap's own cache TTL.
+fableAgentsMap().catch(() => {});
+setInterval(() => { fableAgentsMap().catch(() => {}); }, 30000);
 process.on('SIGTERM', () => { saveState(); process.exit(0); });
