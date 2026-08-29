@@ -14,7 +14,8 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { initHud } from './hud.js';
 import { initNotifications } from './notifications.js';
-import { initTimeline } from './timeline.js';
+// 2026-08-29 (t_c369e5e0): timeline ticker removed (fixtures were fiction);
+// Backups/Docs panels removed with the sidebar tabs.
 
 export const bus = new EventTarget();
 const emit = ev => bus.dispatchEvent(new CustomEvent('bridge', { detail: ev }));
@@ -659,7 +660,6 @@ connect();
 // ----------------------------------------------------------------- modules
 initHud({ bus, sim, demo: () => demoMode });
 initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents });
-initTimeline({ sim, demo: () => demoMode });
 
 // ----------------------------------------------------------------- loop
 const clock = new THREE.Clock();

@@ -34,15 +34,7 @@ export function runDemo(inject) {
     // snapshot
     inject({ event: 'snapshot', ts: now(), agents: AGENTS.map(a => ({ ...a, runtime: 'ok', fallbackActive: false })), cards: [] });
 
-    // timeline fixtures (VF #3)
-    const t0 = now();
-    window.__demoTimeline = [
-      { ts: t0 + 14 * 60, label: 'backup-sweep', kind: 'cron', owner: 'storekeeper' },
-      { ts: t0 + 45 * 60, label: 'DeepSeek balance check', kind: 'balance', owner: 'ollie' },
-      { ts: t0 + 2 * 3600, label: 'cluster maintenance', kind: 'maintenance', owner: 'deploybot' },
-      { ts: t0 + 3 * 3600 + 600, label: 'Weekly cost report', kind: 'reminder', owner: 'ceo' },
-      { ts: t0 + 7 * 3600, label: 'cert-renew', kind: 'cron', owner: 'deploy-build' },
-    ];
+    // 2026-08-29 (t_c369e5e0): timeline fixtures removed with the ticker (fiction).
 
     // synthetic usage every 5s
     let tok = { storekeeper: 9000, 'store-nas': 2200, 'store-pbs': 1500, 'store-zfs': 800, deploybot: 5100, 'deploy-build': 600 };
@@ -85,8 +77,7 @@ export function runDemo(inject) {
     card();
     setInterval(card, 95000);
 
-    // announcements
-    setTimeout(() => inject({ event: 'system.announcement', message: 'Config drift lint completed — 0 findings', priority: 'normal', ts: now() }), 25000);
+    // 2026-08-29 (t_c369e5e0): removed the 'Config drift lint' demo announcement.
     setTimeout(() => inject({ event: 'system.announcement', message: 'DeepSeek balance below $5 — top up needed', priority: 'high', ts: now() }), 70000);
     setTimeout(() => inject({ event: 'system.announcement', message: 'SECURITY: anomalous login pattern on cloudnode-01', priority: 'alert', ts: now() }), 130000);
 

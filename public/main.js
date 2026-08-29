@@ -23,9 +23,9 @@ import { initInteractive, updateInteractive, clickInteractive } from './interact
 import { initScreens, updateScreens } from './screens.js';
 import { initMoments, updateMoments } from './moments.js';
 import { initNotifications } from './notifications.js';
-import { initTimeline } from './timeline.js';
-import { initBackups } from './backups.js';
-import { initDocs } from './docs.js';
+// 2026-08-29 (t_c369e5e0): timeline ticker removed — its only data sources were
+// demo fixtures and mapping.json schedule fixtures, never a real event feed.
+// Backups/Docs panels removed with the sidebar tabs (dashboard owns those pages).
 
 // ---- Phase 9.1: crash visibility. A silent runtime error = "all black", so
 // surface any boot/runtime error in the badge where Ray can read it.
@@ -1347,9 +1347,6 @@ catch (e) { console.error('[interactive] init failed:', e); }
 try { if (!SAFE) initMoments({ bus, sim }); }
 catch (e) { console.error('[moments] init failed:', e); }
 initNotifications({ bus, sim, THREE, scene, byCard, byId, anchors, rooms, agents });
-initTimeline({ sim, demo: () => demoMode });
-initBackups();
-initDocs();
 
 // ----------------------------------------------------------------- security guard
 // A non-roster avatar that patrols the forecourt (reuses the walk system + the

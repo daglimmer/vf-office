@@ -36,17 +36,8 @@
   "docsUrl": "",
   "docsRoots": {},
 
-  "reminders": [
-    { "message": "DeepSeek balance check", "priority": "normal", "intervalMinutes": 240, "kind": "balance", "owner": "ollie" },
-    { "message": "Weekly cost report", "priority": "normal", "dailyAt": "09:00", "owner": "ceo" },
-    { "message": "Config drift lint", "priority": "normal", "intervalMinutes": 720, "owner": "deploybot" }
-  ],
-  "cronJobs": [
-    { "label": "backup-sweep", "owner": "storekeeper", "intervalMinutes": 180 },
-    { "label": "cert-renew check", "owner": "deploy-build", "dailyAt": "03:30" },
-    { "label": "log-rotate", "owner": "devops", "intervalMinutes": 360 }
-  ],
-  "maintenance": [
-    { "label": "cluster maintenance window", "owner": "deploybot", "at": "2026-06-12T02:00:00Z", "durationMinutes": 90 }
-  ]
+  "_comment_2026_08_29": "reminders/cronJobs/maintenance emptied (t_c369e5e0). They fed /timeline and reminder announcements ('DeepSeek balance check', 'Weekly cost report', 'backup-sweep', 'log-rotate') that were fixtures, not real events. When a real scheduler exists, list real jobs here — until then the office shows nothing rather than fiction.",
+  "reminders": [],
+  "cronJobs": [],
+  "maintenance": []
 }
