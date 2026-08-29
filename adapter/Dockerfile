@@ -10,5 +10,5 @@ COPY config/ ./config/
 COPY public/ ./public/
 COPY sources/ ./sources/
 
-EXPOSE 3001
+EXPOSE 3000
 CMD ["node", "index.js"]

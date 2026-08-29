@@ -9,3 +9,8 @@ public/dist/
 *.bak*
 *.bck
 .kube/
+
+# runtime/dev artifacts (from master reconcile 2026-08-29)
+*.log
+adapter/state.json
+.env
