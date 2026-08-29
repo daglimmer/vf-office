@@ -24,7 +24,7 @@ export function initHud({ bus, sim, demo }) {
       <div><b data-b="active">0</b><span>active</span></div>
       <div><b data-b="blocked" class="warn">0</b><span>blocked</span></div>
       <div><b data-b="inflight">0</b><span>in flight</span></div>
-      <div><b data-b="cost">$–</b><span>session</span></div>
+      <div><b data-b="waiting">0</b><span>waiting on you</span></div>
     </div>
     <div class="hud-infra" data-b="infra"></div>
     <div class="hud-agents" data-b="agents"></div>
@@ -56,6 +56,7 @@ export function initHud({ bus, sim, demo }) {
   const usage = new Map();      // agentId -> usage record
   const cards = new Map();      // DOM: agentId -> {el, steer}
   let budgets = { soft: 5, hard: 20 };
+  let waitingData = { count: 0, titles: [] };  // "WAITING ON YOU" — cards assigned to Ray (from snapshot)
   const log5 = [], hist = [];
   let histFilter = 'all';
 
@@ -174,11 +175,17 @@ export function initHud({ bus, sim, demo }) {
     $('blocked').textContent = blockedN;
     $('blocked').classList.toggle('alert', blockedN > 0);
     $('inflight').textContent = sim.getAgents().filter(a => a.cardId).length;
-    let total = 0, any = false;
-    for (const u of usage.values()) if (u.costUsd != null) { total += u.costUsd; any = true; }
-    const costEl = $('cost');
-    costEl.textContent = any ? `$${total.toFixed(2)}` : '$–';
-    costEl.className = total > budgets.hard ? 'alert' : total > budgets.soft ? 'warn' : '';
+    // "WAITING ON YOU" — live count of cards assigned to Ray that aren't done/archived.
+    // Driven by the snapshot's waitingOnYou field (adapter queries kanban.db).
+    // Zero reads as "nothing waiting on you", not an empty box — a blank panel is
+    // indistinguishable from a broken one.
+    const waitingEl = $('waiting');
+    const wn = waitingData.count;
+    waitingEl.textContent = wn > 0 ? String(wn) : '✓';
+    waitingEl.className = wn > 0 ? 'alert' : '';
+    waitingEl.title = wn > 0
+      ? `${wn} card${wn === 1 ? '' : 's'} waiting on you:\n` + waitingData.titles.map(t => `• ${t}`).join('\n')
+      : 'nothing waiting on you';
 
     // infra strip (VF #1)
     const infra = [...reg.values()].filter(a => a.type === 'infrastructure');
@@ -290,6 +297,13 @@ export function initHud({ bus, sim, demo }) {
       case 'snapshot':
         for (const a of ev.agents ?? []) {
           reg.set(a.id, { ...reg.get(a.id), ...a });
+        }
+        // "WAITING ON YOU" — count + titles from the adapter's snapshot query
+        if (typeof ev.waitingOnYou === 'number') {
+          waitingData = {
+            count: ev.waitingOnYou,
+            titles: (ev.waitingOnYouCards ?? []).map(c => c.title ?? c.id),
+          };
         }
         break;
       case 'card.comment':
