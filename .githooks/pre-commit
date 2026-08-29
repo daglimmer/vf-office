@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Per-repo gitleaks pre-commit hook.
+# Blocks commits that contain secrets in staged changes.
+set -euo pipefail
+
+GITLEAKS="$(command -v gitleaks || true)"
+
+if [ -z "$GITLEAKS" ]; then
+    echo "ERROR: gitleaks is not on PATH. Install it to block secret leaks." >&2
+    echo "  curl -sSL https://github.com/gitleaks/gitleaks/releases/latest | ..." >&2
+    exit 1
+fi
+
+echo "Running gitleaks protect on staged changes..."
+"$GITLEAKS" protect --staged --verbose --redact
