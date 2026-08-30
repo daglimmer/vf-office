@@ -200,6 +200,16 @@ jobs:
           echo "production office: $BUNDLE = $SIZE bytes, anchors = $ANCH bytes"
           [ "${SIZE:-0}" -ge 900000 ] || { echo "::error::production bundle is only ${SIZE} bytes - the hollow office is live"; exit 1; }
 
+      - name: Propagate office commit to vf-dashboard
+        # The dashboard's /api/freshness compares OFFICE_COMMIT against the latest
+        # vf-office main head. Keep it in sync with the office build we just deployed.
+        run: |
+          set -e
+          OFFICE_SHA="${GITHUB_SHA::8}"
+          echo "OFFICE_COMMIT=$OFFICE_SHA"
+          kubectl set env deployment/vf-dashboard -n mission-control OFFICE_COMMIT="$OFFICE_SHA"
+          kubectl rollout status deployment/vf-dashboard -n mission-control --timeout=120s
+
       - name: Capture production screenshots
         run: |
           mkdir -p screenshots
