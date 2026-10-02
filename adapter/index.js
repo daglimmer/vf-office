@@ -916,6 +916,29 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { ok: true, id, status: b.status ?? null, assignee: b.assignee ?? null });
       } catch (e) { log('kanban action failed:', e.message); return json(res, 502, { ok: false, error: e.message }); }
     }
+    // ---- probe endpoints (t_1f631ddc, 2026-10-02) — split LIVENESS from DEPENDENCY state.
+    // Before this change BOTH probes pointed at `/health`, which 503s whenever ANY
+    // downstream error is recorded (`fable.agent-truth` every 30 s, `gateway`, `hermes-cost`).
+    // A downstream hiccup therefore (a) restarted the container (8 restarts / 31 d, "Liveness
+    // probe failed: HTTP probe failed with statuscode: 503") and (b) evicted the pod from the
+    // Service endpoints so /office returned 503 during the blip.
+    //   /healthz = LIVENESS. Only "is this process alive and serving?" — must NEVER consult a
+    //              dependency, or a gateway/fable blip restarts the container.
+    //   /readyz  = READINESS. Downstream blips must NOT evict the pod from the endpoints. Only
+    //              a LOCAL fault that actually stops the board from serving data — a broken
+    //              snapshot / kanban.db read — marks the pod not-ready.
+    // `/health` keeps its 503-for-degraded semantics for dashboards and watchdogs.
+    if (req.method === 'GET' && (p === '/healthz' || p === '/livez')) {
+      return json(res, 200, { status: 'ok', uptimeMs: Math.round(process.uptime() * 1000) });
+    }
+    if (req.method === 'GET' && p === '/readyz') {
+      const localKeys = [...health.errors.keys()].filter(k => k.startsWith('snapshot.'));
+      return json(res, localKeys.length ? 503 : 200, {
+        status: localKeys.length ? 'not-ready' : 'ready',
+        local: localKeys.map(k => `${k}: ${health.errors.get(k).msg}`),
+        downstream: [...health.errors.keys()].filter(k => !k.startsWith('snapshot.')),   // reported, never gates readiness
+      });
+    }
     if (req.method === 'GET' && p === '/health') {                                       // code-quality pass: surface silent failures
       const h = healthReport();
       return json(res, h.ok ? 200 : 503, { status: h.ok ? 'ok' : 'degraded', ...h });
