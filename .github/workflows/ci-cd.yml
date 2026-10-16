@@ -214,11 +214,23 @@ jobs:
       - name: Verify combined pod serves LIVE snapshot
         # t_73ec06f4 acceptance: svc olympus-office must return the ~850KB live payload from
         # olympus-office-adapter-v2 (proxied), NOT the 16KB stale baked kanban.db snapshot.
+        # 2026-10-16 first attempt raced endpoint programming: pod was Ready but the svc had no
+        # endpoints yet on the snapcheck node's kube-proxy → curl exit 7 (connection refused).
+        # Wait for endpoints, then retry the curl — a single-shot probe is flaky by design here.
         run: |
           set -e
-          SNAP=$(kubectl -n ${{ env.KUBE_NAMESPACE }} run "snapcheck-${GITHUB_RUN_ID}" --rm -i --restart=Never \
-            --image=curlimages/curl --quiet -- \
-            curl -s -m 15 http://olympus-office.mission-control.svc.cluster.local/snapshot -o /dev/null -w '%{size_download}')
+          kubectl -n ${{ env.KUBE_NAMESPACE }} wait --for=condition=ready pod \
+            -l app=olympus-office --timeout=120s
+          kubectl -n ${{ env.KUBE_NAMESPACE }} rollout status \
+            deployment/${{ env.KUBE_DEPLOYMENT }} --timeout=120s
+          SNAP=""
+          for i in 1 2 3 4 5 6; do
+            SNAP=$(kubectl -n ${{ env.KUBE_NAMESPACE }} run "snapcheck-${GITHUB_RUN_ID}-${i}" --rm -i --restart=Never \
+              --image=curlimages/curl --quiet -- \
+              curl -s -m 15 http://olympus-office.mission-control.svc.cluster.local/snapshot -o /dev/null -w '%{size_download}' 2>/dev/null) && [ -n "$SNAP" ] && break
+            echo "attempt $i: snapshot probe empty/refused (endpoints still programming?), retrying in 10s"
+            sleep 10
+          done
           echo "combined-pod /snapshot: ${SNAP} bytes"
           [ "${SNAP:-0}" -ge 800000 ] || { echo "::error::combined pod /snapshot is ${SNAP} bytes - still stale"; exit 1; }
 
