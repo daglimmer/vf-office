@@ -12,6 +12,11 @@
  *   HERMES_DB=/root/.hermes/kanban.db  HOST=127.0.0.1  PORT=3000
  *   CONFIG_DIR=<here>/config  PUBLIC_DIR=<here>/public  STATE_FILE=<here>/state.json
  *   SIGNALD_SOCK=/run/hermes-office/signald.sock
+ *   SNAPSHOT_UPSTREAM=<url>  — when set, GET /snapshot is proxied to this base URL
+ *     (t_73ec06f4, dynamic-over-baked-in) instead of read from the LOCAL kanban.db.
+ *     The combined K3s pod mounts a node hostPath /root/.hermes whose kanban.db can be
+ *     a stale copy; proxying makes /snapshot always live regardless of mount state.
+ *     Unset = legacy local behaviour. Upstream failure = honest 502, never stale data.
  *
  * Assumed Hermes schema (override SQL in mapping.json "sql" key if different):
  *   task_events(id, task_id, kind, payload, created_at)  payload = JSON
@@ -41,6 +46,7 @@ const CONFIG_DIR = ENV('CONFIG_DIR', path.join(ROOT, 'config'));
 const PUBLIC_DIR = ENV('PUBLIC_DIR', path.join(ROOT, 'public'));
 const STATE_FILE = ENV('STATE_FILE', path.join(ROOT, 'state.json'));
 const SIGNALD_SOCK = ENV('SIGNALD_SOCK', '/run/hermes-office/signald.sock');
+const SNAPSHOT_UPSTREAM = ENV('SNAPSHOT_UPSTREAM', '').replace(/\/+$/, '');   // t_73ec06f4: env-driven /snapshot source
 
 const log = (...a) => console.log(new Date().toISOString(), '[adapter]', ...a);
 
@@ -351,6 +357,38 @@ function snapshot() {
 
 // (The fable cache warm-up lives with the server startup at the bottom of this file — it must
 // run after fableAgentsMap/_fable are declared, and snapshot() only reads the cache sync.)
+
+// ------------------------------------------------------------------ snapshot upstream proxy
+// t_73ec06f4 (2026-10-16): the combined K3s pod mounts a node hostPath /root/.hermes whose
+// kanban.db can be a stale copy (baked 2026-10-02 snapshot made the dashboard lie while the
+// real adapter was healthy). When SNAPSHOT_UPSTREAM is set, /snapshot is proxied to that base
+// URL instead of read locally. Upstream failure returns an honest 502 — never stale data.
+function proxySnapshot(res) {
+  return new Promise((resolve) => {
+    const lib = SNAPSHOT_UPSTREAM.startsWith('https:') ? https : http;
+    const up = lib.get(`${SNAPSHOT_UPSTREAM}/snapshot`, { timeout: 10000 }, (ur) => {
+      if (ur.statusCode !== 200) {
+        ur.resume();
+        log(`snapshot upstream ${SNAPSHOT_UPSTREAM} returned HTTP ${ur.statusCode}`);
+        resolve(json(res, 502, { ok: false, error: `snapshot upstream returned HTTP ${ur.statusCode}` }));
+        return;
+      }
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'X-Snapshot-Source': SNAPSHOT_UPSTREAM,   // observability: proves the live source
+      });
+      ur.pipe(res);
+      ur.on('end', () => resolve());
+      ur.on('error', (e) => { log('snapshot upstream stream error:', e.message); res.destroy(); resolve(); });
+    });
+    up.on('timeout', () => up.destroy(new Error('snapshot upstream timeout')));
+    up.on('error', (e) => {
+      log('snapshot upstream fetch failed:', e.message);
+      if (!res.headersSent) resolve(json(res, 502, { ok: false, error: `snapshot upstream unreachable: ${e.message}` }));
+      else res.destroy();
+    });
+  });
+}
 
 // ------------------------------------------------------------------ kanban polling
 function pollKanban() {
@@ -943,7 +981,10 @@ const server = http.createServer(async (req, res) => {
       const h = healthReport();
       return json(res, h.ok ? 200 : 503, { status: h.ok ? 'ok' : 'degraded', ...h });
     }
-    if (req.method === 'GET' && p === '/snapshot') return json(res, 200, snapshot());       // Phase 5: REST snapshot for HTTP fallback + probes
+    if (req.method === 'GET' && p === '/snapshot') {                                        // Phase 5: REST snapshot for HTTP fallback + probes
+      if (SNAPSHOT_UPSTREAM) return proxySnapshot(res);   // t_73ec06f4: live upstream, never the stale local db
+      return json(res, 200, snapshot());
+    }
     if (req.method === 'GET' && p === '/timeline') return json(res, 200, timelineItems());
     if (req.method === 'GET' && p === '/api/backups') return json(res, 200, readBackups(BACKUPS_FILE));   // Phase 6
     if (req.method === 'GET' && p === '/api/agents') return json(res, 200, await agentRoster());           // Phase 6
@@ -1024,7 +1065,8 @@ server.on('upgrade', (req, sock) => {                    // Phase 5: explicit /w
 
 // ------------------------------------------------------------------ start
 openDb();
-server.listen(PORT, HOST, () => log(`listening on http://${HOST}:${PORT}, db=${DB_PATH}, lastEventId=${st.lastEventId}`));
+server.listen(PORT, HOST, () => log(`listening on http://${HOST}:${PORT}, db=${DB_PATH}, lastEventId=${st.lastEventId}${SNAPSHOT_UPSTREAM ? `, snapshot=PROXY->${SNAPSHOT_UPSTREAM}` : ''}`));
+if (SNAPSHOT_UPSTREAM) log(`/snapshot proxied to ${SNAPSHOT_UPSTREAM} (t_73ec06f4) — local kanban.db no longer served on that route`);
 setInterval(pollKanban, 2000);
 setInterval(checkHeartbeats, 5000);
 // Agent-truth warm-up: keep the fable cache fresh so snapshot()'s SYNC read of _fable.map is
