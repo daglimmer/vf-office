@@ -165,6 +165,17 @@ jobs:
           echo "${{ secrets.KUBECONFIG }}" | base64 -d > "$RUNNER_TEMP/kubeconfig" && chmod 600 "$RUNNER_TEMP/kubeconfig"
           echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> $GITHUB_ENV
 
+      - name: Point /snapshot at live adapter upstream
+        # t_73ec06f4 (dynamic-over-baked-in): the combined pod mounts a node hostPath
+        # /root/.hermes whose kanban.db can be a stale copy — it served a baked 2026-10-02
+        # 16KB snapshot while the real adapter was healthy. SNAPSHOT_UPSTREAM makes the new
+        # image proxy /snapshot from olympus-office-adapter-v2 (live Hermes-VM adapter).
+        # Old images ignore the unknown env var, so this is safe to land before the image swap.
+        run: |
+          kubectl set env deployment/${{ env.KUBE_DEPLOYMENT }} \
+            SNAPSHOT_UPSTREAM=http://olympus-office-adapter-v2.mission-control.svc.cluster.local:3000 \
+            -n ${{ env.KUBE_NAMESPACE }}
+
       - name: Deploy to K3s (production)
         run: |
           kubectl set image deployment/${{ env.KUBE_DEPLOYMENT }} \
@@ -199,6 +210,17 @@ jobs:
           SIZE=$(curl -sf -o /dev/null -w '%{size_download}' "$BASE/office/$BUNDLE")
           echo "production office: $BUNDLE = $SIZE bytes, anchors = $ANCH bytes"
           [ "${SIZE:-0}" -ge 900000 ] || { echo "::error::production bundle is only ${SIZE} bytes - the hollow office is live"; exit 1; }
+
+      - name: Verify combined pod serves LIVE snapshot
+        # t_73ec06f4 acceptance: svc olympus-office must return the ~850KB live payload from
+        # olympus-office-adapter-v2 (proxied), NOT the 16KB stale baked kanban.db snapshot.
+        run: |
+          set -e
+          SNAP=$(kubectl -n ${{ env.KUBE_NAMESPACE }} run "snapcheck-${GITHUB_RUN_ID}" --rm -i --restart=Never \
+            --image=curlimages/curl --quiet -- \
+            curl -s -m 15 http://olympus-office.mission-control.svc.cluster.local/snapshot -o /dev/null -w '%{size_download}')
+          echo "combined-pod /snapshot: ${SNAP} bytes"
+          [ "${SNAP:-0}" -ge 800000 ] || { echo "::error::combined pod /snapshot is ${SNAP} bytes - still stale"; exit 1; }
 
       - name: Propagate office commit to vf-dashboard
         # The dashboard's /api/freshness compares OFFICE_COMMIT against the latest
