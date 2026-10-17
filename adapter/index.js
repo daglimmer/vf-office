@@ -363,29 +363,55 @@ function snapshot() {
 // kanban.db can be a stale copy (baked 2026-10-02 snapshot made the dashboard lie while the
 // real adapter was healthy). When SNAPSHOT_UPSTREAM is set, /snapshot is proxied to that base
 // URL instead of read locally. Upstream failure returns an honest 502 — never stale data.
+// t_20de2bbf (2026-10-17): the 10s timeout used to fire MID-STREAM too — a slow DOWNSTREAM
+// dashboard reader (res backpressure) paused the pipe, the upstream socket looked idle and
+// the office destroyed its own fully-delivered response, logging a bogus "upstream timeout"
+// (~13/h for weeks; wire proof: full body delivered in 100ms, then 10s of app-level idle
+// with an open TCP window). The timeout now guards ONLY the pre-response phase (connect +
+// TTFB — a genuinely dead upstream still 502s fast). After headers, data is forwarded
+// manually so upstream backpressure (drain) is decoupled from downstream reads, and a
+// downstream disconnect aborts the upstream fetch instead of letting it linger.
 function proxySnapshot(res) {
   return new Promise((resolve) => {
+    let settled = false;
+    const done = (fn) => { if (!settled) { settled = true; fn(); } };
     const lib = SNAPSHOT_UPSTREAM.startsWith('https:') ? https : http;
     const up = lib.get(`${SNAPSHOT_UPSTREAM}/snapshot`, { timeout: 10000 }, (ur) => {
       if (ur.statusCode !== 200) {
         ur.resume();
         log(`snapshot upstream ${SNAPSHOT_UPSTREAM} returned HTTP ${ur.statusCode}`);
-        resolve(json(res, 502, { ok: false, error: `snapshot upstream returned HTTP ${ur.statusCode}` }));
+        up.setTimeout(0);                                       // phase over: disarm idle timer
+        done(() => json(res, 502, { ok: false, error: `snapshot upstream returned HTTP ${ur.statusCode}` }));
         return;
       }
+      up.setTimeout(0);                                         // t_20de2bbf: headers received — no more idle timeout
       res.writeHead(200, {
         'Content-Type': 'application/json',
         'X-Snapshot-Source': SNAPSHOT_UPSTREAM,   // observability: proves the live source
       });
-      ur.pipe(res);
-      ur.on('end', () => resolve());
-      ur.on('error', (e) => { log('snapshot upstream stream error:', e.message); res.destroy(); resolve(); });
+      // t_20de2bbf: manual forward — write synchronously (json() bodies fit the socket
+      // buffer), pause the upstream only on a real socket-level backpressure signal.
+      let fwdDone = false;
+      const finish = () => { if (!fwdDone) { fwdDone = true; done(() => resolve()); } };
+      ur.on('data', (chunk) => {
+        if (!res.write(chunk)) {
+          ur.pause();
+          res.once('drain', () => ur.resume());
+        }
+      });
+      ur.on('end', () => { res.end(); finish(); });
+      ur.on('error', (e) => { log('snapshot upstream stream error:', e.message); if (!res.writableEnded) res.destroy(); finish(); });
+      res.on('close', () => {                                   // dashboard hung up mid-transfer
+        if (!fwdDone) { try { up.destroy(); } catch {} finish(); }
+      });
     });
     up.on('timeout', () => up.destroy(new Error('snapshot upstream timeout')));
     up.on('error', (e) => {
       log('snapshot upstream fetch failed:', e.message);
-      if (!res.headersSent) resolve(json(res, 502, { ok: false, error: `snapshot upstream unreachable: ${e.message}` }));
-      else res.destroy();
+      done(() => {
+        if (!res.headersSent) json(res, 502, { ok: false, error: `snapshot upstream unreachable: ${e.message}` });
+        else if (!res.writableEnded) res.destroy();
+      });
     });
   });
 }
