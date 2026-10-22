@@ -280,10 +280,14 @@ function snapshot() {
   const cards = [];
   try {
     for (const r of db.prepare(SQL.tasks).all()) {
+      // t_6b772b4e (2026-10-22): card `description` (tasks.body) DROPPED from the snapshot.
+      // It dominated the payload (365KB of 0.91MB, 38%) and has ZERO consumers — the 3D
+      // client renders columns/titles/positions only (grep-verified across the repo), the
+      // dashboard reads the kanban-bridge, and the sensor's shape checks never touch it.
+      // Full bodies still flow through the WS comment feed (pollKanban) where rendered.
       cards.push({
         cardId: String(r.id), title: r.title, column: colKey(r.status),
         assignee: r.assignee, priority: r.priority,
-        description: r.body ?? null,                              // tasks.body = the description
         createdAt: r.created_at                                  // epoch (s or ms) -> ISO for the dashboard
           ? new Date(r.created_at < 1e12 ? r.created_at * 1000 : r.created_at).toISOString()
           : null,
