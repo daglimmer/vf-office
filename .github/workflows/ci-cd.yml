@@ -228,7 +228,10 @@ jobs:
           SNAP=$(kubectl -n ${{ env.KUBE_NAMESPACE }} exec deploy/cost-cache-proxy -- \
             wget -qO- http://olympus-office.mission-control.svc.cluster.local/snapshot | wc -c)
           echo "combined-pod /snapshot: ${SNAP} bytes"
-          [ "${SNAP:-0}" -ge 800000 ] || { echo "::error::combined pod /snapshot is ${SNAP} bytes - still stale"; exit 1; }
+          # t_6b772b4e (2026-10-22): card descriptions dropped from the payload — the LIVE
+          # snapshot is now ~0.55MB, not ~0.93MB. The band is: stale baked kanban.db = 16,417B
+          # (2026-10-16); live trimmed = ~551,000B. 400K separates the two by 24x/1.4x margins.
+          [ "${SNAP:-0}" -ge 400000 ] || { echo "::error::combined pod /snapshot is ${SNAP} bytes - still stale"; exit 1; }
 
       - name: Propagate office commit to vf-dashboard
         # The dashboard's /api/freshness compares OFFICE_COMMIT against the latest
