@@ -49,6 +49,11 @@ const SIGNALD_SOCK = ENV('SIGNALD_SOCK', '/run/hermes-office/signald.sock');
 const SNAPSHOT_UPSTREAM = ENV('SNAPSHOT_UPSTREAM', '').replace(/\/+$/, '');   // t_73ec06f4: env-driven /snapshot source
 
 const log = (...a) => console.log(new Date().toISOString(), '[adapter]', ...a);
+// t_510326fe (2026-11-04): opt-in only. Used for events we CAUSE ourselves (a downstream
+// hang-up aborting our own upstream fetch) — those belong in a trace, never in the error log.
+const dbg = (...a) => {
+  if (process.env.DEBUG_SNAPSHOT === '1') console.log(new Date().toISOString(), '[adapter][debug]', ...a);
+};
 
 // ------------------------------------------------------------------ config
 const mapping = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'mapping.json'), 'utf8'));
@@ -375,9 +380,19 @@ function snapshot() {
 // TTFB — a genuinely dead upstream still 502s fast). After headers, data is forwarded
 // manually so upstream backpressure (drain) is decoupled from downstream reads, and a
 // downstream disconnect aborts the upstream fetch instead of letting it linger.
+//
+// t_510326fe (2026-11-04): that downstream-disconnect abort was logged as an UPSTREAM fault.
+// `up.destroy()` makes Node emit `aborted` on the upstream response, which `ur.on('error')`
+// printed as "snapshot upstream stream error: aborted" — a fault that never happened.
+// Measured on image 20261022-033324-eb9599c6: 233 such lines in 4h51m, every one traceable
+// to a downstream that hung up mid-transfer (the dashboard's 60s readiness probe fetches
+// /snapshot and never reads the body — 100% of inbound peers in a sampled window). We now
+// flag our own destroys: they are a debug-level trace and are never reported as upstream
+// faults. A genuine upstream failure keeps the honest log text and the fast 502.
 function proxySnapshot(res) {
   return new Promise((resolve) => {
     let settled = false;
+    let downstreamGone = false;   // t_510326fe: WE destroyed the upstream fetch, not the upstream
     const done = (fn) => { if (!settled) { settled = true; fn(); } };
     const lib = SNAPSHOT_UPSTREAM.startsWith('https:') ? https : http;
     const up = lib.get(`${SNAPSHOT_UPSTREAM}/snapshot`, { timeout: 10000 }, (ur) => {
@@ -398,19 +413,41 @@ function proxySnapshot(res) {
       let fwdDone = false;
       const finish = () => { if (!fwdDone) { fwdDone = true; done(() => resolve()); } };
       ur.on('data', (chunk) => {
+        if (downstreamGone || res.destroyed || res.writableEnded) return;   // t_510326fe: nobody left to read it
         if (!res.write(chunk)) {
           ur.pause();
-          res.once('drain', () => ur.resume());
+          res.once('drain', () => { if (!downstreamGone) ur.resume(); });
         }
       });
-      ur.on('end', () => { res.end(); finish(); });
-      ur.on('error', (e) => { log('snapshot upstream stream error:', e.message); if (!res.writableEnded) res.destroy(); finish(); });
+      ur.on('end', () => { if (!downstreamGone) res.end(); finish(); });
+      ur.on('error', (e) => {
+        // t_510326fe: `aborted`/`ECONNRESET` here is the echo of OUR OWN up.destroy() below —
+        // a downstream hang-up, not an upstream fault. Trace it, never alarm on it.
+        if (downstreamGone) {
+          dbg('snapshot downstream hung up mid-transfer — upstream fetch aborted by us:', e.message);
+          if (!res.writableEnded) res.destroy();
+          finish();
+          return;
+        }
+        log('snapshot upstream stream error:', e.message);
+        if (!res.writableEnded) res.destroy();
+        finish();
+      });
       res.on('close', () => {                                   // dashboard hung up mid-transfer
-        if (!fwdDone) { try { up.destroy(); } catch {} finish(); }
+        if (!fwdDone) {
+          downstreamGone = true;                                // t_510326fe: set BEFORE we destroy
+          dbg('snapshot downstream closed mid-transfer — aborting our upstream fetch');
+          try { up.destroy(); } catch {} finish();
+        }
       });
     });
     up.on('timeout', () => up.destroy(new Error('snapshot upstream timeout')));
     up.on('error', (e) => {
+      if (downstreamGone) {                                     // t_510326fe: self-inflicted, not upstream
+        dbg('snapshot upstream fetch aborted after downstream close:', e.message);
+        done(() => resolve());
+        return;
+      }
       log('snapshot upstream fetch failed:', e.message);
       done(() => {
         if (!res.headersSent) json(res, 502, { ok: false, error: `snapshot upstream unreachable: ${e.message}` });
