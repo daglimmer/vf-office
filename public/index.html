@@ -3,14 +3,62 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>110lymph.nl — Office</title>
+  <title>The Office · 110lymph.nl</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div id="view"></div>
-  <div id="presets"></div>
-  <div id="demobadge">DEMO MODE — no adapter connected</div>
-  <div id="hud" class="hud"></div>
+  <nav class="side">
+    <div class="logo"><i></i>Olympus</div>
+    <a class="nav" href="/hq/desk">🏠 Front Desk</a>
+    <a class="nav" href="/hq/">▦ Control Room</a>
+    <a class="nav" href="/hq/#live">📡 Live</a>
+    <div class="nav on">🛋 The Office</div>
+    <a class="nav" href="/hq/#needs">✋ Needs you<span class="badge" id="needs-badge">0</span></a>
+    <h6>Pages</h6>
+    <a class="nav" href="/projects">● Projects</a>
+    <a class="nav" href="/cost">● Cost</a>
+    <a class="nav" href="/backups">● Backups</a>
+    <div class="jarvis"><b>Ask Marcus</b><small>Talk or type in Element — he answers in #marcus</small>
+      <a href="https://matrix.to/#/!bXKhTI7lsgF3q_YciEFtYDS-mMFD8isDPxIDZuSx8w8?via=comms.110lymph.nl" target="_blank" rel="noopener">🎙 Open #marcus</a></div>
+  </nav>
+
+  <div class="page">
+    <header>
+      <div class="topbar">
+        <h1>The Office · <em>who's at work</em></h1>
+        <span class="grow"></span>
+        <button class="cmdk" id="cmdk">⌘ K</button>
+        <div class="me" title="Ray">R</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><b id="k-working">0</b><small>Working</small></div>
+        <div class="kpi gold"><b id="k-needs">0</b><small>Waiting for you</small></div>
+        <div class="kpi"><b id="k-idle">0</b><small>Idle</small></div>
+        <div class="kpi"><b id="k-offline">0</b><small>Offline</small></div>
+      </div>
+      <div class="news"><span class="tag">NEWS</span><div class="track" id="news"></div><span id="bell" class="bell"></span></div>
+    </header>
+
+    <main>
+      <div id="stage"></div>
+      <svg id="lines"></svg>
+      <div id="layer"></div>
+      <div id="rooms"></div>
+      <aside id="panel"></aside>
+      <div id="chip"></div>
+      <div id="palette">
+        <div class="pal-box">
+          <div class="pal-title">All pages</div>
+          <div class="pal-item" data-go="/hq/desk">🏠 Front Desk</div>
+          <div class="pal-item" data-go="/hq/">▦ Control Room</div>
+          <div class="pal-item" data-go="/hq/#live">📡 Live</div>
+          <div class="pal-item" data-go="/office/">🛋 The Office</div>
+          <div class="pal-item" data-go="/hq/#needs">✋ Needs you</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
   <script type="module" src="/main.js"></script>
 </body>
 </html>
