@@ -63,7 +63,15 @@ jobs:
           fail() { echo "::error::$1"; exit 1; }
       
           # 1. the modules that BUILD the office must exist
-          for f in main.js office.js screens.js avatars.js interactive.js moments.js anchors.json; do
+          # 2026-11-24 (SPEC-2026-043 section 4): the module list below is re-pointed at the v2 set.
+          # Kimi's v2 tree deliberately DROPS screens.js, interactive.js and moments.js - the buzz /
+          # A2A / mail-envelope / live-screen / event-moment layer - plus notifications.js, steering.js
+          # and demo.js. The gate was refusing the v2 tree for a FILENAME reason, not because the
+          # office was hollow.
+          # ONLY the list moved. The import checks, the runtime-asset ship check, the 900,000-byte
+          # bundle floor and the 8,000-byte anchors floor are UNCHANGED: the gate is re-pointed, NOT
+          # loosened. The floors are what catch a hollow room - that one was 663,327 bytes.
+          for f in main.js office.js avatars.js hud.js agentcard.js anchors.json; do
             test -s "public/$f" || fail "public/$f is missing - the office would render hollow"
           done
       
