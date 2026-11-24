@@ -165,6 +165,15 @@ export function animateHumanoid(agent, aY, dt) {
       headX = 0.4;                                          // 8f: tilt face up
       if (agent.seated) { hipsY = 0.46 * S; thigh = Math.PI / 2 - 0.12; shin = -Math.PI / 2 + 0.1; armX = 0.5; foreX = 0.5; }
       break;
+    case 'handup':                                            // v2: blocked, waiting for Ray
+      armX = 0; lean = -0.04;
+      // right arm straight up with a small wave; left arm hangs
+      p.armR.userData.targetX = -2.75;
+      p.foreR.userData.targetX = -0.25 + Math.sin(t * 3.2) * 0.12;
+      p.armL.userData.targetX = 0.15;
+      p.foreL.userData.targetX = 0.25;
+      headX = -0.12;
+      break;
     case 'headdown':
       headX = -0.5; lean = -0.18;                           // 8f: slump forward
       if (agent.seated) { hipsY = 0.46 * S; thigh = Math.PI / 2 - 0.12; shin = -Math.PI / 2 + 0.1; armX = 0.5; foreX = 0.6; }
@@ -192,10 +201,14 @@ export function animateHumanoid(agent, aY, dt) {
   lerpTo(p.legR, 'x', thigh - gait * 0.55, k);
   lerpTo(p.shinL, 'x', shin - (agent.pose === 'walk' ? Math.max(0, -gait) * 0.7 : 0), k);   // knee flexes BACK
   lerpTo(p.shinR, 'x', shin - (agent.pose === 'walk' ? Math.max(0, gait) * 0.7 : 0), k);
-  lerpTo(p.armL, 'x', armX - gait * 0.45 + gesture * 0.3, k);
-  lerpTo(p.armR, 'x', armX + gait * 0.45 - gesture, k);
-  lerpTo(p.foreL, 'x', foreX + Math.max(0, gait) * 0.3, k);                                 // elbow flexes FORWARD
-  lerpTo(p.foreR, 'x', foreX + Math.max(0, -gait) * 0.3 + Math.abs(gesture) * 0.5, k);
+  lerpTo(p.armL, 'x', p.armL.userData.targetX ?? (armX - gait * 0.45 + gesture * 0.3), k);
+  lerpTo(p.armR, 'x', p.armR.userData.targetX ?? (armX + gait * 0.45 - gesture), k);
+  lerpTo(p.foreL, 'x', p.foreL.userData.targetX ?? (foreX + Math.max(0, gait) * 0.3), k);   // elbow flexes FORWARD
+  lerpTo(p.foreR, 'x', p.foreR.userData.targetX ?? (foreX + Math.max(0, -gait) * 0.3 + Math.abs(gesture) * 0.5), k);
+  if (agent.pose !== 'handup') {
+    delete p.armL.userData.targetX; delete p.armR.userData.targetX;
+    delete p.foreL.userData.targetX; delete p.foreR.userData.targetX;
+  }
 
   if (agent.ring.visible) agent.ring.rotation.y = t * 1.5;
   // keep feet out of the floor: compute the lowest shoe from the current joint

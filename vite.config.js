@@ -12,6 +12,8 @@ export default defineConfig({
   esbuild: { target: 'es2022', supported: { 'top-level-await': true } },
   server: {
     proxy: {
+      // SPEC-2026-043: dev pulls the live board straight from olympus
+      '/hq': { target: 'https://olympus.110lymph.nl', changeOrigin: true, secure: true },
       '/agents': TARGET,
       '/announce': TARGET,
       '/snapshot': TARGET,
